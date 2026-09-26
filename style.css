@@ -1,3 +1,36 @@
+.player-controls { display: grid; grid-template-columns: minmax(3rem, 1fr) 4rem minmax(3rem, 1fr); column-gap: 1.75rem; align-items: center; width: 100%; }
+.player-controls .play-btn { grid-column: 2; margin: 0; }
+.side-control { display: flex; align-items: center; justify-content: center; justify-self: center; width: 3rem; height: 3rem; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #fff; cursor: pointer; opacity: 0.9; transition: background 0.2s ease, opacity 0.2s ease, transform 0.2s ease; -webkit-tap-highlight-color: transparent; }
+.side-control:first-child { grid-column: 1; justify-self: end; }
+.side-control:last-child { grid-column: 3; justify-self: start; }
+.side-control:hover { background: rgba(255, 255, 255, 0.12); opacity: 1; }
+.side-control:active { transform: scale(0.92); }
+.side-control:focus-visible, .play-btn:focus-visible, .timer-options button:focus-visible, .dialog-close:focus-visible { outline: 0.125rem solid #fff; outline-offset: 0.2rem; }
+.side-control span { display: grid; place-items: center; width: 1.25rem; height: 1.25rem; border: 0.1rem solid currentColor; border-radius: 50%; font-family: Georgia, serif; font-size: 0.9rem; font-weight: 700; line-height: 1; }
+.side-control svg { width: 1.45rem; height: 1.45rem; fill: currentColor; }
+.side-control.timer-active { background: rgba(255, 255, 255, 0.16); }
+.control-dialog { width: min(24rem, calc(100vw - 2rem)); max-height: min(80vh, 38rem); margin: auto; padding: 1.5rem; border: 0.0625rem solid rgba(255, 255, 255, 0.18); border-radius: 1rem; background: rgba(27, 25, 24, 0.96); color: #fff; box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.4); }
+.song-info-dialog { height: min(30rem, calc(100dvh - 2rem)); max-height: min(30rem, calc(100dvh - 2rem)); overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; }
+.song-info-dialog::-webkit-scrollbar { display: none; }
+.control-dialog::backdrop { background: rgba(0, 0, 0, 0.56); backdrop-filter: blur(0.25rem); }
+.control-dialog h2 { margin: 0 2rem 1.25rem 0; font-size: 1.1rem; }
+.control-dialog form { position: absolute; top: 0.8rem; right: 0.8rem; }
+.dialog-close { width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.1); color: #fff; font-size: 1.4rem; cursor: pointer; }
+.song-info-art { display: block; width: min(12rem, 70%); aspect-ratio: 1; margin: 0 auto 1.25rem; border-radius: 0.8rem; object-fit: cover; background: rgba(255, 255, 255, 0.08); }
+.song-info-track { margin: 0 0 0.4rem; font-size: 1rem; font-weight: 700; line-height: 1.5; }
+.song-info-artist { margin: 0 0 0.8rem; color: rgba(255, 255, 255, 0.72); font-size: 0.88rem; }
+.song-info-details { margin: 0; color: rgba(255, 255, 255, 0.66); font-size: 0.84rem; line-height: 1.7; white-space: pre-line; }
+.song-info-link { display: inline-block; margin-top: 1rem; color: #fff; font-size: 0.84rem; text-decoration: underline; text-underline-offset: 0.2rem; }
+.song-info-link[hidden] { display: none; }
+.song-info-background { max-height: 9rem; margin: 1rem 0 0; overflow-y: auto; color: rgba(255, 255, 255, 0.78); font-size: 0.84rem; line-height: 1.65; scrollbar-width: thin; }
+.song-info-wiki-link { display: inline-block; margin-top: 0.6rem; color: rgba(255, 255, 255, 0.72); font-size: 0.75rem; text-decoration: underline; text-underline-offset: 0.18rem; }
+.song-info-wiki-link[hidden] { display: none; }
+.timer-options { display: grid; gap: 0.5rem; }
+.timer-options button { min-height: 2.75rem; padding: 0.65rem 0.8rem; border: 0.0625rem solid rgba(255, 255, 255, 0.12); border-radius: 0.55rem; background: rgba(255, 255, 255, 0.07); color: #fff; font: inherit; text-align: left; cursor: pointer; }
+.timer-options button:hover { background: rgba(255, 255, 255, 0.15); }
+.timer-options button[hidden] { display: none; }
+.timer-options #cancelSleepTimer { border-color: rgba(255, 255, 255, 0.24); }
+.timer-status { min-height: 1.2rem; margin: 0.9rem 0 0; color: rgba(255, 255, 255, 0.68); font-size: 0.82rem; }
 .lyrics-panel { display: block; visibility: hidden; opacity: 0; pointer-events: none; width: min(32rem, 34vw); height: min(78vh, 52rem); padding: clamp(3rem, 7vh, 5rem) 0 1rem; position: absolute; z-index: 2; text-align: left; transform: translateX(1rem); transition: opacity 0.45s ease, transform 0.45s ease, visibility 0.45s ease; }
 .lyrics-heading { margin-bottom: 0.75rem; font-size: 0.75rem; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.65; }
 .lyrics-notice { margin: -0.25rem 0 1rem; color: rgba(255, 255, 255, 0.48); font-size: 0.82rem; font-weight: 500; }
