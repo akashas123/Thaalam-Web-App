@@ -10,7 +10,31 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=5">
+  <link rel="stylesheet" href="style.css?v=6">
+  <style>
+    .tagline[class~="marquee"] span {
+      animation-duration: 45s;
+      animation-delay: 0s;
+      animation-iteration-count: infinite;
+    }
+    .tagline[class~="marquee"] > span {
+      display: flex;
+      width: max-content;
+      gap: 3rem;
+      animation: marqueeLoop 45s linear infinite;
+    }
+    body.paused-gradient .tagline[class~="marquee"] > span {
+      animation-play-state: paused;
+    }
+    .tagline[class~="marquee"] > span > span {
+      flex: 0 0 auto;
+      animation: none;
+    }
+    @keyframes marqueeLoop {
+      from { transform: translateX(0); }
+      to { transform: translateX(calc(-50% - 1.5rem)); }
+    }
+  </style>
   <link rel="manifest" href="manifest.json">
 
   <meta name="theme-color" content="#05070d">
@@ -29,7 +53,7 @@
     </div>
 
     <div class="tagline">
-      <span id="nowPlaying">The Best Music</span>
+      <span id="nowPlaying">Non-Stop 24x7</span>
     </div>
 
     <div class="live-row">
@@ -52,7 +76,19 @@
 
   </div>
 
+  <aside class="lyrics-panel" id="lyricsPanel" aria-live="polite" aria-hidden="true">
+    <button class="lyrics-toggle" id="lyricsToggle" type="button" aria-expanded="false">
+      <span class="lyrics-heading">Lyrics (Beta)</span>
+      <span class="lyrics-toggle-icon" aria-hidden="true">⌃</span>
+    </button>
+    <div class="lyrics-notice" id="lyricsNotice" hidden>Lyrics aren't time-synced.</div>
+    <div class="lyrics-song" id="lyricsSong"></div>
+    <div class="lyrics-content" id="lyricsContent"></div>
+  </aside>
+
   <script src="script.js?v=5"></script>
+  <script src="marquee.js?v=2"></script>
+  <script src="lyrics.js?v=6"></script>
 
 </body>
 </html>
