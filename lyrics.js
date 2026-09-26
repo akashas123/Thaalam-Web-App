@@ -124,14 +124,11 @@ function updateActiveLyric() {
 function smoothlyRevealLyric(lineElement) {
   cancelAnimationFrame(lyricScrollFrame);
 
-  const isMobile = window.matchMedia('(max-width: 56.1875rem)').matches;
   const container = lyricsContent;
   const lineRect = lineElement.getBoundingClientRect();
-  const start = isMobile ? window.scrollY : container.scrollTop;
-  const destination = isMobile
-    ? Math.max(0, start + lineRect.top - (window.innerHeight - lineRect.height) / 2)
-    : Math.max(0, start + lineRect.top - container.getBoundingClientRect().top
-      - (container.clientHeight - lineRect.height) / 2);
+  const start = container.scrollTop;
+  const destination = Math.max(0, start + lineRect.top - container.getBoundingClientRect().top
+    - (container.clientHeight - lineRect.height) / 2);
   const distance = destination - start;
 
   if (Math.abs(distance) < 2) return;
@@ -151,11 +148,7 @@ function smoothlyRevealLyric(lineElement) {
       : 1 - Math.pow(-2 * progress + 2, 3) / 2;
     const position = start + distance * easedProgress;
 
-    if (isMobile) {
-      window.scrollTo(0, position);
-    } else {
-      container.scrollTop = position;
-    }
+    container.scrollTop = position;
 
     if (progress < 1) {
       lyricScrollFrame = requestAnimationFrame(animateScroll);
@@ -214,7 +207,13 @@ function updateLyrics(data, refreshCurrentSong = false) {
       document.body.classList.toggle('mobile-lyrics-revealed', lyricsAreSynced);
       lyricsToggle.setAttribute('aria-expanded', String(lyricsAreSynced));
       if (songChanged && (!lyricsAreSynced || lastLyricsWereSynced !== lyricsAreSynced)) {
-        resetMobilePlayerPosition();
+        if (lyricsAreSynced && !mobilePlayerViewChosen) {
+          requestAnimationFrame(() => {
+            if (!mobilePlayerViewChosen) lyricsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          });
+        } else {
+          resetMobilePlayerPosition();
+        }
       }
     }
     lastLyricsWereSynced = lyricsAreSynced;
@@ -280,19 +279,20 @@ async function fetchLyrics() {
 
 function updateMobileLyricsVisibility() {
   const isMobile = window.matchMedia('(max-width: 56.1875rem)').matches;
-  const userScrolledTowardPlayer = isMobile
-    && lastMobileScrollPosition > 48
-    && window.scrollY < lastMobileScrollPosition - 2;
-
-  if (userScrolledTowardPlayer) {
-    mobilePlayerViewChosen = true;
-    cancelAnimationFrame(lyricScrollFrame);
-    lyricScrollFrame = 0;
-  }
   const isRevealed = isMobile && window.scrollY > 48;
   document.body.classList.toggle('mobile-lyrics-revealed', isRevealed);
-  lyricsToggle.setAttribute('aria-expanded', String(isRevealed));
+  lyricsToggle.setAttribute('aria-expanded', String(isRevealed || document.body.classList.contains('mobile-lyrics-expanded')));
   lastMobileScrollPosition = window.scrollY;
+}
+
+function toggleMobileLyricsExpansion() {
+  if (!window.matchMedia('(max-width: 56.1875rem)').matches) return;
+  const expanded = document.body.classList.toggle('mobile-lyrics-expanded');
+  if (expanded) {
+    mobilePlayerViewChosen = false;
+    lyricsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  lyricsToggle.setAttribute('aria-expanded', String(expanded));
 }
 
 function handleMobileWheel(event) {
@@ -362,4 +362,5 @@ window.addEventListener('resize', updateMobileLyricsVisibility);
 window.addEventListener('wheel', handleMobileWheel, { passive: true });
 window.addEventListener('touchstart', handleMobileTouchStart, { passive: true });
 window.addEventListener('touchend', handleMobileTouchEnd, { passive: true });
+lyricsToggle.addEventListener('click', toggleMobileLyricsExpansion);
 updateMobileLyricsVisibility();
