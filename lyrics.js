@@ -5,6 +5,7 @@ const lyricsContent = document.getElementById('lyricsContent');
 const lyricsNotice = document.getElementById('lyricsNotice');
 const lyricsRadio = document.getElementById('radio');
 const lyricsApi = 'https://radio.thaalam24x7.in/api/nowplaying/thaalam_24x7';
+const lrclibApi = 'https://lrclib.net/api';
 const LYRICS_SYNC_OFFSET_SECONDS = 2;
 let syncedLines = [];
 let currentSongId = '';
@@ -16,20 +17,46 @@ let streamIsActive = false;
 let mobilePlayerViewChosen = false;
 let lastMobileScrollPosition = 0;
 let mobileTouchStartY = 0;
+let lyricsLookupSongId = '';
+let lyricsLookupResult = '';
+let lyricsLookupRequestId = 0;
+let lyricScrollFrame = 0;
+const lrclibCache = new Map();
 
-function getLyrics(data) {
-  const song = data?.now_playing?.song;
-  const candidates = [
-    data?.lyrics,
-    data?.now_playing?.lyrics,
-    song?.lyrics
-  ];
+function normalizeTrackTitle(value) {
+  return value?.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '') || '';
+}
 
-  const lyrics = candidates.find((value) => {
-    return typeof value === 'string' ? value.trim() : Array.isArray(value) && value.length;
-  });
+async function fetchLrclibLyrics(song) {
+  if (!song?.artist || !song?.title) return '';
 
-  return Array.isArray(lyrics) ? lyrics.join('\n') : lyrics?.trim() || '';
+  const cacheKey = `${song.artist.toLowerCase()}|${song.title.toLowerCase()}`;
+  if (lrclibCache.has(cacheKey)) return lrclibCache.get(cacheKey);
+
+  try {
+    const search = new URLSearchParams({ q: song.title });
+    const response = await fetch(`${lrclibApi}/search?${search}`, { cache: 'default' });
+    if (!response.ok) return '';
+
+    const matches = await response.json();
+    const normalizedTitle = normalizeTrackTitle(song.title);
+    const result = matches.find((match) =>
+      normalizeTrackTitle(match.trackName) === normalizedTitle
+        && (match.syncedLyrics || match.plainLyrics)
+    );
+    const lyrics = result?.syncedLyrics || result?.plainLyrics || '';
+    lrclibCache.set(cacheKey, lyrics);
+    return lyrics;
+  } catch (error) {
+    console.log('LRCLIB lyrics lookup failed:', error);
+    return '';
+  }
+}
+
+function getAzuraCastLyrics(song) {
+  const lyrics = song?.lyrics;
+  if (Array.isArray(lyrics)) return lyrics.join('\n').trim();
+  return typeof lyrics === 'string' ? lyrics.trim() : '';
 }
 
 function parseLyrics(lyrics) {
@@ -88,15 +115,61 @@ function updateActiveLyric() {
   });
 
   if (activeIndex >= 0 && activeIndex !== activeLyricIndex && !mobilePlayerViewChosen) {
-    syncedLines[activeIndex].element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    smoothlyRevealLyric(syncedLines[activeIndex].element);
   }
 
   activeLyricIndex = activeIndex;
 }
 
-function updateLyrics(data) {
-  const lyrics = getLyrics(data);
+function smoothlyRevealLyric(lineElement) {
+  cancelAnimationFrame(lyricScrollFrame);
+
+  const isMobile = window.matchMedia('(max-width: 56.1875rem)').matches;
+  const container = lyricsContent;
+  const lineRect = lineElement.getBoundingClientRect();
+  const start = isMobile ? window.scrollY : container.scrollTop;
+  const destination = isMobile
+    ? Math.max(0, start + lineRect.top - (window.innerHeight - lineRect.height) / 2)
+    : Math.max(0, start + lineRect.top - container.getBoundingClientRect().top
+      - (container.clientHeight - lineRect.height) / 2);
+  const distance = destination - start;
+
+  if (Math.abs(distance) < 2) return;
+
+  const startTime = performance.now();
+  const duration = Math.min(900, Math.max(450, Math.abs(distance) * 1.2));
+
+  function animateScroll(now) {
+    if (!streamIsActive || mobilePlayerViewChosen) {
+      lyricScrollFrame = 0;
+      return;
+    }
+
+    const progress = Math.min(1, (now - startTime) / duration);
+    const easedProgress = progress < 0.5
+      ? 4 * progress * progress * progress
+      : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+    const position = start + distance * easedProgress;
+
+    if (isMobile) {
+      window.scrollTo(0, position);
+    } else {
+      container.scrollTop = position;
+    }
+
+    if (progress < 1) {
+      lyricScrollFrame = requestAnimationFrame(animateScroll);
+    } else {
+      lyricScrollFrame = 0;
+    }
+  }
+
+  lyricScrollFrame = requestAnimationFrame(animateScroll);
+}
+
+function updateLyrics(data, refreshCurrentSong = false) {
   const song = data?.now_playing?.song;
+  const lyrics = lyricsLookupResult || getAzuraCastLyrics(song);
   const nowPlaying = data?.now_playing;
   const songName = [song?.artist, song?.title].filter(Boolean).join(' - ');
   const hasLyrics = Boolean(lyrics);
@@ -124,12 +197,15 @@ function updateLyrics(data) {
 
   lyricsSong.textContent = songName;
 
-  if (songId !== currentSongId) {
-    currentSongId = songId;
-    mobilePlayerViewChosen = false;
-    songStartedAt = performance.now() / 1000
-      - Number(nowPlaying?.elapsed || 0)
-      + LYRICS_SYNC_OFFSET_SECONDS;
+  const songChanged = songId !== currentSongId;
+  if (songChanged || refreshCurrentSong) {
+    if (songChanged) {
+      currentSongId = songId;
+      mobilePlayerViewChosen = false;
+      songStartedAt = performance.now() / 1000
+        - Number(nowPlaying?.elapsed || 0)
+        + LYRICS_SYNC_OFFSET_SECONDS;
+    }
     renderLyrics(lyrics);
 
     const lyricsAreSynced = syncedLines.length > 0;
@@ -137,7 +213,7 @@ function updateLyrics(data) {
     if (window.matchMedia('(max-width: 56.1875rem)').matches) {
       document.body.classList.toggle('mobile-lyrics-revealed', lyricsAreSynced);
       lyricsToggle.setAttribute('aria-expanded', String(lyricsAreSynced));
-      if (!lyricsAreSynced || lastLyricsWereSynced !== lyricsAreSynced) {
+      if (songChanged && (!lyricsAreSynced || lastLyricsWereSynced !== lyricsAreSynced)) {
         resetMobilePlayerPosition();
       }
     }
@@ -165,6 +241,37 @@ async function fetchLyrics() {
 
     const data = await response.json();
     hasFetchedLyrics = true;
+    const song = data?.now_playing?.song;
+    const songId = song?.id || [song?.artist, song?.title].filter(Boolean).join(' - ');
+
+    if (songId && songId !== lyricsLookupSongId) {
+      lyricsLookupSongId = songId;
+      const azuraCastLyrics = getAzuraCastLyrics(song);
+      const azuraHasTimestamps = parseLyrics(azuraCastLyrics).length > 0;
+      lyricsLookupResult = azuraCastLyrics;
+      document.body.classList.remove('has-lyrics', 'synced-lyrics', 'mobile-lyrics-revealed');
+      lyricsPanel.setAttribute('aria-hidden', 'true');
+      lyricsContent.replaceChildren();
+      lyricsNotice.hidden = true;
+      syncedLines = [];
+      activeLyricIndex = -1;
+      resetMobilePlayerPosition();
+      const requestId = ++lyricsLookupRequestId;
+      updateLyrics(data);
+
+      if (azuraHasTimestamps) {
+        console.info('Using timestamped lyrics from AzuraCast.');
+        return;
+      }
+
+      console.info('AzuraCast lyrics have no timestamps; checking LRCLIB.');
+      const lrclibLyrics = await fetchLrclibLyrics(song);
+      if (requestId !== lyricsLookupRequestId) return;
+      lyricsLookupResult = lrclibLyrics || azuraCastLyrics;
+      updateLyrics(data, true);
+      return;
+    }
+
     updateLyrics(data);
   } catch (error) {
     console.log('Lyrics update failed:', error);
@@ -179,6 +286,8 @@ function updateMobileLyricsVisibility() {
 
   if (userScrolledTowardPlayer) {
     mobilePlayerViewChosen = true;
+    cancelAnimationFrame(lyricScrollFrame);
+    lyricScrollFrame = 0;
   }
   const isRevealed = isMobile && window.scrollY > 48;
   document.body.classList.toggle('mobile-lyrics-revealed', isRevealed);
@@ -224,6 +333,10 @@ function resetMobilePlayerPosition() {
 function setStreamPlaybackState(isActive) {
   streamIsActive = isActive && !lyricsRadio.paused;
   if (streamIsActive) fetchLyrics();
+  else {
+    cancelAnimationFrame(lyricScrollFrame);
+    lyricScrollFrame = 0;
+  }
 }
 
 if (window.matchMedia('(max-width: 56.1875rem)').matches) {
