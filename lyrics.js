@@ -14,8 +14,8 @@ let activeLyricIndex = -1;
 let lastLyricsWereSynced = false;
 let hasFetchedLyrics = false;
 let streamIsActive = false;
-let mobilePlayerViewChosen = false;
-let lastMobileScrollPosition = 0;
+let playbackStartedOnMobile = false;
+let mobileLyricsAutoReturnInProgress = false;
 let mobileTouchStartY = 0;
 let lyricsLookupSongId = '';
 let lyricsLookupResult = '';
@@ -114,7 +114,10 @@ function updateActiveLyric() {
     line.element.classList.toggle('is-active', index === activeIndex);
   });
 
-  if (activeIndex >= 0 && activeIndex !== activeLyricIndex && !mobilePlayerViewChosen) {
+  if (activeIndex >= 0 && activeIndex !== activeLyricIndex) {
+    if (window.matchMedia('(max-width: 56.1875rem)').matches && window.scrollY <= 48) {
+      lyricsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
     smoothlyRevealLyric(syncedLines[activeIndex].element);
   }
 
@@ -137,7 +140,7 @@ function smoothlyRevealLyric(lineElement) {
   const duration = Math.min(900, Math.max(450, Math.abs(distance) * 1.2));
 
   function animateScroll(now) {
-    if (!streamIsActive || mobilePlayerViewChosen) {
+    if (!streamIsActive) {
       lyricScrollFrame = 0;
       return;
     }
@@ -146,9 +149,7 @@ function smoothlyRevealLyric(lineElement) {
     const easedProgress = progress < 0.5
       ? 4 * progress * progress * progress
       : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-    const position = start + distance * easedProgress;
-
-    container.scrollTop = position;
+    container.scrollTop = start + distance * easedProgress;
 
     if (progress < 1) {
       lyricScrollFrame = requestAnimationFrame(animateScroll);
@@ -176,11 +177,9 @@ function updateLyrics(data, refreshCurrentSong = false) {
     lyricsContent.replaceChildren();
       lyricsNotice.hidden = true;
     document.body.classList.remove('mobile-lyrics-expanded');
-    document.body.classList.remove('mobile-lyrics-revealed');
     document.body.classList.remove('synced-lyrics');
     lyricsToggle.setAttribute('aria-expanded', 'false');
     lastLyricsWereSynced = false;
-    mobilePlayerViewChosen = false;
     resetMobilePlayerPosition();
     syncedLines = [];
     currentSongId = '';
@@ -194,7 +193,6 @@ function updateLyrics(data, refreshCurrentSong = false) {
   if (songChanged || refreshCurrentSong) {
     if (songChanged) {
       currentSongId = songId;
-      mobilePlayerViewChosen = false;
       songStartedAt = performance.now() / 1000
         - Number(nowPlaying?.elapsed || 0)
         + LYRICS_SYNC_OFFSET_SECONDS;
@@ -204,16 +202,9 @@ function updateLyrics(data, refreshCurrentSong = false) {
     const lyricsAreSynced = syncedLines.length > 0;
     document.body.classList.toggle('synced-lyrics', lyricsAreSynced);
     if (window.matchMedia('(max-width: 56.1875rem)').matches) {
-      document.body.classList.toggle('mobile-lyrics-revealed', lyricsAreSynced);
-      lyricsToggle.setAttribute('aria-expanded', String(lyricsAreSynced));
+      lyricsToggle.setAttribute('aria-expanded', String(document.body.classList.contains('mobile-lyrics-expanded')));
       if (songChanged && (!lyricsAreSynced || lastLyricsWereSynced !== lyricsAreSynced)) {
-        if (lyricsAreSynced && !mobilePlayerViewChosen) {
-          requestAnimationFrame(() => {
-            if (!mobilePlayerViewChosen) lyricsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          });
-        } else {
-          resetMobilePlayerPosition();
-        }
+        resetMobilePlayerPosition();
       }
     }
     lastLyricsWereSynced = lyricsAreSynced;
@@ -229,6 +220,7 @@ function updateLyrics(data, refreshCurrentSong = false) {
   }
 
   updateActiveLyric();
+  expandLyricsAfterPlaybackStarts();
 }
 
 async function fetchLyrics() {
@@ -248,7 +240,7 @@ async function fetchLyrics() {
       const azuraCastLyrics = getAzuraCastLyrics(song);
       const azuraHasTimestamps = parseLyrics(azuraCastLyrics).length > 0;
       lyricsLookupResult = azuraCastLyrics;
-      document.body.classList.remove('has-lyrics', 'synced-lyrics', 'mobile-lyrics-revealed');
+      document.body.classList.remove('has-lyrics', 'synced-lyrics');
       lyricsPanel.setAttribute('aria-hidden', 'true');
       lyricsContent.replaceChildren();
       lyricsNotice.hidden = true;
@@ -279,25 +271,34 @@ async function fetchLyrics() {
 
 function updateMobileLyricsVisibility() {
   const isMobile = window.matchMedia('(max-width: 56.1875rem)').matches;
-  const isRevealed = isMobile && window.scrollY > 48;
-  document.body.classList.toggle('mobile-lyrics-revealed', isRevealed);
-  lyricsToggle.setAttribute('aria-expanded', String(isRevealed || document.body.classList.contains('mobile-lyrics-expanded')));
-  lastMobileScrollPosition = window.scrollY;
-}
+  const isExpanded = isMobile && document.body.classList.contains('mobile-lyrics-expanded');
+  lyricsToggle.setAttribute('aria-expanded', String(isExpanded));
 
-function toggleMobileLyricsExpansion() {
-  if (!window.matchMedia('(max-width: 56.1875rem)').matches) return;
-  const expanded = document.body.classList.toggle('mobile-lyrics-expanded');
-  if (expanded) {
-    mobilePlayerViewChosen = false;
+  if (!isMobile || window.scrollY > 48) {
+    mobileLyricsAutoReturnInProgress = false;
+  } else if (streamIsActive && syncedLines.length && !mobileLyricsAutoReturnInProgress) {
+    mobileLyricsAutoReturnInProgress = true;
     lyricsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
-  lyricsToggle.setAttribute('aria-expanded', String(expanded));
+}
+
+function collapseMobileLyrics() {
+  if (!window.matchMedia('(max-width: 56.1875rem)').matches) return;
+  document.body.classList.remove('mobile-lyrics-expanded');
+  resetMobilePlayerPosition();
+  lyricsToggle.setAttribute('aria-expanded', 'false');
+}
+
+function expandLyricsAfterPlaybackStarts() {
+  if (!playbackStartedOnMobile || !streamIsActive || !document.body.classList.contains('has-lyrics')) return;
+  playbackStartedOnMobile = false;
+  document.body.classList.add('mobile-lyrics-expanded');
+  lyricsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  lyricsToggle.setAttribute('aria-expanded', 'true');
 }
 
 function handleMobileWheel(event) {
   if (window.matchMedia('(max-width: 56.1875rem)').matches && event.deltaY < 0) {
-    mobilePlayerViewChosen = true;
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }
 }
@@ -313,7 +314,6 @@ function handleMobileTouchEnd(event) {
   const movedDown = touchEndY - mobileTouchStartY > 24;
 
   if (window.matchMedia('(max-width: 56.1875rem)').matches && movedDown && window.scrollY > 48) {
-    mobilePlayerViewChosen = true;
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }
 }
@@ -331,9 +331,17 @@ function resetMobilePlayerPosition() {
 }
 
 function setStreamPlaybackState(isActive) {
+  const wasActive = streamIsActive;
   streamIsActive = isActive && !lyricsRadio.paused;
-  if (streamIsActive) fetchLyrics();
+  if (streamIsActive) {
+    if (!wasActive) {
+      playbackStartedOnMobile = window.matchMedia('(max-width: 56.1875rem)').matches;
+    }
+    fetchLyrics();
+    expandLyricsAfterPlaybackStarts();
+  }
   else {
+    playbackStartedOnMobile = false;
     cancelAnimationFrame(lyricScrollFrame);
     lyricScrollFrame = 0;
   }
@@ -362,5 +370,5 @@ window.addEventListener('resize', updateMobileLyricsVisibility);
 window.addEventListener('wheel', handleMobileWheel, { passive: true });
 window.addEventListener('touchstart', handleMobileTouchStart, { passive: true });
 window.addEventListener('touchend', handleMobileTouchEnd, { passive: true });
-lyricsToggle.addEventListener('click', toggleMobileLyricsExpansion);
+lyricsToggle.addEventListener('click', collapseMobileLyrics);
 updateMobileLyricsVisibility();
