@@ -15,7 +15,7 @@ let lastLyricsWereSynced = false;
 let hasFetchedLyrics = false;
 let streamIsActive = false;
 let playbackStartedOnMobile = false;
-let mobileLyricsAutoReturnInProgress = false;
+let mobilePlayerViewChosen = false;
 let mobileTouchStartY = 0;
 let lyricsLookupSongId = '';
 let lyricsLookupResult = '';
@@ -115,7 +115,8 @@ function updateActiveLyric() {
   });
 
   if (activeIndex >= 0 && activeIndex !== activeLyricIndex) {
-    if (window.matchMedia('(max-width: 56.1875rem)').matches && window.scrollY <= 48) {
+    if (window.matchMedia('(max-width: 56.1875rem)').matches && mobilePlayerViewChosen) {
+      mobilePlayerViewChosen = false;
       lyricsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
     smoothlyRevealLyric(syncedLines[activeIndex].element);
@@ -273,13 +274,6 @@ function updateMobileLyricsVisibility() {
   const isMobile = window.matchMedia('(max-width: 56.1875rem)').matches;
   const isExpanded = isMobile && document.body.classList.contains('mobile-lyrics-expanded');
   lyricsToggle.setAttribute('aria-expanded', String(isExpanded));
-
-  if (!isMobile || window.scrollY > 48) {
-    mobileLyricsAutoReturnInProgress = false;
-  } else if (streamIsActive && syncedLines.length && !mobileLyricsAutoReturnInProgress) {
-    mobileLyricsAutoReturnInProgress = true;
-    lyricsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
 }
 
 function collapseMobileLyrics() {
@@ -299,6 +293,7 @@ function expandLyricsAfterPlaybackStarts() {
 
 function handleMobileWheel(event) {
   if (window.matchMedia('(max-width: 56.1875rem)').matches && event.deltaY < 0) {
+    mobilePlayerViewChosen = true;
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }
 }
@@ -314,6 +309,7 @@ function handleMobileTouchEnd(event) {
   const movedDown = touchEndY - mobileTouchStartY > 24;
 
   if (window.matchMedia('(max-width: 56.1875rem)').matches && movedDown && window.scrollY > 48) {
+    mobilePlayerViewChosen = true;
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }
 }
