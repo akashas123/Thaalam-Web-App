@@ -13,6 +13,7 @@ let lastSongText = '';
 let lastArtwork = '';
 let isConnecting = false;
 let hlsPlayer = null;
+const streamQuality = document.getElementById('streamQuality');
 
 function setAlbumColors(colors) {
   if (!colors || colors.length < 5) return;
@@ -124,6 +125,26 @@ function showPauseIcon() {
   if (playIcon) playIcon.innerHTML = '<path d="M6 5h4v14H6zm8 0h4v14h-4z"/>';
 }
 
+function updateStreamQuality(levelIndex, levels = []) {
+  if (!streamQuality) return;
+
+  const sortedLevels = levels
+    .map((level, index) => ({ index, bitrate: level.bitrate || level.averageBitrate || 0 }))
+    .sort((first, second) => first.bitrate - second.bitrate);
+  const activeLevel = sortedLevels.findIndex((level) => level.index === levelIndex);
+  const tiers = ['LOW', 'MEDIUM', 'HIGH'];
+  let label = 'AUTO';
+
+  if (activeLevel >= 0 && sortedLevels.length === 1) {
+    const bitrate = sortedLevels[0].bitrate;
+    label = bitrate < 96000 ? 'LOW' : bitrate < 160000 ? 'MEDIUM' : 'HIGH';
+  } else if (activeLevel >= 0) {
+    label = tiers[Math.round(activeLevel * (tiers.length - 1) / (sortedLevels.length - 1))];
+  }
+
+  streamQuality.setAttribute('aria-label', `Current stream quality: ${label.toLowerCase()}`);
+  streamQuality.textContent = label;
+}
 async function startLiveStream() {
   if (isConnecting || !radio) return;
   isConnecting = true;
@@ -144,7 +165,11 @@ async function startLiveStream() {
       });
       const player = hlsPlayer;
       await new Promise((resolve, reject) => {
+        player.on(window.Hls.Events.LEVEL_SWITCHED, (_event, data) => {
+          updateStreamQuality(data.level, player.levels);
+        });
         player.once(window.Hls.Events.MANIFEST_PARSED, () => {
+          updateStreamQuality(player.currentLevel, player.levels);
           radio.play().then(resolve, reject);
         });
         player.on(window.Hls.Events.ERROR, (_event, data) => {
