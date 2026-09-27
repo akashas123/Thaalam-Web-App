@@ -1,1 +1,330 @@
-const _0x4fee16=_0x4b50;(function(_0x1e187b,_0x47c362){const _0x286366=_0x4b50,_0x264cc7=_0x1e187b();while(!![]){try{const _0x36e20f=-parseInt(_0x286366(0x1ed))/0x1*(parseInt(_0x286366(0x1d6))/0x2)+-parseInt(_0x286366(0x22a))/0x3*(parseInt(_0x286366(0x244))/0x4)+parseInt(_0x286366(0x23f))/0x5*(-parseInt(_0x286366(0x1dd))/0x6)+parseInt(_0x286366(0x1df))/0x7+-parseInt(_0x286366(0x229))/0x8*(parseInt(_0x286366(0x1d3))/0x9)+-parseInt(_0x286366(0x22d))/0xa*(parseInt(_0x286366(0x22e))/0xb)+-parseInt(_0x286366(0x24a))/0xc*(-parseInt(_0x286366(0x226))/0xd);if(_0x36e20f===_0x47c362)break;else _0x264cc7['push'](_0x264cc7['shift']());}catch(_0x38a1a8){_0x264cc7['push'](_0x264cc7['shift']());}}}(_0x5be2,0x2589b));const STREAM_URL=_0x4fee16(0x20f),radio=document[_0x4fee16(0x1f5)](_0x4fee16(0x214)),icon=document['getElementById']('playIcon'),nowPlayingEl=document[_0x4fee16(0x1f5)](_0x4fee16(0x204)),stationNameEl=document['getElementById'](_0x4fee16(0x216)),logo=document['getElementById'](_0x4fee16(0x1f7)),NOW_PLAYING_API=_0x4fee16(0x207),SCHEDULE_API='https://radio.thaalam24x7.in/api/station/6/schedule';function _0x5be2(){const _0x2f7cdc=['some','load','art','classList','20ZZHSwJ','innerHTML','map','appendChild','./sw.js','112760WOpOXf','album-background','padStart','updateMarquee','.tagline','width','36YsVuqp','scrollWidth','add','9jyXfzK','play','name','142RavjEl','data','body','artist','live','style','serviceWorker','403722wEoafv','toUpperCase','910574jsyLdY','log','pause','length','saturation','onload','trim','streamer_name','is_live','image/png','removeAttribute','playlist','onerror','--c4','1543TwIfMT','now','Service\x20worker\x20registration\x20failed:','logo.png','rel','--c1','createElement','title','getElementById','song','logoImg','--c2','addEventListener','setProperty','Album\x20color\x20extraction\x20failed:','src','div','\x20–\x20','now_playing','opacity','join','Thaalam\x2024x7','href','nowPlaying','querySelector','toLocaleTimeString','https://radio.thaalam24x7.in/api/nowplaying/thaalam_24x7','paused','crossOrigin','LIVE\x20•\x20','2-digit','marquee','anonymous','brightness','https://radio.thaalam24x7.in/listen/thaalam_24x7/live','end','clientWidth','DOMContentLoaded','prepend','radio','--c3','stationName','Now\x20Playing\x20update\x20failed:','numeric','start','register','setMinutes','type','max','toString','className','is_now','getMinutes','remove','color=','<path\x20d=\x22M8\x205v14l11-7z\x22/>','Unable\x20to\x20start\x20live\x20stream:','3723369AqrwAw','height','getImageData','994352tvoYva','3sCYByi','documentElement','round','3043810LWrAxd','11tKvuHq','json','no-store','paused-gradient','find','--c5','catch','min','Album\x20artwork\x20could\x20not\x20be\x20loaded\x20for\x20color\x20extraction','innerText','?live=','<path\x20d=\x22M6\x205h4v14H6zm8\x200h4v14h-4z\x22/>','includes'];_0x5be2=function(){return _0x2f7cdc;};return _0x5be2();}let lastSongText='',lastArtwork='',isConnecting=![];const root=document[_0x4fee16(0x22b)];function setAlbumColors(_0x4385c8){const _0x3e41a2=_0x4fee16;if(!_0x4385c8||_0x4385c8['length']<0x5)return;root[_0x3e41a2(0x1db)][_0x3e41a2(0x1fa)](_0x3e41a2(0x1f2),_0x4385c8[0x0]),root[_0x3e41a2(0x1db)]['setProperty'](_0x3e41a2(0x1f8),_0x4385c8[0x1]),root['style']['setProperty'](_0x3e41a2(0x215),_0x4385c8[0x2]),root[_0x3e41a2(0x1db)][_0x3e41a2(0x1fa)](_0x3e41a2(0x1ec),_0x4385c8[0x3]),root[_0x3e41a2(0x1db)][_0x3e41a2(0x1fa)](_0x3e41a2(0x233),_0x4385c8[0x4]);}function rgbToHex(_0x1cee42,_0x1069a0,_0x4ffa10){const _0x49edaf=_0x4fee16;return'#'+[_0x1cee42,_0x1069a0,_0x4ffa10][_0x49edaf(0x241)](_0x19c9d6=>Math['max'](0x0,Math[_0x49edaf(0x235)](0xff,Math[_0x49edaf(0x22c)](_0x19c9d6)))[_0x49edaf(0x21e)](0x10)[_0x49edaf(0x246)](0x2,'0'))[_0x49edaf(0x201)]('');}function colorDistance(_0x4d3114,_0x4e5870){const _0xce208d=_0x4d3114['r']-_0x4e5870['r'],_0x454270=_0x4d3114['g']-_0x4e5870['g'],_0x3c7e18=_0x4d3114['b']-_0x4e5870['b'];return Math['sqrt'](_0xce208d*_0xce208d+_0x454270*_0x454270+_0x3c7e18*_0x3c7e18);}function extractAlbumColors(_0x2787ad){const _0x5ba2cf=_0x4fee16,_0x2ff54e=document[_0x5ba2cf(0x1f3)]('canvas'),_0x4b5414=_0x2ff54e['getContext']('2d',{'willReadFrequently':!![]}),_0x2cc226=0x50;_0x2ff54e[_0x5ba2cf(0x249)]=_0x2cc226,_0x2ff54e[_0x5ba2cf(0x227)]=_0x2cc226;try{_0x4b5414['drawImage'](_0x2787ad,0x0,0x0,_0x2cc226,_0x2cc226);const _0x2edc36=_0x4b5414[_0x5ba2cf(0x228)](0x0,0x0,_0x2cc226,_0x2cc226)[_0x5ba2cf(0x1d7)],_0x26934d=[];for(let _0x199541=0x0;_0x199541<_0x2edc36[_0x5ba2cf(0x1e2)];_0x199541+=0x10){const _0xa01280=_0x2edc36[_0x199541],_0x55a06f=_0x2edc36[_0x199541+0x1],_0x3cf0b5=_0x2edc36[_0x199541+0x2],_0x25f3d7=_0x2edc36[_0x199541+0x3];if(_0x25f3d7<0xb4)continue;const _0xb9821b=(_0xa01280+_0x55a06f+_0x3cf0b5)/0x3;if(_0xb9821b<0xc||_0xb9821b>0xf8)continue;const _0x5bc2a0=Math[_0x5ba2cf(0x21d)](_0xa01280,_0x55a06f,_0x3cf0b5)-Math[_0x5ba2cf(0x235)](_0xa01280,_0x55a06f,_0x3cf0b5);_0x26934d['push']({'r':_0xa01280,'g':_0x55a06f,'b':_0x3cf0b5,'saturation':_0x5bc2a0,'brightness':_0xb9821b});}_0x26934d['sort']((_0x20c848,_0x224bcd)=>_0x224bcd[_0x5ba2cf(0x1e3)]+_0x224bcd[_0x5ba2cf(0x20e)]*0.35-(_0x20c848['saturation']+_0x20c848[_0x5ba2cf(0x20e)]*0.35));const _0x29ad57=[];for(const _0x1c9aa6 of _0x26934d){const _0x4e8110=_0x29ad57[_0x5ba2cf(0x23b)](_0x447c9c=>colorDistance(_0x1c9aa6,_0x447c9c)<0x37);!_0x4e8110&&_0x29ad57['push'](_0x1c9aa6);if(_0x29ad57['length']>=0x5)break;}while(_0x29ad57[_0x5ba2cf(0x1e2)]<0x5){_0x29ad57['push']({'r':0x8,'g':0xc,'b':0x14});}const _0x176cc5=_0x29ad57[_0x5ba2cf(0x241)](_0x3da524=>{const _0x271d3f=_0x5ba2cf,_0x111faa=_0x3da524[_0x271d3f(0x20e)]<0x50?1.25:0.72;return rgbToHex(_0x3da524['r']*_0x111faa,_0x3da524['g']*_0x111faa,_0x3da524['b']*_0x111faa);});setAlbumColors(_0x176cc5);}catch(_0x4c3817){console[_0x5ba2cf(0x1e0)](_0x5ba2cf(0x1fb),_0x4c3817);}}function updateAlbumColors(_0x6f9979){const _0x45c64c=_0x4fee16,_0x3dd11c=new Image();_0x3dd11c[_0x45c64c(0x209)]=_0x45c64c(0x20d),_0x3dd11c['onload']=()=>{extractAlbumColors(_0x3dd11c);},_0x3dd11c[_0x45c64c(0x1eb)]=()=>{const _0x568c7c=_0x45c64c;console[_0x568c7c(0x1e0)](_0x568c7c(0x236));},_0x3dd11c[_0x45c64c(0x1fc)]=_0x6f9979+(_0x6f9979[_0x45c64c(0x23a)]('?')?'&':'?')+_0x45c64c(0x223)+Date[_0x45c64c(0x1ee)]();}document['addEventListener'](_0x4fee16(0x212),function(){const _0x319a36=_0x4fee16;radio[_0x319a36(0x1fc)]=STREAM_URL,logo[_0x319a36(0x1fc)]=_0x319a36(0x1f0);const _0x51227a=document[_0x319a36(0x1f3)]('link');_0x51227a[_0x319a36(0x1f1)]='icon',_0x51227a[_0x319a36(0x21c)]=_0x319a36(0x1e8),_0x51227a[_0x319a36(0x203)]=_0x319a36(0x1f0),document['head'][_0x319a36(0x242)](_0x51227a);const _0x30507c=document[_0x319a36(0x1f3)](_0x319a36(0x1fd));_0x30507c[_0x319a36(0x21f)]=_0x319a36(0x245),document[_0x319a36(0x1d8)][_0x319a36(0x213)](_0x30507c);const _0x53ef0b=document[_0x319a36(0x205)](_0x319a36(0x248)),_0x357ea4=document[_0x319a36(0x1f5)]('nowPlaying');_0x53ef0b&&_0x357ea4&&(window[_0x319a36(0x247)]=function(){const _0x4d73ad=_0x319a36;_0x53ef0b[_0x4d73ad(0x23e)][_0x4d73ad(0x222)](_0x4d73ad(0x20c)),requestAnimationFrame(()=>{const _0x36dde5=_0x4d73ad;_0x357ea4[_0x36dde5(0x24b)]>_0x53ef0b[_0x36dde5(0x211)]&&_0x53ef0b[_0x36dde5(0x23e)]['add'](_0x36dde5(0x20c));});},updateMarquee()),_0x319a36(0x1dc)in navigator&&navigator['serviceWorker'][_0x319a36(0x21a)](_0x319a36(0x243))[_0x319a36(0x234)](_0x14b383=>{const _0x158013=_0x319a36;console['log'](_0x158013(0x1ef),_0x14b383);});});function showPlayIcon(){const _0x1432f8=_0x4fee16;icon[_0x1432f8(0x240)]=_0x1432f8(0x224);}function showPauseIcon(){const _0x32090a=_0x4fee16;icon['innerHTML']=_0x32090a(0x239);}function setVisualState(_0x54594f){const _0xebf98c=_0x4fee16,_0x241250=document[_0xebf98c(0x205)](_0xebf98c(0x248));_0x54594f?(_0x241250['classList']['remove'](_0xebf98c(0x208)),document[_0xebf98c(0x1d8)]['classList'][_0xebf98c(0x222)](_0xebf98c(0x231))):(_0x241250['classList'][_0xebf98c(0x1d2)]('paused'),document[_0xebf98c(0x1d8)][_0xebf98c(0x23e)][_0xebf98c(0x1d2)](_0xebf98c(0x231)));}async function startLiveStream(){const _0x339c5c=_0x4fee16;if(isConnecting)return;isConnecting=!![];try{radio[_0x339c5c(0x1e1)](),radio[_0x339c5c(0x1e9)](_0x339c5c(0x1fc)),radio['load']();const _0x1fba55=STREAM_URL+_0x339c5c(0x238)+Date[_0x339c5c(0x1ee)]();radio[_0x339c5c(0x1fc)]=_0x1fba55,radio[_0x339c5c(0x23c)](),await updateNowPlaying();const _0x28439a=radio[_0x339c5c(0x1d4)]();_0x28439a!==undefined&&await _0x28439a;}catch(_0x5f152e){console['log'](_0x339c5c(0x225),_0x5f152e);}finally{isConnecting=![];}}function togglePlay(){const _0x410dba=_0x4fee16;radio[_0x410dba(0x208)]?startLiveStream():radio['pause']();}radio[_0x4fee16(0x1f9)](_0x4fee16(0x1d4),()=>{setVisualState(!![]),showPauseIcon();}),radio[_0x4fee16(0x1f9)](_0x4fee16(0x1e1),()=>{setVisualState(![]),showPlayIcon();});function _0x4b50(_0x51f3f9,_0x2c8a53){_0x51f3f9=_0x51f3f9-0x1d2;const _0x5be27e=_0x5be2();let _0x4b50bd=_0x5be27e[_0x51f3f9];return _0x4b50bd;}async function updateStationNameFromSchedule(){const _0x19846e=_0x4fee16;try{const _0x2eeb42=await fetch(SCHEDULE_API,{'cache':_0x19846e(0x230)}),_0x21cde5=await _0x2eeb42[_0x19846e(0x22f)](),_0x1f526e=_0x21cde5[_0x19846e(0x232)](_0x537d8e=>_0x537d8e[_0x19846e(0x220)]===!![]&&_0x537d8e['type']===_0x19846e(0x1ea))||_0x21cde5['find'](_0x286a92=>_0x286a92[_0x19846e(0x220)]===!![]);if(_0x1f526e){const _0xd15e9d=_0x1f526e[_0x19846e(0x1f4)]||_0x1f526e[_0x19846e(0x1d5)]||_0x19846e(0x202);if(_0x1f526e[_0x19846e(0x219)]&&_0x1f526e[_0x19846e(0x210)]){const _0x41bd2c=new Date(_0x1f526e[_0x19846e(0x219)]);_0x41bd2c['setMinutes'](_0x41bd2c['getMinutes']()+0x2);const _0x44a87d=new Date(_0x1f526e[_0x19846e(0x210)]);_0x44a87d[_0x19846e(0x21b)](_0x44a87d[_0x19846e(0x221)]()+0x2);const _0x2b8a66=_0x41bd2c['toLocaleTimeString']([],{'hour':_0x19846e(0x218),'minute':_0x19846e(0x20b),'hour12':!![]})[_0x19846e(0x1de)](),_0x4ad34d=_0x44a87d[_0x19846e(0x206)]([],{'hour':_0x19846e(0x218),'minute':_0x19846e(0x20b),'hour12':!![]})[_0x19846e(0x1de)]();stationNameEl['innerText']=_0xd15e9d+'\x20('+_0x2b8a66+_0x19846e(0x1fe)+_0x4ad34d+')';}else stationNameEl[_0x19846e(0x237)]=_0xd15e9d;}else stationNameEl[_0x19846e(0x237)]=_0x19846e(0x202);}catch(_0x3be6c9){stationNameEl[_0x19846e(0x237)]=_0x19846e(0x202);}}function updateAlbumArt(_0x12f952){const _0x428cf7=_0x4fee16;if(!_0x12f952){logo['src']=_0x428cf7(0x1f0),logo[_0x428cf7(0x1db)][_0x428cf7(0x200)]='1',lastArtwork='';return;}if(_0x12f952===lastArtwork)return;const _0x2ac3a6=new Image();_0x2ac3a6[_0x428cf7(0x209)]=_0x428cf7(0x20d),_0x2ac3a6[_0x428cf7(0x1e4)]=()=>{const _0x2f9469=_0x428cf7;logo[_0x2f9469(0x1db)]['opacity']='0',setTimeout(()=>{const _0x1c61a9=_0x2f9469;logo[_0x1c61a9(0x1fc)]=_0x12f952,logo[_0x1c61a9(0x1db)]['opacity']='1';},0xc8);},_0x2ac3a6[_0x428cf7(0x1eb)]=()=>{const _0x228ee6=_0x428cf7;logo[_0x228ee6(0x1fc)]='logo.png',logo['style'][_0x228ee6(0x200)]='1';},_0x2ac3a6[_0x428cf7(0x1fc)]=_0x12f952,updateAlbumColors(_0x12f952),lastArtwork=_0x12f952;}async function updateNowPlaying(){const _0x1e65c7=_0x4fee16;try{const _0x5363ce=await fetch(NOW_PLAYING_API+'?t='+Date[_0x1e65c7(0x1ee)](),{'cache':_0x1e65c7(0x230)}),_0x534137=await _0x5363ce['json'](),_0x57b3b5=_0x534137?.[_0x1e65c7(0x1da)];_0x57b3b5&&_0x57b3b5[_0x1e65c7(0x1e7)]&&_0x57b3b5[_0x1e65c7(0x1e6)]&&(stationNameEl[_0x1e65c7(0x237)]=_0x1e65c7(0x20a)+_0x57b3b5[_0x1e65c7(0x1e6)]);const _0xca61fc=_0x534137?.[_0x1e65c7(0x1ff)]?.[_0x1e65c7(0x1f6)];if(!_0xca61fc){updateAlbumArt('');return;}const _0x3f2046=_0xca61fc[_0x1e65c7(0x23d)]?.['trim']()||'';updateAlbumArt(_0x3f2046);const _0x2be892=_0xca61fc[_0x1e65c7(0x1d9)]?.[_0x1e65c7(0x1e5)]()||'',_0x4dd5e7=_0xca61fc[_0x1e65c7(0x1f4)]?.[_0x1e65c7(0x1e5)]()||'',_0x32c709=_0x2be892?_0x2be892+_0x1e65c7(0x1fe)+_0x4dd5e7:_0x4dd5e7;if(!_0x32c709)return;_0x32c709!==lastSongText&&(lastSongText=_0x32c709,nowPlayingEl[_0x1e65c7(0x237)]=_0x32c709,window[_0x1e65c7(0x247)]&&updateMarquee());}catch(_0x40c703){console['log'](_0x1e65c7(0x217),_0x40c703);}}setVisualState(![]),showPlayIcon(),updateStationNameFromSchedule(),updateNowPlaying(),setInterval(updateStationNameFromSchedule,0xea60),setInterval(updateNowPlaying,0x3a98);
+const HLS_STREAM_URL = 'https://radio.thaalam24x7.in/hls/thaalam_24x7/live.m3u8';
+const NOW_PLAYING_API = 'https://radio.thaalam24x7.in/api/nowplaying/thaalam_24x7';
+const SCHEDULE_API = 'https://radio.thaalam24x7.in/api/station/6/schedule';
+
+const radio = document.getElementById('radio');
+const playIcon = document.getElementById('playIcon');
+const nowPlayingEl = document.getElementById('nowPlaying');
+const stationNameEl = document.getElementById('stationName');
+const logo = document.getElementById('logoImg');
+const root = document.documentElement;
+
+let lastSongText = '';
+let lastArtwork = '';
+let isConnecting = false;
+let hlsPlayer = null;
+
+function setAlbumColors(colors) {
+  if (!colors || colors.length < 5) return;
+  ['--c1', '--c2', '--c3', '--c4', '--c5'].forEach((property, index) => {
+    root.style.setProperty(property, colors[index]);
+  });
+}
+
+function rgbToHex(red, green, blue) {
+  return `#${[red, green, blue]
+    .map((value) => Math.max(0, Math.min(255, Math.round(value)))
+      .toString(16).padStart(2, '0'))
+    .join('')}`;
+}
+
+function colorDistance(first, second) {
+  const red = first.r - second.r;
+  const green = first.g - second.g;
+  const blue = first.b - second.b;
+  return Math.sqrt(red * red + green * green + blue * blue);
+}
+
+function extractAlbumColors(image) {
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  const size = 80;
+  canvas.width = size;
+  canvas.height = size;
+
+  try {
+    context.drawImage(image, 0, 0, size, size);
+    const pixels = context.getImageData(0, 0, size, size).data;
+    const candidates = [];
+
+    for (let index = 0; index < pixels.length; index += 16) {
+      const red = pixels[index];
+      const green = pixels[index + 1];
+      const blue = pixels[index + 2];
+      const alpha = pixels[index + 3];
+      if (alpha < 180) continue;
+
+      const brightness = (red + green + blue) / 3;
+      if (brightness < 12 || brightness > 248) continue;
+
+      candidates.push({
+        r: red,
+        g: green,
+        b: blue,
+        saturation: Math.max(red, green, blue) - Math.min(red, green, blue),
+        brightness
+      });
+    }
+
+    candidates.sort((first, second) =>
+      second.saturation + second.brightness * 0.35 -
+      (first.saturation + first.brightness * 0.35));
+
+    const selected = [];
+    for (const candidate of candidates) {
+      if (!selected.some((color) => colorDistance(candidate, color) < 55)) {
+        selected.push(candidate);
+      }
+      if (selected.length >= 5) break;
+    }
+
+    while (selected.length < 5) {
+      selected.push({ r: 8, g: 12, b: 20, brightness: 12 });
+    }
+
+    setAlbumColors(selected.map((color) => {
+      const multiplier = color.brightness < 80 ? 1.25 : 0.72;
+      return rgbToHex(
+        color.r * multiplier,
+        color.g * multiplier,
+        color.b * multiplier
+      );
+    }));
+  } catch (error) {
+    console.log('Album color extraction failed:', error);
+  }
+}
+
+function updateAlbumColors(imageUrl) {
+  const image = new Image();
+  image.crossOrigin = 'anonymous';
+  image.onload = () => extractAlbumColors(image);
+  image.onerror = () => console.log('Album artwork could not be loaded for color extraction');
+  image.src = `${imageUrl}${imageUrl.includes('?') ? '&' : '?'}color=${Date.now()}`;
+}
+
+function setVisualState(isPlaying) {
+  const tagline = document.querySelector('.tagline');
+  if (!tagline) return;
+
+  if (isPlaying) {
+    tagline.classList.remove('paused');
+    document.body.classList.remove('paused-gradient');
+  } else {
+    tagline.classList.add('paused');
+    document.body.classList.add('paused-gradient');
+  }
+}
+
+function showPlayIcon() {
+  if (playIcon) playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+}
+
+function showPauseIcon() {
+  if (playIcon) playIcon.innerHTML = '<path d="M6 5h4v14H6zm8 0h4v14h-4z"/>';
+}
+
+async function startLiveStream() {
+  if (isConnecting || !radio) return;
+  isConnecting = true;
+
+  try {
+    radio.pause();
+    if (hlsPlayer) {
+      hlsPlayer.destroy();
+      hlsPlayer = null;
+    }
+    radio.removeAttribute('src');
+    radio.load();
+
+    if (window.Hls && window.Hls.isSupported()) {
+      hlsPlayer = new window.Hls({
+        maxBufferLength: 45,
+        maxMaxBufferLength: 90
+      });
+      const player = hlsPlayer;
+      await new Promise((resolve, reject) => {
+        player.once(window.Hls.Events.MANIFEST_PARSED, () => {
+          radio.play().then(resolve, reject);
+        });
+        player.on(window.Hls.Events.ERROR, (_event, data) => {
+          if (!data.fatal) return;
+          if (data.type === window.Hls.ErrorTypes.NETWORK_ERROR) {
+            player.startLoad();
+          } else if (data.type === window.Hls.ErrorTypes.MEDIA_ERROR) {
+            player.recoverMediaError();
+          } else {
+            reject(new Error(`Fatal HLS playback error: ${data.details}`));
+          }
+        });
+        player.attachMedia(radio);
+        player.loadSource(HLS_STREAM_URL);
+      });
+    } else if (radio.canPlayType('application/vnd.apple.mpegurl')) {
+      radio.src = HLS_STREAM_URL;
+      await radio.play();
+    } else {
+      throw new Error('This browser does not support HLS playback.');
+    }
+
+    await updateNowPlaying();
+  } catch (error) {
+    console.log('Unable to start live stream:', error);
+  } finally {
+    isConnecting = false;
+  }
+}
+
+function togglePlay() {
+  if (!radio) return;
+  if (radio.paused) {
+    startLiveStream();
+  } else {
+    radio.pause();
+  }
+}
+
+if (radio) {
+  radio.addEventListener('playing', () => {
+    setVisualState(true);
+    showPauseIcon();
+  });
+  radio.addEventListener('pause', () => {
+    setVisualState(false);
+    showPlayIcon();
+  });
+}
+
+async function updateStationNameFromSchedule() {
+  try {
+    const response = await fetch(SCHEDULE_API, { cache: 'no-store' });
+    const schedule = await response.json();
+    const currentShow = schedule.find((item) => item.is_now === true && item.type === 'live') ||
+      schedule.find((item) => item.is_now === true);
+
+    if (!currentShow) {
+      stationNameEl.innerText = 'Thaalam 24x7';
+      return;
+    }
+
+    const showName = currentShow.name || currentShow.streamer_name || 'Thaalam 24x7';
+    if (currentShow.start && currentShow.end) {
+      const start = new Date(currentShow.start);
+      const end = new Date(currentShow.end);
+      start.setMinutes(start.getMinutes() + 2);
+      end.setMinutes(end.getMinutes() + 2);
+      const formatTime = (date) => date.toLocaleTimeString([], {
+        hour: '2-digit', minute: '2-digit', hour12: true
+      }).trim();
+      stationNameEl.innerText = `${showName} (${formatTime(start)} – ${formatTime(end)})`;
+    } else {
+      stationNameEl.innerText = showName;
+    }
+  } catch (_) {
+    if (stationNameEl) stationNameEl.innerText = 'Thaalam 24x7';
+  }
+}
+
+function updateAlbumArt(artworkUrl) {
+  if (!artworkUrl) {
+    logo.src = 'logo.png';
+    logo.style.opacity = '1';
+    lastArtwork = '';
+    return;
+  }
+  if (artworkUrl === lastArtwork) return;
+
+  const image = new Image();
+  image.crossOrigin = 'anonymous';
+  image.onload = () => {
+    logo.style.opacity = '0';
+    setTimeout(() => {
+      logo.src = artworkUrl;
+      logo.style.opacity = '1';
+    }, 200);
+  };
+  image.onerror = () => {
+    logo.src = 'logo.png';
+    logo.style.opacity = '1';
+  };
+  image.src = artworkUrl;
+  updateAlbumColors(artworkUrl);
+  lastArtwork = artworkUrl;
+}
+
+async function updateNowPlaying() {
+  try {
+    const response = await fetch(`${NOW_PLAYING_API}?t=${Date.now()}`, { cache: 'no-store' });
+    const data = await response.json();
+    const nowPlaying = data?.now_playing;
+    const song = nowPlaying?.song;
+
+    if (nowPlaying?.is_live && nowPlaying?.streamer_name && stationNameEl) {
+      stationNameEl.innerText = `LIVE • ${nowPlaying.streamer_name}`;
+    }
+
+    if (!song) {
+      updateAlbumArt('');
+      return;
+    }
+
+    updateAlbumArt(song.art?.trim() || '');
+    const title = song.title?.trim() || '';
+    const artist = song.artist?.trim() || '';
+    const songText = title ? `${title} – ${artist}` : artist;
+    if (!songText) return;
+
+    if (songText !== lastSongText) {
+      lastSongText = songText;
+      if (nowPlayingEl) nowPlayingEl.innerText = songText;
+      if (window.updateMarquee) window.updateMarquee();
+    }
+  } catch (error) {
+    console.log('Now Playing update failed:', error);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  if (radio) radio.preload = 'none';
+  if (logo) logo.src = 'logo.png';
+
+  const favicon = document.createElement('link');
+  favicon.rel = 'icon';
+  favicon.type = 'image/png';
+  favicon.href = 'logo.png';
+  document.head.prepend(favicon);
+
+  const albumBackground = document.createElement('div');
+  albumBackground.className = 'album-background';
+  document.body.prepend(albumBackground);
+
+  const tagline = document.querySelector('.tagline');
+  if (tagline && nowPlayingEl) {
+    window.updateMarquee = () => {
+      tagline.classList.remove('marquee');
+      requestAnimationFrame(() => {
+        if (nowPlayingEl.scrollWidth > tagline.clientWidth) {
+          tagline.classList.add('marquee');
+        }
+      });
+    };
+    window.updateMarquee();
+  }
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch((error) => {
+      console.log('Service worker registration failed:', error);
+    });
+  }
+});
+
+function refreshStationAndTrackInfo() {
+  updateStationNameFromSchedule();
+  updateNowPlaying();
+}
+
+setVisualState(false);
+showPlayIcon();
+refreshStationAndTrackInfo();
+setInterval(updateStationNameFromSchedule, 60000);
+setInterval(updateNowPlaying, 15000);
