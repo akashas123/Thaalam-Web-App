@@ -48,7 +48,10 @@ let sleepTimerInterval = 0;
 let songInfoRequestId = 0;
 let itunesRequestId = 0;
 let currentRatingTrackKey = '';
+let currentRatingSongKey = '';
 let feedbackTimeout = 0;
+let ratingRefreshInterval = 0;
+let ratingRefreshInProgress = false;
 
 let likeFeedbackShown = false;
 let dislikeFeedbackShown = false;
@@ -61,6 +64,9 @@ const RATING_STORAGE_KEY =
 
 const SLEEP_TIMER_STORAGE_KEY =
   'thaalam24x7-sleep-timer';
+
+const NOW_PLAYING_URL =
+  'https://radio.thaalam24x7.in/api/nowplaying/thaalam_24x7';
 
 function openDialog(dialog) {
   if (!dialog) {
@@ -148,12 +154,14 @@ function getStoredRatings() {
 
     if (
       !parsed ||
-      typeof parsed !== 'object'
+      typeof parsed !== 'object' ||
+      Array.isArray(parsed)
     ) {
       return {};
     }
 
     return parsed;
+
   } catch {
     return {};
   }
@@ -167,7 +175,11 @@ function saveStoredRatings(
       RATING_STORAGE_KEY,
       JSON.stringify(ratings)
     );
+
+    return true;
+
   } catch {
+    return false;
   }
 }
 
@@ -238,6 +250,9 @@ function updateStoredRatingForCurrentSong(
   currentRatingTrackKey =
     key;
 
+  currentRatingSongKey =
+    key;
+
   if (!key) {
     clearRatingSelection();
     return;
@@ -246,10 +261,19 @@ function updateStoredRatingForCurrentSong(
   const ratings =
     getStoredRatings();
 
+  const savedRating =
+    ratings[key] === 'up' ||
+    ratings[key] === 'down'
+      ? ratings[key]
+      : null;
+
   applyStoredRating(
-    ratings[key] || null
+    savedRating
   );
 }
+
+window.updateStoredRatingForCurrentSong =
+  updateStoredRatingForCurrentSong;
 
 function setStoredRating(
   value
@@ -286,9 +310,14 @@ function setStoredRating(
     currentRatingTrackKey
   ] = value;
 
-  saveStoredRatings(
-    ratings
-  );
+  const saved =
+    saveStoredRatings(
+      ratings
+    );
+
+  if (!saved) {
+    return false;
+  }
 
   applyStoredRating(
     value
@@ -372,6 +401,75 @@ function showSongFeedback(
     }, 2200);
 }
 
+async function refreshCurrentRating() {
+  if (ratingRefreshInProgress) {
+    return;
+  }
+
+  ratingRefreshInProgress =
+    true;
+
+  try {
+    const response =
+      await fetch(
+        NOW_PLAYING_URL,
+        {
+          cache: 'no-store'
+        }
+      );
+
+    if (!response.ok) {
+      return;
+    }
+
+    const data =
+      await response.json();
+
+    const song =
+      data
+        ?.now_playing
+        ?.song;
+
+    if (!song) {
+      return;
+    }
+
+    const newKey =
+      getTrackRatingKey(song);
+
+    if (!newKey) {
+      return;
+    }
+
+    if (
+      newKey !==
+      currentRatingSongKey
+    ) {
+      updateStoredRatingForCurrentSong(
+        song
+      );
+    } else {
+      const ratings =
+        getStoredRatings();
+
+      const savedRating =
+        ratings[newKey] === 'up' ||
+        ratings[newKey] === 'down'
+          ? ratings[newKey]
+          : null;
+
+      applyStoredRating(
+        savedRating
+      );
+    }
+
+  } catch {
+  } finally {
+    ratingRefreshInProgress =
+      false;
+  }
+}
+
 async function updateSongInfo() {
   const requestId =
     ++songInfoRequestId;
@@ -407,7 +505,7 @@ async function updateSongInfo() {
   try {
     const nowPlayingResponse =
       await fetch(
-        'https://radio.thaalam24x7.in/api/nowplaying/thaalam_24x7',
+        NOW_PLAYING_URL,
         {
           cache: 'no-store'
         }
@@ -1006,7 +1104,10 @@ function refreshSleepTimerStatus() {
   const formatted =
     `${minutes}:${String(
       seconds
-    ).padStart(2, '0')}`;
+    ).padStart(
+      2,
+      '0'
+    )}`;
 
   sleepTimerStatus.textContent =
     `Playback will pause in ${formatted}.`;
@@ -1085,38 +1186,6 @@ function restoreSleepTimer() {
   }
 }
 
-async function refreshCurrentRating() {
-  try {
-    const response =
-      await fetch(
-        'https://radio.thaalam24x7.in/api/nowplaying/thaalam_24x7',
-        {
-          cache: 'no-store'
-        }
-      );
-
-    if (!response.ok) {
-      return;
-    }
-
-    const data =
-      await response.json();
-
-    const song =
-      data
-        ?.now_playing
-        ?.song;
-
-    if (song) {
-      updateStoredRatingForCurrentSong(
-        song
-      );
-    }
-
-  } catch {
-  }
-}
-
 songInfoButton?.addEventListener(
   'click',
   () => {
@@ -1166,9 +1235,18 @@ cancelSleepTimerButton?.addEventListener(
 );
 
 if (thumbsUpButton) {
+  thumbsUpButton.setAttribute(
+    'aria-pressed',
+    'false'
+  );
+
   thumbsUpButton.addEventListener(
     'click',
-    () => {
+    async () => {
+      if (!currentRatingTrackKey) {
+        await refreshCurrentRating();
+      }
+
       const triggered =
         selectRating(
           thumbsUpButton,
@@ -1179,7 +1257,8 @@ if (thumbsUpButton) {
         triggered &&
         !likeFeedbackShown
       ) {
-        likeFeedbackShown = true;
+        likeFeedbackShown =
+          true;
 
         showSongFeedback(
           'Likes influences our charts'
@@ -1190,9 +1269,18 @@ if (thumbsUpButton) {
 }
 
 if (thumbsDownButton) {
+  thumbsDownButton.setAttribute(
+    'aria-pressed',
+    'false'
+  );
+
   thumbsDownButton.addEventListener(
     'click',
-    () => {
+    async () => {
+      if (!currentRatingTrackKey) {
+        await refreshCurrentRating();
+      }
+
       const triggered =
         selectRating(
           thumbsDownButton,
@@ -1203,7 +1291,8 @@ if (thumbsDownButton) {
         triggered &&
         !dislikeFeedbackShown
       ) {
-        dislikeFeedbackShown = true;
+        dislikeFeedbackShown =
+          true;
 
         showSongFeedback(
           'Tuning, promo factors may still apply'
@@ -1224,10 +1313,11 @@ restoreSleepTimer();
 
 window.setTimeout(
   refreshCurrentRating,
-  500
+  300
 );
 
-window.setInterval(
-  refreshCurrentRating,
-  15000
-);
+ratingRefreshInterval =
+  window.setInterval(
+    refreshCurrentRating,
+    15000
+  );
