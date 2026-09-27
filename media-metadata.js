@@ -1,7 +1,5 @@
 const metadataRadio = document.getElementById('radio');
-const metadataApi = 'https://radio.thaalam24x7.in/api/nowplaying/thaalam_24x7';
 const fallbackArtwork = new URL('album-placeholder.svg?v=2', window.location.href).href;
-let metadataLoaded = false;
 let currentArtwork = '';
 
 function setFavicon(artwork) {
@@ -43,17 +41,16 @@ function applyNowPlayingMetadata(data) {
   }
 }
 
-async function refreshNowPlayingMetadata() {
-  if (metadataRadio.paused && metadataLoaded) return;
+function refreshNowPlayingMetadata(data = window.latestNowPlayingData) {
+  if (data) applyNowPlayingMetadata(data);
+}
 
-  try {
-    const response = await fetch(`${metadataApi}?t=${Date.now()}`, { cache: 'no-store' });
-    if (!response.ok) return;
-    applyNowPlayingMetadata(await response.json());
-    metadataLoaded = true;
-  } catch (error) {
-    console.log('Browser media metadata update failed:', error);
-  }
+window.addEventListener('thaalam:nowplaying', (event) => {
+  refreshNowPlayingMetadata(event.detail);
+});
+
+if (window.latestNowPlayingData) {
+  refreshNowPlayingMetadata(window.latestNowPlayingData);
 }
 
 if (navigator.mediaSession) {
@@ -74,9 +71,9 @@ if (navigator.mediaSession) {
   });
 }
 
-refreshNowPlayingMetadata();
-setInterval(refreshNowPlayingMetadata, 15000);
-metadataRadio.addEventListener('play', refreshNowPlayingMetadata);
+metadataRadio.addEventListener('play', () => {
+  refreshNowPlayingMetadata(window.latestNowPlayingData);
+});
 
 new MutationObserver((records) => {
   if (records.some((record) => [...record.addedNodes].some((node) =>
