@@ -228,6 +228,8 @@ body::after {
 
   backdrop-filter: blur(0.5rem);
   -webkit-backdrop-filter: blur(0.5rem);
+
+  position: relative;
 }
 
 [class~="logo-card"] img {
@@ -244,6 +246,64 @@ body::after {
 
   user-select: none;
   -webkit-user-select: none;
+}
+
+.song-feedback {
+  position: absolute;
+
+  left: 50%;
+  top: 50%;
+
+  transform:
+    translate(-50%, -50%)
+    scale(0.96);
+
+  z-index: 10;
+
+  padding:
+    0.65rem 1rem;
+
+  border-radius: 0.75rem;
+
+  background:
+    rgba(0, 0, 0, 0.55);
+
+  border:
+    0.0625rem solid
+    rgba(255, 255, 255, 0.16);
+
+  color: #fff;
+
+  font-size: 0.78rem;
+
+  font-weight: 600;
+
+  letter-spacing: 0.01rem;
+
+  white-space: nowrap;
+
+  opacity: 0;
+
+  pointer-events: none;
+
+  backdrop-filter: blur(0.75rem);
+  -webkit-backdrop-filter: blur(0.75rem);
+
+  box-shadow:
+    0 0.5rem 1.5rem
+    rgba(0, 0, 0, 0.3);
+
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
+}
+
+.song-feedback.show {
+  opacity: 1;
+
+  transform:
+    translate(-50%, -50%)
+    scale(1);
 }
 
 [class~="station"] {
@@ -378,6 +438,35 @@ body::after {
     rgba(0, 0, 0, 0.45);
 }
 
+.track-time {
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  width: 100%;
+
+  margin-top: -1.5rem;
+  margin-bottom: 1.75rem;
+
+  padding: 0 0.1rem;
+
+  font-size: 0.72rem;
+  font-weight: 500;
+
+  letter-spacing: 0.04rem;
+
+  color: rgba(255, 255, 255, 0.62);
+
+  text-shadow:
+    0 0.125rem 0.625rem
+    rgba(0, 0, 0, 0.35);
+}
+
+.track-time span {
+  display: block;
+}
+
 [class~="play-btn"] {
   -webkit-tap-highlight-color: transparent;
 
@@ -464,13 +553,16 @@ body::after {
   display: grid;
 
   grid-template-columns:
-    minmax(3rem, 1fr)
+    3rem
+    3rem
     4rem
-    minmax(3rem, 1fr);
+    3rem
+    3rem;
 
-  column-gap: 1.75rem;
+  column-gap: 0.75rem;
 
   align-items: center;
+  justify-content: center;
 
   width: 100%;
 
@@ -484,17 +576,25 @@ body::after {
 }
 
 .player-controls .play-btn {
-  grid-column: 2;
+  grid-column: 3;
   margin: 0;
 }
 
-.side-control {
+.player-controls #songInfoButton {
+  grid-column: 2;
+  justify-self: center;
+}
+
+.player-controls #sleepTimerButton {
+  grid-column: 4;
+  justify-self: center;
+}
+
+.rating-btn {
   display: flex;
 
   align-items: center;
   justify-content: center;
-
-  justify-self: center;
 
   width: 3rem;
   height: 3rem;
@@ -521,33 +621,107 @@ body::after {
   -webkit-tap-highlight-color: transparent;
 }
 
-.side-control:first-child {
+#thumbsDownButton {
   grid-column: 1;
-  justify-self: end;
+  justify-self: center;
 }
 
-.side-control:last-child {
-  grid-column: 3;
-  justify-self: start;
+#thumbsDownButton svg {
+  transform: rotate(180deg);
 }
 
-.side-control:hover {
-  background:
-    rgba(255, 255, 255, 0.12);
+#thumbsUpButton {
+  grid-column: 5;
+  justify-self: center;
+}
+
+.rating-btn svg {
+  display: block;
+
+  width: 1.45rem;
+  height: 1.45rem;
+
+  fill: #fff;
+
+  color: #fff;
+}
+
+.rating-btn:hover {
+  background: transparent;
 
   opacity: 1;
 }
 
-.side-control:active {
+.rating-btn:active {
   transform: scale(0.92);
 }
 
+.rating-btn.rating-selected {
+  background: transparent;
+
+  opacity: 1;
+}
+
+.rating-btn.rating-selected svg {
+  filter:
+    drop-shadow(
+      0 0 0.2rem
+      rgba(255, 255, 255, 0.85)
+    )
+    drop-shadow(
+      0 0 0.5rem
+      rgba(255, 255, 255, 0.45)
+    );
+}
+
+.rating-btn:focus-visible,
 .side-control:focus-visible,
 .play-btn:focus-visible,
 .timer-options button:focus-visible,
 .dialog-close:focus-visible {
   outline: 0.125rem solid #fff;
   outline-offset: 0.2rem;
+}
+
+.side-control {
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  width: 3rem;
+  height: 3rem;
+
+  padding: 0;
+
+  border: 0;
+
+  border-radius: 50%;
+
+  background: transparent;
+
+  color: #fff;
+
+  cursor: pointer;
+
+  opacity: 0.9;
+
+  transition:
+    background 0.2s ease,
+    opacity 0.2s ease,
+    transform 0.2s ease;
+
+  -webkit-tap-highlight-color: transparent;
+}
+
+.side-control:hover {
+  background: transparent;
+
+  opacity: 1;
+}
+
+.side-control:active {
+  transform: scale(0.92);
 }
 
 .side-control span {
@@ -580,8 +754,19 @@ body::after {
 }
 
 .side-control.timer-active {
-  background:
-    rgba(255, 255, 255, 0.16);
+  background: transparent;
+
+  opacity: 1;
+
+  filter:
+    drop-shadow(
+      0 0 0.2rem
+      rgba(255, 255, 255, 0.85)
+    )
+    drop-shadow(
+      0 0 0.5rem
+      rgba(255, 255, 255, 0.45)
+    );
 }
 
 .control-dialog {

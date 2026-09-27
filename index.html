@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="robots" content="noindex,nofollow">
+
   <meta
     name="viewport"
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
@@ -10,31 +11,42 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=18">
+  <link rel="stylesheet" href="style.css?v=23">
+
   <style>
     .tagline[class~="marquee"] span {
       animation-duration: 45s;
       animation-delay: 0s;
       animation-iteration-count: infinite;
     }
+
     .tagline[class~="marquee"] > span {
       display: flex;
       width: max-content;
       gap: 3rem;
       animation: marqueeLoop 45s linear infinite;
     }
+
     body.paused-gradient .tagline[class~="marquee"] > span {
       animation-play-state: paused;
     }
+
     .tagline[class~="marquee"] > span > span {
       flex: 0 0 auto;
       animation: none;
     }
+
     @keyframes marqueeLoop {
-      from { transform: translateX(0); }
-      to { transform: translateX(calc(-50% - 1.5rem)); }
+      from {
+        transform: translateX(0);
+      }
+
+      to {
+        transform: translateX(calc(-50% - 1.5rem));
+      }
     }
   </style>
+
   <link rel="manifest" href="manifest.json">
 
   <meta name="theme-color" content="#05070d">
@@ -66,67 +78,276 @@
       <div class="live-line"></div>
     </div>
 
+    <div
+      class="track-time"
+      id="trackTime"
+      aria-live="polite"
+    >
+      <span id="trackElapsed">0:00</span>
+      <span id="trackDuration">0:00</span>
+    </div>
+
     <audio id="radio"></audio>
 
     <div class="player-controls">
-      <button class="side-control" id="songInfoButton" type="button" aria-label="Song information" title="Song information">
+
+      <button
+        class="rating-btn"
+        id="thumbsDownButton"
+        type="button"
+        aria-label="Dislike"
+        title="Dislike"
+        aria-pressed="false"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <path d="M1 21h4V9H1v12ZM23 10c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2Z"/>
+        </svg>
+      </button>
+
+      <button
+        class="side-control"
+        id="songInfoButton"
+        type="button"
+        aria-label="Song information"
+        title="Song information"
+      >
         <span aria-hidden="true">i</span>
       </button>
 
-      <button class="play-btn" id="playButton" type="button" onclick="togglePlay()" aria-label="Play">
-        <svg id="playIcon" viewBox="0 0 24 24" aria-hidden="true">
+      <button
+        class="play-btn"
+        id="playButton"
+        type="button"
+        onclick="togglePlay()"
+        aria-label="Play"
+      >
+        <svg
+          id="playIcon"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
           <path d="M8 5v14l11-7z"/>
         </svg>
       </button>
 
-      <button class="side-control" id="sleepTimerButton" type="button" aria-label="Sleep timer" title="Sleep timer">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
+      <button
+        class="side-control"
+        id="sleepTimerButton"
+        type="button"
+        aria-label="Sleep timer"
+        title="Sleep timer"
+        aria-pressed="false"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
           <path d="M20.2 15.1A8.5 8.5 0 0 1 8.9 3.8 8.6 8.6 0 1 0 20.2 15.1Z"/>
         </svg>
       </button>
+
+      <button
+        class="rating-btn"
+        id="thumbsUpButton"
+        type="button"
+        aria-label="Like"
+        title="Like"
+        aria-pressed="false"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <path d="M1 21h4V9H1v12ZM23 10c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41.17-.79.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2Z"/>
+        </svg>
+      </button>
+
     </div>
 
   </div>
 
-  <dialog class="control-dialog song-info-dialog" id="songInfoDialog" aria-labelledby="songInfoTitle">
-    <form method="dialog"><button class="dialog-close" aria-label="Close">&times;</button></form>
-    <h2 id="songInfoTitle">Now playing</h2>
-    <img class="song-info-art" id="songInfoArt" alt="Current album artwork">
-    <p class="song-info-track" id="songInfoTrack">Thaalam 24x7</p>
-    <p class="song-info-artist" id="songInfoArtist"></p>
-    <p class="song-info-details" id="songInfoDetails">Loading track details...</p>
-    <p class="song-info-background" id="songInfoBackground" hidden></p>
-    <a class="song-info-wiki-link" id="songInfoWikiLink" target="_blank" rel="noopener noreferrer" hidden></a>
+  <dialog
+    class="control-dialog song-info-dialog"
+    id="songInfoDialog"
+    aria-labelledby="songInfoTitle"
+  >
+
+    <form method="dialog">
+      <button
+        class="dialog-close"
+        aria-label="Close"
+      >
+        &times;
+      </button>
+    </form>
+
+    <h2 id="songInfoTitle">
+      Now playing
+    </h2>
+
+    <img
+      class="song-info-art"
+      id="songInfoArt"
+      alt="Current album artwork"
+    >
+
+    <p
+      class="song-info-track"
+      id="songInfoTrack"
+    >
+      Thaalam 24x7
+    </p>
+
+    <p
+      class="song-info-artist"
+      id="songInfoArtist"
+    ></p>
+
+    <p
+      class="song-info-details"
+      id="songInfoDetails"
+    >
+      Loading track details...
+    </p>
+
+    <p
+      class="song-info-background"
+      id="songInfoBackground"
+      hidden
+    ></p>
+
+    <a
+      class="song-info-wiki-link"
+      id="songInfoWikiLink"
+      target="_blank"
+      rel="noopener noreferrer"
+      hidden
+    ></a>
+
   </dialog>
 
-  <dialog class="control-dialog sleep-dialog" id="sleepTimerDialog" aria-labelledby="sleepTimerTitle">
-    <form method="dialog"><button class="dialog-close" aria-label="Close">&times;</button></form>
-    <h2 id="sleepTimerTitle">Sleep timer</h2>
+  <dialog
+    class="control-dialog sleep-dialog"
+    id="sleepTimerDialog"
+    aria-labelledby="sleepTimerTitle"
+  >
+
+    <form method="dialog">
+      <button
+        class="dialog-close"
+        aria-label="Close"
+      >
+        &times;
+      </button>
+    </form>
+
+    <h2 id="sleepTimerTitle">
+      Sleep timer
+    </h2>
+
     <div class="timer-options">
-      <button type="button" data-minutes="15">15 minutes</button>
-      <button type="button" data-minutes="30">30 minutes</button>
-      <button type="button" data-minutes="45">45 minutes</button>
-      <button type="button" data-minutes="60">60 minutes</button>
-      <button type="button" id="cancelSleepTimer" hidden>Cancel timer</button>
+
+      <button
+        type="button"
+        data-minutes="15"
+      >
+        15 minutes
+      </button>
+
+      <button
+        type="button"
+        data-minutes="30"
+      >
+        30 minutes
+      </button>
+
+      <button
+        type="button"
+        data-minutes="45"
+      >
+        45 minutes
+      </button>
+
+      <button
+        type="button"
+        data-minutes="60"
+      >
+        60 minutes
+      </button>
+
+      <button
+        type="button"
+        id="cancelSleepTimer"
+        hidden
+      >
+        Cancel timer
+      </button>
+
     </div>
-    <p class="timer-status" id="sleepTimerStatus" aria-live="polite"></p>
+
+    <p
+      class="timer-status"
+      id="sleepTimerStatus"
+      aria-live="polite"
+    ></p>
+
   </dialog>
 
-  <aside class="lyrics-panel" id="lyricsPanel" aria-live="polite" aria-hidden="true">
-    <button class="lyrics-toggle" id="lyricsToggle" type="button" aria-expanded="false">
-      <span class="lyrics-heading">Lyrics (Beta)</span>
-      <span class="lyrics-toggle-icon" aria-hidden="true">⌃</span>
+  <aside
+    class="lyrics-panel"
+    id="lyricsPanel"
+    aria-live="polite"
+    aria-hidden="true"
+  >
+
+    <button
+      class="lyrics-toggle"
+      id="lyricsToggle"
+      type="button"
+      aria-expanded="false"
+    >
+
+      <span class="lyrics-heading">
+        Lyrics (Beta)
+      </span>
+
+      <span
+        class="lyrics-toggle-icon"
+        aria-hidden="true"
+      >
+        ⌃
+      </span>
+
     </button>
-    <div class="lyrics-notice" id="lyricsNotice" hidden>Lyrics aren't time-synced.</div>
-    <div class="lyrics-song" id="lyricsSong"></div>
-    <div class="lyrics-content" id="lyricsContent"></div>
+
+    <div
+      class="lyrics-notice"
+      id="lyricsNotice"
+      hidden
+    >
+      Lyrics aren't time-synced.
+    </div>
+
+    <div
+      class="lyrics-song"
+      id="lyricsSong"
+    ></div>
+
+    <div
+      class="lyrics-content"
+      id="lyricsContent"
+    ></div>
+
   </aside>
 
   <script src="script.js?v=5"></script>
   <script src="marquee.js?v=2"></script>
   <script src="media-metadata.js?v=1"></script>
-  <script src="player-controls.js?v=17"></script>
-  <script src="lyrics.js?v=18"></script>
+  <script src="player-controls.js?v=20"></script>
+  <script src="lyrics.js?v=19"></script>
 
 </body>
 </html>
