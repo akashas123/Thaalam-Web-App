@@ -45,6 +45,7 @@ const thumbsUpButton =
 
 let sleepTimerDeadline = 0;
 let sleepTimerInterval = 0;
+let sleepTimerDuration = 0;
 let songInfoRequestId = 0;
 let itunesRequestId = 0;
 let currentRatingTrackKey = '';
@@ -62,8 +63,16 @@ const itunesTrackCache =
 const RATING_STORAGE_KEY =
   'thaalam24x7-ratings';
 
+const SONG_INFO_STORAGE_KEY =
+  'thaalam24x7-song-info-v1';
+
+const SONG_INFO_CACHE_LIMIT = 100;
+
 const SLEEP_TIMER_STORAGE_KEY =
   'thaalam24x7-sleep-timer';
+
+const SLEEP_TIMER_DURATION_KEY =
+  'thaalam24x7-sleep-timer-duration';
 
 const NOW_PLAYING_URL =
   'https://radio.thaalam24x7.in/api/nowplaying/thaalam_24x7';
@@ -136,6 +145,60 @@ function getTrackRatingKey(
   }
 
   return `${title}|${artist}`;
+}
+
+function getStoredSongInfo(key) {
+  if (!key) return null;
+
+  try {
+    const cache = JSON.parse(
+      localStorage.getItem(SONG_INFO_STORAGE_KEY) || '{}'
+    );
+    return cache[key] || null;
+  } catch {
+    return null;
+  }
+}
+
+function saveStoredSongInfo(key, entry) {
+  if (!key || !entry) return;
+
+  try {
+    const cache = JSON.parse(
+      localStorage.getItem(SONG_INFO_STORAGE_KEY) || '{}'
+    );
+    cache[key] = { ...cache[key], ...entry, savedAt: Date.now() };
+
+    const oldestKeys = Object.keys(cache)
+      .sort((first, second) =>
+        (cache[first]?.savedAt || 0) - (cache[second]?.savedAt || 0)
+      );
+    while (oldestKeys.length > SONG_INFO_CACHE_LIMIT) {
+      delete cache[oldestKeys.shift()];
+    }
+
+    localStorage.setItem(
+      SONG_INFO_STORAGE_KEY,
+      JSON.stringify(cache)
+    );
+  } catch {
+    // Song information still works if storage is unavailable or full.
+  }
+}
+
+function showSongInfoBackground(background) {
+  if (!background?.url) {
+    songInfoBackground.textContent = '';
+    songInfoBackground.hidden = true;
+    songInfoWikiLink.hidden = true;
+    return;
+  }
+
+  songInfoBackground.textContent = background.summary || '';
+  songInfoBackground.hidden = !background.summary;
+  songInfoWikiLink.href = background.url;
+  songInfoWikiLink.textContent = `Source: Wikipedia - ${background.title}`;
+  songInfoWikiLink.hidden = false;
 }
 
 function getStoredRatings() {
@@ -345,12 +408,12 @@ function selectRating(
 function showSongFeedback(
   message
 ) {
-  const logoCard =
+  const albumArtCard =
     document.querySelector(
-      '.logo-card'
+      '.album-art-card'
     );
 
-  if (!logoCard) {
+  if (!albumArtCard) {
     return;
   }
 
@@ -371,7 +434,7 @@ function showSongFeedback(
     feedback.className =
       'song-feedback';
 
-    logoCard.appendChild(
+    albumArtCard.appendChild(
       feedback
     );
   }
@@ -474,15 +537,15 @@ async function updateSongInfo() {
   const requestId =
     ++songInfoRequestId;
 
-  const logo =
+  const albumArtImage =
     document.getElementById(
-      'logoImg'
+      'albumArtImg'
     );
 
   songInfoArt.src =
-    logo?.currentSrc ||
-    logo?.src ||
-    'logo.png';
+    albumArtImage?.currentSrc ||
+    albumArtImage?.src ||
+    'album-placeholder.svg?v=2';
 
   showSongInfo(
     '',
@@ -503,27 +566,21 @@ async function updateSongInfo() {
     null;
 
   try {
-    const nowPlayingResponse =
-      await fetch(
+    let song = window.currentNowPlayingSong;
+
+    if (!song?.title || !song?.artist) {
+      const nowPlayingResponse = await fetch(
         NOW_PLAYING_URL,
-        {
-          cache: 'no-store'
-        }
+        { cache: 'no-store' }
       );
 
-    if (!nowPlayingResponse.ok) {
-      throw new Error(
-        'Unable to load current track.'
-      );
+      if (!nowPlayingResponse.ok) {
+        throw new Error('Unable to load current track.');
+      }
+
+      const nowPlayingData = await nowPlayingResponse.json();
+      song = nowPlayingData?.now_playing?.song;
     }
-
-    const nowPlayingData =
-      await nowPlayingResponse.json();
-
-    const song =
-      nowPlayingData
-        ?.now_playing
-        ?.song;
 
     if (
       !song?.title ||
@@ -537,6 +594,23 @@ async function updateSongInfo() {
     updateStoredRatingForCurrentSong(
       song
     );
+
+    const songCacheKey = getTrackRatingKey(song);
+    const cachedSongInfo = getStoredSongInfo(songCacheKey);
+
+    if (
+      cachedSongInfo?.track &&
+      cachedSongInfo?.artist &&
+      cachedSongInfo?.details
+    ) {
+      showSongInfo(
+        cachedSongInfo.track,
+        cachedSongInfo.artist,
+        cachedSongInfo.details
+      );
+      showSongInfoBackground(cachedSongInfo.background);
+      return;
+    }
 
     const fallbackAlbumDetails =
       [
@@ -557,44 +631,27 @@ async function updateSongInfo() {
         'Additional track details are unavailable.'
     };
 
-    fetchWikipediaSongBackground(
-      song
-    )
-      .then(
-        (background) => {
-          if (
-            requestId !==
-            songInfoRequestId
-          ) {
-            return;
-          }
+    const wikipediaRequest = fetchWikipediaSongBackground(song)
+      .then((background) => {
+        saveStoredSongInfo(songCacheKey, {
+          background,
+          wikiChecked: true
+        });
 
-          if (background?.url) {
-            songInfoBackground.textContent =
-              background.summary;
-
-            songInfoBackground.hidden =
-              false;
-
-            songInfoWikiLink.href =
-              background.url;
-
-            songInfoWikiLink.textContent =
-              `Source: Wikipedia - ${background.title}`;
-
-            songInfoWikiLink.hidden =
-              false;
-          }
+        if (requestId === songInfoRequestId) {
+          showSongInfoBackground(background);
         }
-      )
+        return background;
+      })
       .catch(() => {
-        if (
-          requestId ===
-          songInfoRequestId
-        ) {
-          songInfoBackground.hidden =
-            true;
+        saveStoredSongInfo(songCacheKey, {
+          background: null,
+          wikiChecked: true
+        });
+        if (requestId === songInfoRequestId) {
+          showSongInfoBackground(null);
         }
+        return null;
       });
 
     const musicData =
@@ -657,6 +714,11 @@ async function updateSongInfo() {
       exactTitleMatches[0];
 
     if (!match) {
+      saveStoredSongInfo(songCacheKey, {
+        track: fallbackSongInfo.track,
+        artist: fallbackSongInfo.artist,
+        details: fallbackSongInfo.details
+      });
       showSongInfo(
         fallbackSongInfo.track,
         fallbackSongInfo.artist,
@@ -727,6 +789,15 @@ async function updateSongInfo() {
       displayArtist,
       displayDetails
     );
+
+    saveStoredSongInfo(songCacheKey, {
+      track: displayTrack,
+      artist: displayArtist,
+      details: displayDetails
+    });
+
+    // The lookup continues in the background and saves its result for next time.
+    void wikipediaRequest;
 
   } catch (error) {
     if (
@@ -1027,6 +1098,30 @@ function removeStoredSleepTimer() {
     );
   } catch {
   }
+
+  try {
+    localStorage.removeItem(
+      SLEEP_TIMER_DURATION_KEY
+    );
+  } catch {
+  }
+}
+
+function updateSleepTimerSelection(progress = 0) {
+  sleepTimerDialog
+    ?.querySelectorAll('[data-minutes]')
+    .forEach((button) => {
+      const selected =
+        sleepTimerDuration > 0 &&
+        Number(button.dataset.minutes) === sleepTimerDuration;
+
+      button.classList.toggle('timer-option-active', selected);
+      button.setAttribute('aria-pressed', String(selected));
+      button.style.setProperty(
+        '--timer-progress',
+        selected ? `${Math.max(0, Math.min(100, progress))}%` : '0%'
+      );
+    });
 }
 
 function stopSleepTimer(
@@ -1038,6 +1133,8 @@ function stopSleepTimer(
 
   sleepTimerInterval = 0;
   sleepTimerDeadline = 0;
+  sleepTimerDuration = 0;
+  updateSleepTimerSelection();
 
   if (clearStorage) {
     removeStoredSleepTimer();
@@ -1093,6 +1190,13 @@ function refreshSleepTimerStatus() {
     return;
   }
 
+  const totalDuration = sleepTimerDuration * 60;
+  updateSleepTimerSelection(
+    totalDuration > 0
+      ? (remaining / totalDuration) * 100
+      : 0
+  );
+
   const minutes =
     Math.floor(
       remaining / 60
@@ -1121,6 +1225,7 @@ function startSleepTimer(
 ) {
   stopSleepTimer();
 
+  sleepTimerDuration = minutes;
   sleepTimerDeadline =
     Date.now() +
     minutes * 60 * 1000;
@@ -1128,6 +1233,16 @@ function startSleepTimer(
   saveStoredSleepTimer(
     sleepTimerDeadline
   );
+
+  try {
+    localStorage.setItem(
+      SLEEP_TIMER_DURATION_KEY,
+      String(minutes)
+    );
+  } catch {
+  }
+
+  updateSleepTimerSelection();
 
   sleepTimerButton.classList.add(
     'timer-active'
@@ -1162,6 +1277,24 @@ function restoreSleepTimer() {
 
   sleepTimerDeadline =
     deadline;
+
+  try {
+    sleepTimerDuration = Number(
+      localStorage.getItem(SLEEP_TIMER_DURATION_KEY)
+    ) || 0;
+  } catch {
+    sleepTimerDuration = 0;
+  }
+
+  const remainingSeconds = Math.max(
+    0,
+    Math.ceil((deadline - Date.now()) / 1000)
+  );
+  updateSleepTimerSelection(
+    sleepTimerDuration > 0
+      ? (remainingSeconds / (sleepTimerDuration * 60)) * 100
+      : 0
+  );
 
   sleepTimerButton.classList.add(
     'timer-active'

@@ -6,8 +6,35 @@ const radio = document.getElementById('radio');
 const playIcon = document.getElementById('playIcon');
 const nowPlayingEl = document.getElementById('nowPlaying');
 const stationNameEl = document.getElementById('stationName');
-const logo = document.getElementById('logoImg');
+const albumArtImage = document.getElementById('albumArtImg');
 const root = document.documentElement;
+
+document.addEventListener('contextmenu', (event) => {
+  event.preventDefault();
+});
+
+document.addEventListener('copy', (event) => {
+  event.preventDefault();
+});
+
+document.addEventListener('cut', (event) => {
+  event.preventDefault();
+});
+
+document.addEventListener('dragstart', (event) => {
+  event.preventDefault();
+});
+
+document.addEventListener('selectstart', (event) => {
+  event.preventDefault();
+});
+
+document.addEventListener('click', (event) => {
+  if (!event.target.closest('button')) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }
+}, true);
 
 let lastSongText = '';
 let lastArtwork = '';
@@ -268,8 +295,8 @@ async function updateStationNameFromSchedule() {
 
 function updateAlbumArt(artworkUrl) {
   if (!artworkUrl) {
-    logo.src = 'logo.png';
-    logo.style.opacity = '1';
+    albumArtImage.src = 'album-placeholder.svg?v=2';
+    albumArtImage.style.opacity = '1';
     lastArtwork = '';
     return;
   }
@@ -278,15 +305,15 @@ function updateAlbumArt(artworkUrl) {
   const image = new Image();
   image.crossOrigin = 'anonymous';
   image.onload = () => {
-    logo.style.opacity = '0';
+    albumArtImage.style.opacity = '0';
     setTimeout(() => {
-      logo.src = artworkUrl;
-      logo.style.opacity = '1';
+      albumArtImage.src = artworkUrl;
+      albumArtImage.style.opacity = '1';
     }, 200);
   };
   image.onerror = () => {
-    logo.src = 'logo.png';
-    logo.style.opacity = '1';
+    albumArtImage.src = 'album-placeholder.svg?v=2';
+    albumArtImage.style.opacity = '1';
   };
   image.src = artworkUrl;
   updateAlbumColors(artworkUrl);
@@ -299,6 +326,7 @@ async function updateNowPlaying() {
     const data = await response.json();
     const nowPlaying = data?.now_playing;
     const song = nowPlaying?.song;
+    window.currentNowPlayingSong = song || null;
 
     if (nowPlaying?.is_live && nowPlaying?.streamer_name && stationNameEl) {
       stationNameEl.innerText = `LIVE • ${nowPlaying.streamer_name}`;
@@ -327,7 +355,7 @@ async function updateNowPlaying() {
 
 document.addEventListener('DOMContentLoaded', () => {
   if (radio) radio.preload = 'none';
-  if (logo) logo.src = 'logo.png';
+  if (albumArtImage) albumArtImage.src = 'album-placeholder.svg?v=2';
 
   const favicon = document.createElement('link');
   favicon.rel = 'icon';
