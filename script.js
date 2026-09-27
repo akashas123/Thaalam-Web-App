@@ -4,6 +4,7 @@ const SCHEDULE_API = 'https://radio.thaalam24x7.in/api/station/6/schedule';
 
 const radio = document.getElementById('radio');
 const playIcon = document.getElementById('playIcon');
+const playButton = document.getElementById('playButton');
 const nowPlayingEl = document.getElementById('nowPlaying');
 const stationNameEl = document.getElementById('stationName');
 const albumArtImage = document.getElementById('albumArtImg');
@@ -38,9 +39,18 @@ document.addEventListener('click', (event) => {
 
 let lastSongText = '';
 let lastArtwork = '';
+let artworkRequestId = 0;
+let nowPlayingRequestId = 0;
 let isConnecting = false;
+let isStreamOffline = false;
+let shouldResumePlayback = false;
+let audioIsAdvancing = false;
+let streamStallTimer = 0;
 let hlsPlayer = null;
 const streamQuality = document.getElementById('streamQuality');
+let lastStreamQuality = 'AUTO';
+window.hlsPlaybackSessionId = window.hlsPlaybackSessionId || 0;
+window.awaitingFreshHlsPosition = false;
 
 function setAlbumColors(colors) {
   if (!colors || colors.length < 5) return;
@@ -123,10 +133,14 @@ function extractAlbumColors(image) {
   }
 }
 
-function updateAlbumColors(imageUrl) {
+function updateAlbumColors(imageUrl, requestId) {
   const image = new Image();
   image.crossOrigin = 'anonymous';
-  image.onload = () => extractAlbumColors(image);
+  image.onload = () => {
+    if (requestId === artworkRequestId) {
+      extractAlbumColors(image);
+    }
+  };
   image.onerror = () => console.log('Album artwork could not be loaded for color extraction');
   image.src = `${imageUrl}${imageUrl.includes('?') ? '&' : '?'}color=${Date.now()}`;
 }
@@ -152,6 +166,33 @@ function showPauseIcon() {
   if (playIcon) playIcon.innerHTML = '<path d="M6 5h4v14H6zm8 0h4v14h-4z"/>';
 }
 
+function setStreamLoading(isLoading) {
+  playButton?.classList.toggle('is-loading', isLoading);
+  playButton?.setAttribute(
+    'aria-label',
+    isLoading ? 'Reconnecting to stream' : radio?.paused ? 'Play' : 'Pause'
+  );
+}
+
+function setStreamOffline(isOffline) {
+  if (!streamQuality) return;
+
+  isStreamOffline = isOffline;
+  streamQuality.classList.toggle('is-offline', isOffline);
+
+  if (isOffline) {
+    streamQuality.textContent = 'OFFLINE';
+    streamQuality.setAttribute('aria-label', 'Audio stream offline');
+    return;
+  }
+
+  streamQuality.textContent = lastStreamQuality;
+  streamQuality.setAttribute(
+    'aria-label',
+    `Current stream quality: ${lastStreamQuality.toLowerCase()}`
+  );
+}
+
 function updateStreamQuality(levelIndex, levels = []) {
   if (!streamQuality) return;
 
@@ -169,12 +210,17 @@ function updateStreamQuality(levelIndex, levels = []) {
     label = tiers[Math.round(activeLevel * (tiers.length - 1) / (sortedLevels.length - 1))];
   }
 
+  lastStreamQuality = label;
+  if (isStreamOffline) return;
   streamQuality.setAttribute('aria-label', `Current stream quality: ${label.toLowerCase()}`);
   streamQuality.textContent = label;
 }
 async function startLiveStream() {
   if (isConnecting || !radio) return;
   isConnecting = true;
+  shouldResumePlayback = true;
+  setStreamLoading(true);
+  if (!navigator.onLine) setStreamOffline(true);
 
   try {
     radio.pause();
@@ -202,6 +248,10 @@ async function startLiveStream() {
         player.on(window.Hls.Events.ERROR, (_event, data) => {
           if (!data.fatal) return;
           if (data.type === window.Hls.ErrorTypes.NETWORK_ERROR) {
+            captureAudibleNowPlayingSnapshot();
+            audioIsAdvancing = false;
+            setStreamLoading(true);
+            setStreamOffline(true);
             player.startLoad();
           } else if (data.type === window.Hls.ErrorTypes.MEDIA_ERROR) {
             player.recoverMediaError();
@@ -219,9 +269,10 @@ async function startLiveStream() {
       throw new Error('This browser does not support HLS playback.');
     }
 
-    await updateNowPlaying();
   } catch (error) {
     console.log('Unable to start live stream:', error);
+    setStreamOffline(true);
+    setStreamLoading(shouldResumePlayback);
   } finally {
     isConnecting = false;
   }
@@ -230,8 +281,12 @@ async function startLiveStream() {
 // Expose the measured distance from the HLS live edge so the UI can align
 // server-side song timing with the audio the listener is hearing.
 window.getAudioLiveLatencySeconds = () => {
-  if (hlsPlayer && Number.isFinite(hlsPlayer.latency)) {
-    return Math.max(0, hlsPlayer.latency);
+  if (
+    hlsPlayer &&
+    Number.isFinite(hlsPlayer.latency) &&
+    hlsPlayer.latency > 0
+  ) {
+    return hlsPlayer.latency;
   }
 
   if (radio?.seekable?.length) {
@@ -243,25 +298,187 @@ window.getAudioLiveLatencySeconds = () => {
   return 0;
 };
 
+function alignNowPlayingToAudio(data) {
+  const nowPlaying = data?.now_playing;
+  const currentSong = nowPlaying?.song;
+  if (!nowPlaying || !currentSong) return data;
+
+  const pausedSnapshot = window.lastAudibleNowPlayingData?.now_playing;
+  if (!audioIsAdvancing && pausedSnapshot?.song) {
+    return {
+      ...data,
+      now_playing: {
+        ...nowPlaying,
+        ...pausedSnapshot,
+        song: pausedSnapshot.song
+      }
+    };
+  }
+
+  const elapsed = Number(nowPlaying.elapsed);
+  const playedAt = Number(nowPlaying.played_at);
+  const snapshotAge = Number.isFinite(window.rawNowPlayingReceivedAt)
+    ? Math.max(0, performance.now() / 1000 - window.rawNowPlayingReceivedAt)
+    : 0;
+  const delay = !audioIsAdvancing
+    ? 0
+    : Number(window.getAudioLiveLatencySeconds?.()) || 0;
+
+  if (
+    !Number.isFinite(elapsed) ||
+    !Number.isFinite(playedAt) ||
+    playedAt <= 0
+  ) {
+    return {
+      ...data,
+      now_playing: {
+        ...nowPlaying,
+        elapsed: Number.isFinite(elapsed)
+          ? Math.max(0, elapsed + snapshotAge - delay)
+          : elapsed
+      }
+    };
+  }
+
+  const audibleTimestamp = playedAt + elapsed + snapshotAge - delay;
+  const candidates = [nowPlaying, ...(data.song_history || [])]
+    .filter((entry) => entry?.song && Number.isFinite(Number(entry.played_at)))
+    .sort((first, second) => Number(second.played_at) - Number(first.played_at));
+
+  const audibleEntry = candidates.find((entry) => {
+    const start = Number(entry.played_at);
+    const duration = Number(entry.duration);
+    return audibleTimestamp >= start &&
+      (!Number.isFinite(duration) || duration <= 0 || audibleTimestamp < start + duration);
+  }) || candidates.find((entry) => Number(entry.played_at) <= audibleTimestamp) ||
+    candidates[candidates.length - 1] || nowPlaying;
+
+  const audibleStart = Number(audibleEntry.played_at);
+  const audibleDuration = Number(audibleEntry.duration);
+  const audibleElapsed = Math.max(0, audibleTimestamp - audibleStart);
+
+  return {
+    ...data,
+    now_playing: {
+      ...nowPlaying,
+      song: audibleEntry.song,
+      played_at: audibleEntry.played_at,
+      duration: Number.isFinite(audibleDuration) && audibleDuration > 0
+        ? audibleDuration
+        : nowPlaying.duration,
+      elapsed: Number.isFinite(audibleDuration) && audibleDuration > 0
+        ? Math.min(audibleElapsed, audibleDuration)
+        : audibleElapsed,
+      remaining: Number.isFinite(audibleDuration) && audibleDuration > 0
+        ? Math.max(0, audibleDuration - audibleElapsed)
+        : nowPlaying.remaining
+    }
+  };
+}
+
+function captureAudibleNowPlayingSnapshot() {
+  const data = window.latestNowPlayingData;
+  const nowPlaying = data?.now_playing;
+  const song = nowPlaying?.song;
+  const clock = window.getAudibleTrackClock?.();
+  if (!song || !clock?.songId || !Number.isFinite(clock.elapsed)) return;
+
+  const songId = song.id || [song.artist, song.title].filter(Boolean).join(' - ');
+  if (songId !== clock.songId) return;
+
+  const duration = clock.duration || Number(nowPlaying.duration) || 0;
+  const elapsed = duration > 0
+    ? Math.min(clock.elapsed, duration)
+    : clock.elapsed;
+
+  window.lastAudibleNowPlayingData = {
+    ...data,
+    now_playing: {
+      ...nowPlaying,
+      elapsed,
+      remaining: duration > 0 ? Math.max(0, duration - elapsed) : nowPlaying.remaining
+    }
+  };
+}
+
 function togglePlay() {
   if (!radio) return;
   if (radio.paused) {
+    shouldResumePlayback = true;
     startLiveStream();
   } else {
+    shouldResumePlayback = false;
+    window.clearTimeout(streamStallTimer);
+    setStreamLoading(false);
+    setStreamOffline(false);
     radio.pause();
   }
 }
 
 if (radio) {
+  const markStreamStalled = () => {
+    if (radio.paused) return;
+    captureAudibleNowPlayingSnapshot();
+    audioIsAdvancing = false;
+    setStreamLoading(true);
+    window.clearTimeout(streamStallTimer);
+    streamStallTimer = window.setTimeout(() => {
+      setStreamOffline(true);
+    }, 12000);
+  };
+
+  radio.addEventListener('waiting', markStreamStalled);
+  radio.addEventListener('stalled', markStreamStalled);
+  radio.addEventListener('error', () => {
+    if (!shouldResumePlayback) return;
+    captureAudibleNowPlayingSnapshot();
+    audioIsAdvancing = false;
+    setStreamLoading(true);
+    setStreamOffline(true);
+  });
   radio.addEventListener('playing', () => {
+    const wasAdvancing = audioIsAdvancing;
+    audioIsAdvancing = true;
+    window.clearTimeout(streamStallTimer);
+    setStreamOffline(false);
+    setStreamLoading(false);
     setVisualState(true);
     showPauseIcon();
+    if (!wasAdvancing) {
+      window.hlsPlaybackSessionId += 1;
+      window.awaitingFreshHlsPosition = true;
+      updateNowPlaying();
+    }
   });
   radio.addEventListener('pause', () => {
+    audioIsAdvancing = false;
+    if (!isConnecting) {
+      captureAudibleNowPlayingSnapshot();
+      shouldResumePlayback = false;
+      window.clearTimeout(streamStallTimer);
+      setStreamLoading(false);
+      setStreamOffline(false);
+    }
     setVisualState(false);
     showPlayIcon();
   });
 }
+
+window.addEventListener('offline', () => {
+  if (!shouldResumePlayback) return;
+  captureAudibleNowPlayingSnapshot();
+  audioIsAdvancing = false;
+  setStreamOffline(true);
+  setStreamLoading(true);
+});
+
+window.addEventListener('online', () => {
+  if (!shouldResumePlayback) return;
+  setStreamLoading(true);
+  if (radio?.paused) {
+    startLiveStream();
+  }
+});
 
 async function updateStationNameFromSchedule() {
   try {
@@ -294,36 +511,57 @@ async function updateStationNameFromSchedule() {
 }
 
 function updateAlbumArt(artworkUrl) {
+  if (artworkUrl && artworkUrl === lastArtwork) return;
+
+  const requestId = ++artworkRequestId;
+
   if (!artworkUrl) {
+    lastArtwork = '';
     albumArtImage.src = 'album-placeholder.svg?v=2';
     albumArtImage.style.opacity = '1';
-    lastArtwork = '';
     return;
   }
-  if (artworkUrl === lastArtwork) return;
-
+  lastArtwork = artworkUrl;
   const image = new Image();
-  image.crossOrigin = 'anonymous';
   image.onload = () => {
+    if (requestId !== artworkRequestId) return;
     albumArtImage.style.opacity = '0';
     setTimeout(() => {
+      if (requestId !== artworkRequestId) return;
       albumArtImage.src = artworkUrl;
       albumArtImage.style.opacity = '1';
     }, 200);
   };
   image.onerror = () => {
+    if (requestId !== artworkRequestId) return;
     albumArtImage.src = 'album-placeholder.svg?v=2';
     albumArtImage.style.opacity = '1';
   };
   image.src = artworkUrl;
-  updateAlbumColors(artworkUrl);
-  lastArtwork = artworkUrl;
+  updateAlbumColors(artworkUrl, requestId);
 }
 
 async function updateNowPlaying() {
+  const requestId = ++nowPlayingRequestId;
+
   try {
     const response = await fetch(`${NOW_PLAYING_API}?t=${Date.now()}`, { cache: 'no-store' });
-    const data = await response.json();
+    if (!response.ok) return;
+    const rawData = await response.json();
+    if (requestId !== nowPlayingRequestId) return;
+
+    window.rawNowPlayingData = rawData;
+    window.rawNowPlayingReceivedAt = performance.now() / 1000;
+    const data = alignNowPlayingToAudio(rawData);
+    window.latestNowPlayingData = data;
+    window.awaitingFreshHlsPosition = false;
+    if (!radio?.paused && data?.now_playing?.song) {
+      window.lastAudibleNowPlayingData = data;
+    }
+    window.dispatchEvent(new CustomEvent('thaalam:nowplaying', {
+      detail: data
+    }));
+
     const nowPlaying = data?.now_playing;
     const song = nowPlaying?.song;
     window.currentNowPlayingSong = song || null;

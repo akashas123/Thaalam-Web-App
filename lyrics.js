@@ -31,7 +31,8 @@ let lyricScrollFrame = 0;
 let trackDurationSeconds = 0;
 let trackElapsedSeconds = 0;
 let trackElapsedSyncTime = 0;
-let trackMediaTimeAtSync = null;
+let trackClockSongId = '';
+let trackClockPlaybackSessionId = 0;
 
 const lrclibCache = new Map();
 
@@ -213,13 +214,7 @@ function formatTrackTime(seconds) {
 
 function getAudibleTrackElapsed() {
   let elapsed = trackElapsedSeconds;
-
-  if (trackMediaTimeAtSync !== null) {
-    const mediaTime = Number(lyricsRadio.currentTime);
-    if (Number.isFinite(mediaTime) && !lyricsRadio.paused) {
-      elapsed += Math.max(0, mediaTime - trackMediaTimeAtSync);
-    }
-  } else if (trackElapsedSyncTime) {
+  if (streamIsActive && trackElapsedSyncTime) {
     elapsed += Math.max(
       0,
       performance.now() / 1000 - trackElapsedSyncTime
@@ -228,6 +223,12 @@ function getAudibleTrackElapsed() {
 
   return Math.max(0, elapsed);
 }
+
+window.getAudibleTrackClock = () => ({
+  songId: trackClockSongId,
+  elapsed: getAudibleTrackElapsed(),
+  duration: trackDurationSeconds
+});
 
 function updateTrackTime() {
   if (!trackElapsed || !trackDuration) {
@@ -462,6 +463,35 @@ function updateLyrics(
   const nowPlaying =
     data?.now_playing;
 
+  const songName =
+    [
+      song?.artist,
+      song?.title
+    ]
+      .filter(Boolean)
+      .join(' - ');
+
+  const songId =
+    song?.id ||
+    songName;
+
+  const playbackSessionId =
+    Number(window.hlsPlaybackSessionId) || 0;
+
+  const isNewPlaybackSession =
+    playbackSessionId !== trackClockPlaybackSessionId;
+
+  const isNewTrack =
+    Boolean(songId) &&
+    songId !== trackClockSongId;
+
+  if (isNewTrack || isNewPlaybackSession) {
+    trackClockSongId = songId;
+    trackElapsedSeconds = 0;
+    trackElapsedSyncTime = 0;
+    trackClockPlaybackSessionId = playbackSessionId;
+  }
+
   const elapsed =
     Number(nowPlaying?.elapsed);
 
@@ -469,21 +499,19 @@ function updateLyrics(
     Number.isFinite(elapsed) &&
     elapsed >= 0
   ) {
-    const liveLatency =
-      Number(window.getAudioLiveLatencySeconds?.()) || 0;
+    // The shared now-playing snapshot is already aligned to the HLS playhead.
+    const serverElapsed = Math.max(0, elapsed);
 
-    trackElapsedSeconds =
-      Math.max(0, elapsed - liveLatency);
+    trackElapsedSeconds = isNewTrack || isNewPlaybackSession
+      ? serverElapsed
+      : Math.max(
+          getAudibleTrackElapsed(),
+          serverElapsed
+        );
 
-    trackMediaTimeAtSync =
-      Number.isFinite(lyricsRadio.currentTime)
-        ? lyricsRadio.currentTime
-        : null;
-
-    trackElapsedSyncTime =
-      trackMediaTimeAtSync === null
-        ? performance.now() / 1000
-        : 0;
+    trackElapsedSyncTime = streamIsActive
+      ? performance.now() / 1000
+      : 0;
   }
 
   const duration =
@@ -500,20 +528,8 @@ function updateLyrics(
       0;
   }
 
-  const songName =
-    [
-      song?.artist,
-      song?.title
-    ]
-      .filter(Boolean)
-      .join(' - ');
-
   const hasLyrics =
     Boolean(lyrics);
-
-  const songId =
-    song?.id ||
-    songName;
 
   document.body.classList.toggle(
     'has-lyrics',
@@ -610,7 +626,7 @@ function updateLyrics(
   expandLyricsAfterPlaybackStarts();
 }
 
-async function fetchLyrics() {
+async function fetchLyrics(nowPlayingData = null) {
   if (
     (!streamIsActive ||
       lyricsRadio.paused) &&
@@ -620,20 +636,17 @@ async function fetchLyrics() {
   }
 
   try {
-    const response =
-      await fetch(
+    let data = nowPlayingData;
+
+    if (!data) {
+      const response = await fetch(
         `${lyricsApi}?t=${Date.now()}`,
-        {
-          cache: 'no-store'
-        }
+        { cache: 'no-store' }
       );
 
-    if (!response.ok) {
-      return;
+      if (!response.ok) return;
+      data = await response.json();
     }
-
-    const data =
-      await response.json();
 
     hasFetchedLyrics = true;
 
@@ -883,19 +896,29 @@ function setStreamPlaybackState(
   const wasActive =
     streamIsActive;
 
-  streamIsActive =
+  const nextActive =
     isActive &&
     !lyricsRadio.paused;
 
+  if (wasActive && !nextActive) {
+    trackElapsedSeconds = getAudibleTrackElapsed();
+    trackElapsedSyncTime = 0;
+  }
+
+  streamIsActive = nextActive;
+
   if (streamIsActive) {
     if (!wasActive) {
+      trackElapsedSyncTime = performance.now() / 1000;
       playbackStartedOnMobile =
         window.matchMedia(
           '(max-width: 56.1875rem)'
         ).matches;
     }
 
-    fetchLyrics();
+    if (!window.awaitingFreshHlsPosition) {
+      fetchLyrics(window.latestNowPlayingData || null);
+    }
 
     updateTrackTime();
 
@@ -930,12 +953,14 @@ if (
   window.scrollTo(0, 0);
 }
 
-fetchLyrics();
+if (window.latestNowPlayingData) {
+  fetchLyrics(window.latestNowPlayingData);
+}
 
-setInterval(
-  fetchLyrics,
-  15000
-);
+window.addEventListener('thaalam:nowplaying', (event) => {
+  window.awaitingFreshHlsPosition = false;
+  fetchLyrics(event.detail);
+});
 
 setInterval(() => {
   if (!lyricsRadio.paused) {
@@ -943,11 +968,6 @@ setInterval(() => {
     updateTrackTime();
   }
 }, 250);
-
-lyricsRadio.addEventListener(
-  'play',
-  () => setStreamPlaybackState(true)
-);
 
 lyricsRadio.addEventListener(
   'playing',
