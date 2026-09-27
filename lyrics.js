@@ -5,6 +5,9 @@ const lyricsContent = document.getElementById('lyricsContent');
 const lyricsNotice = document.getElementById('lyricsNotice');
 const lyricsRadio = document.getElementById('radio');
 
+const trackElapsed = document.getElementById('trackElapsed');
+const trackDuration = document.getElementById('trackDuration');
+
 const lyricsApi =
   'https://radio.thaalam24x7.in/api/nowplaying/thaalam_24x7';
 
@@ -27,6 +30,10 @@ let lyricsLookupSongId = '';
 let lyricsLookupResult = '';
 let lyricsLookupRequestId = 0;
 let lyricScrollFrame = 0;
+
+let trackDurationSeconds = 0;
+let trackElapsedSeconds = 0;
+let trackElapsedSyncTime = 0;
 
 const lrclibCache = new Map();
 
@@ -172,6 +179,69 @@ function renderLyrics(lyrics) {
 
     line.element = lineElement;
   });
+}
+
+function formatTrackTime(seconds) {
+  seconds = Math.max(
+    0,
+    Math.floor(seconds || 0)
+  );
+
+  const hours =
+    Math.floor(seconds / 3600);
+
+  const minutes =
+    Math.floor((seconds % 3600) / 60);
+
+  const remainingSeconds =
+    seconds % 60;
+
+  if (hours > 0) {
+    return (
+      hours +
+      ':' +
+      String(minutes).padStart(2, '0') +
+      ':' +
+      String(remainingSeconds).padStart(2, '0')
+    );
+  }
+
+  return (
+    minutes +
+    ':' +
+    String(remainingSeconds).padStart(2, '0')
+  );
+}
+
+function updateTrackTime() {
+  if (!trackElapsed || !trackDuration) {
+    return;
+  }
+
+  let elapsed =
+    trackElapsedSeconds;
+
+  if (trackElapsedSyncTime) {
+    elapsed +=
+      performance.now() / 1000 -
+      trackElapsedSyncTime;
+  }
+
+  if (
+    trackDurationSeconds > 0 &&
+    elapsed > trackDurationSeconds
+  ) {
+    elapsed =
+      trackDurationSeconds;
+  }
+
+  trackElapsed.textContent =
+    formatTrackTime(elapsed);
+
+  trackDuration.textContent =
+    trackDurationSeconds > 0
+      ? formatTrackTime(trackDurationSeconds)
+      : '0:00';
 }
 
 function updateActiveLyric() {
@@ -385,6 +455,34 @@ function updateLyrics(
   const nowPlaying =
     data?.now_playing;
 
+  const elapsed =
+    Number(nowPlaying?.elapsed);
+
+  if (
+    Number.isFinite(elapsed) &&
+    elapsed >= 0
+  ) {
+    trackElapsedSeconds =
+      elapsed;
+
+    trackElapsedSyncTime =
+      performance.now() / 1000;
+  }
+
+  const duration =
+    Number(nowPlaying?.duration);
+
+  if (
+    Number.isFinite(duration) &&
+    duration > 0
+  ) {
+    trackDurationSeconds =
+      duration;
+  } else {
+    trackDurationSeconds =
+      0;
+  }
+
   const songName =
     [
       song?.artist,
@@ -430,7 +528,8 @@ function updateLyrics(
       'false'
     );
 
-    lastLyricsWereSynced = false;
+    lastLyricsWereSynced =
+      false;
 
     resetMobilePlayerPosition();
 
@@ -439,6 +538,8 @@ function updateLyrics(
     currentSongId = '';
 
     activeLyricIndex = -1;
+
+    updateTrackTime();
 
     return;
   }
@@ -493,20 +594,26 @@ function updateLyrics(
   }
 
   if (syncedLines.length) {
-    const elapsed =
+    const syncedElapsed =
       Number(
         nowPlaying?.elapsed
       );
 
-    if (Number.isFinite(elapsed)) {
+    if (
+      Number.isFinite(
+        syncedElapsed
+      )
+    ) {
       songStartedAt =
         performance.now() / 1000 -
-        elapsed +
+        syncedElapsed +
         LYRICS_SYNC_OFFSET_SECONDS;
     }
   }
 
   updateActiveLyric();
+
+  updateTrackTime();
 
   expandLyricsAfterPlaybackStarts();
 }
@@ -798,11 +905,15 @@ function setStreamPlaybackState(
 
     fetchLyrics();
 
+    updateTrackTime();
+
     expandLyricsAfterPlaybackStarts();
 
   } else {
     playbackStartedOnMobile =
       false;
+
+    updateTrackTime();
 
     cancelAnimationFrame(
       lyricScrollFrame
@@ -837,6 +948,7 @@ setInterval(
 setInterval(() => {
   if (!lyricsRadio.paused) {
     updateActiveLyric();
+    updateTrackTime();
   }
 }, 250);
 
