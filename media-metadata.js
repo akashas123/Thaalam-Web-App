@@ -1,10 +1,11 @@
 const metadataRadio = document.getElementById('radio');
 const metadataApi = 'https://radio.thaalam24x7.in/api/nowplaying/thaalam_24x7';
-const fallbackArtwork = new URL('logo.png', window.location.href).href;
+const fallbackArtwork = new URL('album-placeholder.svg?v=2', window.location.href).href;
 let metadataLoaded = false;
-let currentArtwork = fallbackArtwork;
+let currentArtwork = '';
 
 function setFavicon(artwork) {
+  if (!artwork) return;
   currentArtwork = artwork;
   document.querySelectorAll('link[rel~="icon"]').forEach((link) => {
     link.href = artwork;
@@ -30,7 +31,7 @@ function applyNowPlayingMetadata(data) {
   const album = song.album?.trim() || 'Thaalam 24x7';
   const artwork = song.art?.trim() || fallbackArtwork;
   document.title = `${title} - ${artist} | Thaalam 24x7`;
-  setFavicon(artwork);
+  if (song.art?.trim()) setFavicon(artwork);
 
   if (navigator.mediaSession && 'MediaMetadata' in window) {
     navigator.mediaSession.metadata = new MediaMetadata({
@@ -81,6 +82,6 @@ new MutationObserver((records) => {
   if (records.some((record) => [...record.addedNodes].some((node) =>
     node.nodeType === Node.ELEMENT_NODE && node.matches?.('link[rel~="icon"]')
   ))) {
-    setFavicon(currentArtwork);
+    if (currentArtwork) setFavicon(currentArtwork);
   }
 }).observe(document.head, { childList: true });

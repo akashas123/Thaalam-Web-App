@@ -192,7 +192,7 @@ body::after {
     transform 0.45s ease;
 }
 
-[class~="logo-card"] {
+[class~="album-art-card"] {
   width: 100%;
   aspect-ratio: 1 / 1;
 
@@ -232,7 +232,7 @@ body::after {
   position: relative;
 }
 
-[class~="logo-card"] img {
+[class~="album-art-card"] img {
   width: 100%;
   height: 100%;
 
@@ -1028,6 +1028,21 @@ body::after {
     rgba(255, 255, 255, 0.15);
 }
 
+.timer-options button.timer-option-active {
+  border-color:
+    rgba(255, 255, 255, 0.48);
+
+  background:
+    linear-gradient(
+      to right,
+      rgba(255, 255, 255, 0.38) 0 var(--timer-progress),
+      rgba(255, 255, 255, 0.07) var(--timer-progress) 100%
+    );
+
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
 .timer-options button[hidden] {
   display: none;
 }
@@ -1427,3 +1442,15 @@ body.has-lyrics .lyrics-panel {
     max-height: 8.5rem;
   }
 }
+html,
+body {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+img {
+  -webkit-user-drag: none;
+  user-drag: none;
+}
+

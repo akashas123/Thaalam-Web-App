@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Album artwork placeholder">
+  <rect width="512" height="512" fill="#242424"/>
+  <g fill="none" stroke="#414141" stroke-linecap="round" stroke-linejoin="round" stroke-width="10">
+    <circle cx="190" cy="337" r="39"/>
+    <circle cx="322" cy="313" r="39"/>
+    <path d="M229 333V190l132-27v144"/>
+  </g>
+</svg>
