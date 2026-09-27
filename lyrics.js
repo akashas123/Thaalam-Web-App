@@ -14,11 +14,8 @@ const lyricsApi =
 const lrclibApi =
   'https://lrclib.net/api';
 
-const LYRICS_SYNC_OFFSET_SECONDS = 2;
-
 let syncedLines = [];
 let currentSongId = '';
-let songStartedAt = 0;
 let activeLyricIndex = -1;
 let lastLyricsWereSynced = false;
 let hasFetchedLyrics = false;
@@ -34,6 +31,7 @@ let lyricScrollFrame = 0;
 let trackDurationSeconds = 0;
 let trackElapsedSeconds = 0;
 let trackElapsedSyncTime = 0;
+let trackMediaTimeAtSync = null;
 
 const lrclibCache = new Map();
 
@@ -213,19 +211,30 @@ function formatTrackTime(seconds) {
   );
 }
 
+function getAudibleTrackElapsed() {
+  let elapsed = trackElapsedSeconds;
+
+  if (trackMediaTimeAtSync !== null) {
+    const mediaTime = Number(lyricsRadio.currentTime);
+    if (Number.isFinite(mediaTime) && !lyricsRadio.paused) {
+      elapsed += Math.max(0, mediaTime - trackMediaTimeAtSync);
+    }
+  } else if (trackElapsedSyncTime) {
+    elapsed += Math.max(
+      0,
+      performance.now() / 1000 - trackElapsedSyncTime
+    );
+  }
+
+  return Math.max(0, elapsed);
+}
+
 function updateTrackTime() {
   if (!trackElapsed || !trackDuration) {
     return;
   }
 
-  let elapsed =
-    trackElapsedSeconds;
-
-  if (trackElapsedSyncTime) {
-    elapsed +=
-      performance.now() / 1000 -
-      trackElapsedSyncTime;
-  }
+  let elapsed = getAudibleTrackElapsed();
 
   if (
     trackDurationSeconds > 0 &&
@@ -248,14 +257,12 @@ function updateActiveLyric() {
   if (
     !streamIsActive ||
     !syncedLines.length ||
-    !songStartedAt
+    !currentSongId
   ) {
     return;
   }
 
-  const elapsed =
-    performance.now() / 1000 -
-    songStartedAt;
+  const elapsed = getAudibleTrackElapsed();
 
   let activeIndex = -1;
 
@@ -462,11 +469,21 @@ function updateLyrics(
     Number.isFinite(elapsed) &&
     elapsed >= 0
   ) {
+    const liveLatency =
+      Number(window.getAudioLiveLatencySeconds?.()) || 0;
+
     trackElapsedSeconds =
-      elapsed;
+      Math.max(0, elapsed - liveLatency);
+
+    trackMediaTimeAtSync =
+      Number.isFinite(lyricsRadio.currentTime)
+        ? lyricsRadio.currentTime
+        : null;
 
     trackElapsedSyncTime =
-      performance.now() / 1000;
+      trackMediaTimeAtSync === null
+        ? performance.now() / 1000
+        : 0;
   }
 
   const duration =
@@ -557,13 +574,6 @@ function updateLyrics(
     if (songChanged) {
       currentSongId =
         songId;
-
-      songStartedAt =
-        performance.now() / 1000 -
-        Number(
-          nowPlaying?.elapsed || 0
-        ) +
-        LYRICS_SYNC_OFFSET_SECONDS;
     }
 
     renderLyrics(lyrics);
@@ -590,24 +600,6 @@ function updateLyrics(
       handleSongLyricsView(
         lyricsAreSynced
       );
-    }
-  }
-
-  if (syncedLines.length) {
-    const syncedElapsed =
-      Number(
-        nowPlaying?.elapsed
-      );
-
-    if (
-      Number.isFinite(
-        syncedElapsed
-      )
-    ) {
-      songStartedAt =
-        performance.now() / 1000 -
-        syncedElapsed +
-        LYRICS_SYNC_OFFSET_SECONDS;
     }
   }
 

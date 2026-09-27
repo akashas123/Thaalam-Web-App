@@ -200,6 +200,22 @@ async function startLiveStream() {
   }
 }
 
+// Expose the measured distance from the HLS live edge so the UI can align
+// server-side song timing with the audio the listener is hearing.
+window.getAudioLiveLatencySeconds = () => {
+  if (hlsPlayer && Number.isFinite(hlsPlayer.latency)) {
+    return Math.max(0, hlsPlayer.latency);
+  }
+
+  if (radio?.seekable?.length) {
+    const lastRange = radio.seekable.length - 1;
+    const latency = radio.seekable.end(lastRange) - radio.currentTime;
+    if (Number.isFinite(latency)) return Math.max(0, latency);
+  }
+
+  return 0;
+};
+
 function togglePlay() {
   if (!radio) return;
   if (radio.paused) {
