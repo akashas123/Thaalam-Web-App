@@ -455,10 +455,10 @@ body::after {
   text-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.3);
 }
 .track-time {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
 
   align-items: center;
-  justify-content: space-between;
 
   width: 100%;
 
@@ -481,6 +481,19 @@ body::after {
 
 .track-time span {
   display: block;
+}
+
+.track-time > span:first-child {
+  justify-self: start;
+}
+
+.track-time > .stream-quality {
+  grid-column: 2;
+  justify-self: center;
+}
+
+.track-time > span:last-child {
+  justify-self: end;
 }
 
 [class~="play-btn"] {
