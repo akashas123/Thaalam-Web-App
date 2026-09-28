@@ -1,1 +1,86 @@
-const _0x47c62f=_0x4372;(function(_0x3a982c,_0x141e55){const _0x43b611=_0x4372,_0x12b352=_0x3a982c();while(!![]){try{const _0x13bbad=-parseInt(_0x43b611(0x97))/0x1+parseInt(_0x43b611(0xbe))/0x2+parseInt(_0x43b611(0xa3))/0x3+-parseInt(_0x43b611(0x9a))/0x4*(-parseInt(_0x43b611(0xa6))/0x5)+parseInt(_0x43b611(0xad))/0x6*(parseInt(_0x43b611(0x9d))/0x7)+-parseInt(_0x43b611(0xb3))/0x8*(-parseInt(_0x43b611(0x98))/0x9)+-parseInt(_0x43b611(0xbb))/0xa;if(_0x13bbad===_0x141e55)break;else _0x12b352['push'](_0x12b352['shift']());}catch(_0x469284){_0x12b352['push'](_0x12b352['shift']());}}}(_0x3361,0x2939f));const CACHE_NAME=_0x47c62f(0xac),APP_FILES=['./',_0x47c62f(0xba),_0x47c62f(0xb7),'./script.js?v=14',_0x47c62f(0xa2),_0x47c62f(0x96),_0x47c62f(0xb4),_0x47c62f(0x99)];function _0x4372(_0x36adb9,_0x4261d9){_0x36adb9=_0x36adb9-0x96;const _0x336104=_0x3361();let _0x43728e=_0x336104[_0x36adb9];return _0x43728e;}self['addEventListener'](_0x47c62f(0xa0),_0x26edd7=>{const _0x2767f2=_0x47c62f;_0x26edd7[_0x2767f2(0x9c)](caches[_0x2767f2(0xbd)](CACHE_NAME)[_0x2767f2(0xb2)](_0x5a308e=>_0x5a308e[_0x2767f2(0xb9)](APP_FILES))),self[_0x2767f2(0xbf)]();}),self[_0x47c62f(0xb1)]('activate',_0x1743e2=>{const _0xa794bd=_0x47c62f;_0x1743e2[_0xa794bd(0x9c)](caches[_0xa794bd(0xa1)]()[_0xa794bd(0xb2)](_0xebc30=>{const _0x31babd=_0xa794bd;return Promise[_0x31babd(0xa7)](_0xebc30['filter'](_0x969d74=>_0x969d74!==CACHE_NAME)[_0x31babd(0xbc)](_0x5386d5=>caches[_0x31babd(0xae)](_0x5386d5)));})['then'](()=>self[_0xa794bd(0xa4)][_0xa794bd(0xb5)]()));}),self['addEventListener']('fetch',_0x4c5261=>{const _0x42a164=_0x47c62f,_0x153be6=_0x4c5261['request'];if(_0x153be6[_0x42a164(0xb0)]!==_0x42a164(0x9f))return;if(_0x153be6['url'][_0x42a164(0xaa)](_0x42a164(0xb6))||_0x153be6[_0x42a164(0xab)][_0x42a164(0xaa)](_0x42a164(0xaf))||_0x153be6[_0x42a164(0xab)][_0x42a164(0xaa)](_0x42a164(0x9e)))return;if(_0x153be6['mode']===_0x42a164(0x9b)||_0x153be6[_0x42a164(0xab)][_0x42a164(0xc0)]('.html')){_0x4c5261[_0x42a164(0xb8)](fetch(_0x153be6,{'cache':_0x42a164(0xa9)})[_0x42a164(0xb2)](_0x1ce8a9=>{const _0x49307d=_0x42a164,_0x2636f5=_0x1ce8a9[_0x49307d(0xa5)]();return caches[_0x49307d(0xbd)](CACHE_NAME)[_0x49307d(0xb2)](_0x43511a=>{const _0x240999=_0x49307d;_0x43511a[_0x240999(0xa8)](_0x240999(0xba),_0x2636f5);}),_0x1ce8a9;})['catch'](()=>{const _0x1597f1=_0x42a164;return caches['match'](_0x1597f1(0xba));}));return;}_0x4c5261['respondWith'](caches['match'](_0x153be6)['then'](_0x2f284e=>{return _0x2f284e||fetch(_0x153be6);}));});function _0x3361(){const _0x518932=['120492RoTaYI','navigate','waitUntil','28pAnXaW','/api/station/','GET','install','keys','./manifest.json','750051lBXXWN','clients','clone','35VEcogH','all','put','no-store','includes','url','thaalam-24x7-v6','146532ZBlYGh','delete','/api/nowplaying/','method','addEventListener','then','1165136JYosqg','./icon-192.png','claim','/hls/thaalam_24x7/','./style.css?v=26','respondWith','addAll','./index.html','5443520lAeTYS','map','open','276176YsOblF','skipWaiting','endsWith','./logo.png','129081BcKWJQ','9BgpDql','./icon-512.png'];_0x3361=function(){return _0x518932;};return _0x3361();}
+const CACHE_NAME = 'thaalam-24x7-v7';
+
+const APP_FILES = [
+  './',
+  './index.html',
+  './style.css?v=34',
+  './script.js?v=23',
+  './audio-recovery.js?v=1',
+  './marquee.js?v=2',
+  './media-metadata.js?v=5',
+  './player-controls.js?v=28',
+  './lyrics.js?v=27',
+  './manifest.json',
+  './album-placeholder.svg?v=2',
+  './icon-192.png',
+  './icon-512.png',
+  './logo.png'
+];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then((cache) => cache.addAll(APP_FILES))
+      .then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys()
+      .then((cacheNames) => Promise.all(
+        cacheNames
+          .filter((cacheName) => cacheName !== CACHE_NAME)
+          .map((cacheName) => caches.delete(cacheName))
+      ))
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', (event) => {
+  const request = event.request;
+  const url = new URL(request.url);
+
+  if (
+    request.method !== 'GET' ||
+    url.origin !== self.location.origin ||
+    url.pathname.includes('/api/') ||
+    url.pathname.includes('/hls/')
+  ) {
+    return;
+  }
+
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            void caches.open(CACHE_NAME).then((cache) =>
+              cache.put('./index.html', copy)
+            );
+          }
+          return response;
+        })
+        .catch(async () => {
+          const cachedPage = await caches.match('./index.html');
+          return cachedPage || Response.error();
+        })
+    );
+    return;
+  }
+
+  event.respondWith(
+    caches.match(request, { ignoreSearch: true })
+      .then((cachedResponse) => cachedResponse || fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            void caches.open(CACHE_NAME).then((cache) =>
+              cache.put(request, copy)
+            );
+          }
+          return response;
+        }))
+  );
+});
