@@ -23,6 +23,7 @@ let streamIsActive = false;
 let playbackStartedOnMobile = false;
 let mobilePlayerViewChosen = false;
 let mobileTouchStartY = 0;
+let mobileTouchStartedInLyrics = false;
 let lyricsLookupSongId = '';
 let lyricsLookupResult = '';
 let lyricsLookupRequestId = 0;
@@ -811,6 +812,7 @@ function handleMobileWheel(event) {
     window.matchMedia(
       '(max-width: 56.1875rem)'
     ).matches &&
+    !event.target.closest?.('#lyricsContent') &&
     event.deltaY < 0
   ) {
     mobilePlayerViewChosen = true;
@@ -831,6 +833,9 @@ function handleMobileTouchStart(event) {
   ) {
     mobileTouchStartY =
       event.touches[0].clientY;
+    mobileTouchStartedInLyrics =
+      event.target instanceof Element &&
+      Boolean(event.target.closest('#lyricsContent'));
   }
 }
 
@@ -847,6 +852,7 @@ function handleMobileTouchEnd(event) {
     window.matchMedia(
       '(max-width: 56.1875rem)'
     ).matches &&
+    !mobileTouchStartedInLyrics &&
     movedDown &&
     window.scrollY > 48
   ) {
@@ -858,6 +864,8 @@ function handleMobileTouchEnd(event) {
       behavior: 'auto'
     });
   }
+
+  mobileTouchStartedInLyrics = false;
 }
 
 function resetMobilePlayerPosition() {
