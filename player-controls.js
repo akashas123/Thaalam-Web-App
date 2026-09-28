@@ -46,19 +46,18 @@ const thumbsUpButton =
 let sleepTimerDeadline = 0;
 let sleepTimerInterval = 0;
 let sleepTimerDuration = 0;
-let songInfoRequestId = 0;
 let itunesRequestId = 0;
 let currentRatingTrackKey = '';
-let currentRatingSongKey = '';
 let feedbackTimeout = 0;
-let ratingRefreshInterval = 0;
-let ratingRefreshInProgress = false;
 
 let likeFeedbackShown = false;
 let dislikeFeedbackShown = false;
 
 const itunesTrackCache =
   new Map();
+
+const prefetchingSongInfo =
+  new Set();
 
 const RATING_STORAGE_KEY =
   'thaalam24x7-ratings';
@@ -73,9 +72,6 @@ const SLEEP_TIMER_STORAGE_KEY =
 
 const SLEEP_TIMER_DURATION_KEY =
   'thaalam24x7-sleep-timer-duration';
-
-const NOW_PLAYING_URL =
-  'https://radio.thaalam24x7.in/api/nowplaying/thaalam_24x7';
 
 function openDialog(dialog) {
   if (!dialog) {
@@ -313,9 +309,6 @@ function updateStoredRatingForCurrentSong(
   currentRatingTrackKey =
     key;
 
-  currentRatingSongKey =
-    key;
-
   if (!key) {
     clearRatingSelection();
     return;
@@ -464,79 +457,15 @@ function showSongFeedback(
     }, 2200);
 }
 
-async function refreshCurrentRating() {
-  if (ratingRefreshInProgress) {
-    return;
-  }
+function refreshCurrentRating() {
+  const song =
+    window.latestNowPlayingData?.now_playing?.song ||
+    window.currentNowPlayingSong;
 
-  ratingRefreshInProgress =
-    true;
-
-  try {
-    const response =
-      await fetch(
-        NOW_PLAYING_URL,
-        {
-          cache: 'no-store'
-        }
-      );
-
-    if (!response.ok) {
-      return;
-    }
-
-    const data =
-      await response.json();
-
-    const song =
-      data
-        ?.now_playing
-        ?.song;
-
-    if (!song) {
-      return;
-    }
-
-    const newKey =
-      getTrackRatingKey(song);
-
-    if (!newKey) {
-      return;
-    }
-
-    if (
-      newKey !==
-      currentRatingSongKey
-    ) {
-      updateStoredRatingForCurrentSong(
-        song
-      );
-    } else {
-      const ratings =
-        getStoredRatings();
-
-      const savedRating =
-        ratings[newKey] === 'up' ||
-        ratings[newKey] === 'down'
-          ? ratings[newKey]
-          : null;
-
-      applyStoredRating(
-        savedRating
-      );
-    }
-
-  } catch {
-  } finally {
-    ratingRefreshInProgress =
-      false;
-  }
+  updateStoredRatingForCurrentSong(song || null);
 }
 
-async function updateSongInfo() {
-  const requestId =
-    ++songInfoRequestId;
-
+function updateSongInfo() {
   const albumArtImage =
     document.getElementById(
       'albumArtImg'
@@ -562,265 +491,115 @@ async function updateSongInfo() {
   songInfoWikiLink.hidden =
     true;
 
-  let fallbackSongInfo =
-    null;
+  const song = window.currentNowPlayingSong;
+  if (!song?.title || !song?.artist) {
+    showSongInfo('', '', 'Track details are unavailable.');
+    return;
+  }
+
+  updateStoredRatingForCurrentSong(song);
+  const cached = getStoredSongInfo(getTrackRatingKey(song));
+  const fallbackDetails = [
+    `Album: ${song.album || 'N/A'}`,
+    'Release date: N/A',
+    'Genre: N/A',
+    'Duration: N/A'
+  ].join('\n');
+
+  showSongInfo(
+    cached?.track || song.title,
+    cached?.artist || song.artist,
+    cached?.details || fallbackDetails
+  );
+  showSongInfoBackground(cached?.background);
+}
+
+async function prefetchSongInfo(song) {
+  if (!song?.title || !song?.artist) return;
+
+  const cacheKey = getTrackRatingKey(song);
+  if (!cacheKey) return;
+
+  const cached = getStoredSongInfo(cacheKey);
+  if (cached?.track && cached?.artist && cached?.details) return;
+  if (prefetchingSongInfo.has(cacheKey)) return;
+
+  prefetchingSongInfo.add(cacheKey);
+  const fallbackDetails = [
+    `Album: ${song.album || 'N/A'}`,
+    'Release date: N/A',
+    'Genre: N/A',
+    'Duration: N/A'
+  ].join('\n');
+
+  const wikipediaRequest = cached?.wikiChecked
+    ? Promise.resolve(cached.background || null)
+    : fetchWikipediaSongBackground(song).catch(() => null);
 
   try {
-    let song = window.currentNowPlayingSong;
+    const musicData = await searchItunes(`${song.artist} ${song.title}`);
+    const normalize = (value) => value
+      ?.normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '') || '';
 
-    if (!song?.title || !song?.artist) {
-      const nowPlayingResponse = await fetch(
-        NOW_PLAYING_URL,
-        { cache: 'no-store' }
-      );
+    const requestedTitle = normalize(song.title);
+    const requestedArtist = normalize(song.artist.split(',')[0]);
+    const exactTitleMatches = musicData.results?.filter((track) =>
+      normalize(track.trackName) === requestedTitle
+    ) || [];
+    const match = exactTitleMatches.find((recording) =>
+      normalize(recording.artistName).includes(requestedArtist)
+    ) || exactTitleMatches[0];
 
-      if (!nowPlayingResponse.ok) {
-        throw new Error('Unable to load current track.');
-      }
-
-      const nowPlayingData = await nowPlayingResponse.json();
-      song = nowPlayingData?.now_playing?.song;
-    }
-
-    if (
-      !song?.title ||
-      !song?.artist
-    ) {
-      throw new Error(
-        'Track details are unavailable.'
-      );
-    }
-
-    updateStoredRatingForCurrentSong(
-      song
-    );
-
-    const songCacheKey = getTrackRatingKey(song);
-    const cachedSongInfo = getStoredSongInfo(songCacheKey);
-
-    if (
-      cachedSongInfo?.track &&
-      cachedSongInfo?.artist &&
-      cachedSongInfo?.details
-    ) {
-      showSongInfo(
-        cachedSongInfo.track,
-        cachedSongInfo.artist,
-        cachedSongInfo.details
-      );
-      showSongInfoBackground(cachedSongInfo.background);
-      return;
-    }
-
-    const fallbackAlbumDetails =
-      [
-        `Album: ${
-          song.album ||
-          'N/A'
-        }`,
-        'Release date: N/A',
-        'Genre: N/A',
-        'Duration: N/A'
-      ].join('\n');
-
-    fallbackSongInfo = {
+    let entry = {
       track: song.title,
       artist: song.artist,
-      details:
-        fallbackAlbumDetails ||
-        'Additional track details are unavailable.'
+      details: fallbackDetails
     };
 
-    const wikipediaRequest = fetchWikipediaSongBackground(song)
-      .then((background) => {
-        saveStoredSongInfo(songCacheKey, {
-          background,
-          wikiChecked: true
-        });
+    if (match) {
+      const releaseDate = match.releaseDate
+        ? new Date(match.releaseDate).toLocaleDateString()
+        : 'N/A';
+      const duration = match.trackTimeMillis
+        ? `${Math.floor(match.trackTimeMillis / 60000)}:${String(
+            Math.floor(match.trackTimeMillis / 1000) % 60
+          ).padStart(2, '0')}`
+        : 'N/A';
 
-        if (requestId === songInfoRequestId) {
-          showSongInfoBackground(background);
-        }
-        return background;
-      })
-      .catch(() => {
-        saveStoredSongInfo(songCacheKey, {
-          background: null,
-          wikiChecked: true
-        });
-        if (requestId === songInfoRequestId) {
-          showSongInfoBackground(null);
-        }
-        return null;
-      });
-
-    const musicData =
-      await searchItunes(
-        `${song.artist} ${song.title}`
-      );
-
-    if (
-      requestId !==
-      songInfoRequestId
-    ) {
-      return;
+      entry = {
+        track: match.trackName || song.title,
+        artist: match.artistName || song.artist,
+        details: [
+          `Album: ${match.collectionName || song.album || 'N/A'}`,
+          `Release date: ${releaseDate}`,
+          `Genre: ${match.primaryGenreName || 'N/A'}`,
+          `Duration: ${duration}`
+        ].join('\n')
+      };
     }
 
-    const normalize =
-      (value) =>
-        value
-          ?.normalize('NFKD')
-          .replace(
-            /[\u0300-\u036f]/g,
-            ''
-          )
-          .toLowerCase()
-          .replace(
-            /[^a-z0-9]/g,
-            ''
-          ) || '';
-
-    const requestedTitle =
-      normalize(
-        song.title
-      );
-
-    const requestedArtist =
-      normalize(
-        song.artist
-          .split(',')[0]
-      );
-
-    const exactTitleMatches =
-      musicData.results?.filter(
-        (track) =>
-          normalize(
-            track.trackName
-          ) === requestedTitle
-      ) || [];
-
-    const artistMatch =
-      exactTitleMatches.find(
-        (recording) =>
-          normalize(
-            recording.artistName
-          ).includes(
-            requestedArtist
-          )
-      );
-
-    const match =
-      artistMatch ||
-      exactTitleMatches[0];
-
-    if (!match) {
-      saveStoredSongInfo(songCacheKey, {
-        track: fallbackSongInfo.track,
-        artist: fallbackSongInfo.artist,
-        details: fallbackSongInfo.details
-      });
-      showSongInfo(
-        fallbackSongInfo.track,
-        fallbackSongInfo.artist,
-        fallbackSongInfo.details
-      );
-
-      return;
-    }
-
-    const releaseDate =
-      match.releaseDate
-        ? new Date(
-            match.releaseDate
-          ).toLocaleDateString()
-        : '';
-
-    const duration =
-      match.trackTimeMillis
-        ? `${Math.floor(
-            match.trackTimeMillis /
-              60000
-          )}:${String(
-            Math.floor(
-              match.trackTimeMillis /
-                1000
-            ) % 60
-          ).padStart(
-            2,
-            '0'
-          )}`
-        : '';
-
-    const displayTrack =
-      match.trackName;
-
-    const displayArtist =
-      match.artistName ||
-      song.artist;
-
-    const albumDetails =
-      [
-        `Album: ${
-          match.collectionName ||
-          song.album ||
-          'N/A'
-        }`,
-        `Release date: ${
-          releaseDate ||
-          'N/A'
-        }`,
-        `Genre: ${
-          match.primaryGenreName ||
-          'N/A'
-        }`,
-        `Duration: ${
-          duration ||
-          'N/A'
-        }`
-      ];
-
-    const displayDetails =
-      albumDetails.length
-        ? albumDetails.join('\n')
-        : fallbackAlbumDetails;
-
-    showSongInfo(
-      displayTrack,
-      displayArtist,
-      displayDetails
-    );
-
-    saveStoredSongInfo(songCacheKey, {
-      track: displayTrack,
-      artist: displayArtist,
-      details: displayDetails
+    saveStoredSongInfo(cacheKey, entry);
+  } catch {
+    saveStoredSongInfo(cacheKey, {
+      track: song.title,
+      artist: song.artist,
+      details: fallbackDetails
     });
+  }
 
-    // The lookup continues in the background and saves its result for next time.
-    void wikipediaRequest;
+  const background = await wikipediaRequest;
+  saveStoredSongInfo(cacheKey, {
+    background,
+    wikiChecked: true
+  });
+  prefetchingSongInfo.delete(cacheKey);
 
-  } catch (error) {
-    if (
-      requestId !==
-      songInfoRequestId
-    ) {
-      return;
-    }
-
-    if (fallbackSongInfo) {
-      showSongInfo(
-        fallbackSongInfo.track,
-        fallbackSongInfo.artist,
-        fallbackSongInfo.details
-      );
-    } else {
-      showSongInfo(
-        '',
-        '',
-        error.message ||
-          'Track details are unavailable.'
-      );
-    }
+  const currentSongKey = getTrackRatingKey(window.currentNowPlayingSong);
+  if (songInfoDialog?.open && currentSongKey === cacheKey) {
+    updateSongInfo();
   }
 }
 
@@ -933,6 +712,21 @@ async function fetchWikipediaSongBackground(
           `https://en.wikipedia.org/?curid=${article.pageid}`
       }
     : null;
+}
+
+window.addEventListener('thaalam:nowplaying', (event) => {
+  const song = event.detail?.now_playing?.song;
+  updateStoredRatingForCurrentSong(song || null);
+  if (!song) return;
+  void prefetchSongInfo(song);
+});
+
+if (window.latestNowPlayingData?.now_playing?.song) {
+  const currentSong = window.latestNowPlayingData.now_playing.song;
+  updateStoredRatingForCurrentSong(currentSong);
+  void prefetchSongInfo(currentSong);
+} else if (window.latestNowPlayingData) {
+  updateStoredRatingForCurrentSong(null);
 }
 
 function searchItunes(
@@ -1375,9 +1169,9 @@ if (thumbsUpButton) {
 
   thumbsUpButton.addEventListener(
     'click',
-    async () => {
+    () => {
       if (!currentRatingTrackKey) {
-        await refreshCurrentRating();
+        refreshCurrentRating();
       }
 
       const triggered =
@@ -1409,9 +1203,9 @@ if (thumbsDownButton) {
 
   thumbsDownButton.addEventListener(
     'click',
-    async () => {
+    () => {
       if (!currentRatingTrackKey) {
-        await refreshCurrentRating();
+        refreshCurrentRating();
       }
 
       const triggered =
@@ -1444,13 +1238,4 @@ controlsRadio?.addEventListener(
 
 restoreSleepTimer();
 
-window.setTimeout(
-  refreshCurrentRating,
-  300
-);
-
-ratingRefreshInterval =
-  window.setInterval(
-    refreshCurrentRating,
-    15000
-  );
+window.setTimeout(refreshCurrentRating, 300);

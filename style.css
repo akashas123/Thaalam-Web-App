@@ -1208,9 +1208,20 @@ body::after {
   display: none;
 }
 
+@media (min-width: 56.25rem) {
+  body.has-lyrics:not(.synced-lyrics)
+  .lyrics-content {
+    max-height: 68vh;
+
+    overflow-y: auto;
+
+    overscroll-behavior: contain;
+  }
+}
+
 body.has-lyrics.synced-lyrics
 .lyrics-content {
-  overflow-y: auto;
+  overflow-y: hidden;
 
   overscroll-behavior: none;
 }
