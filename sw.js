@@ -1,15 +1,15 @@
-const CACHE_NAME = 'thaalam-24x7-v7';
+const CACHE_NAME = 'thaalam-24x7-v85';
 
 const APP_FILES = [
   './',
   './index.html',
-  './style.css?v=34',
-  './script.js?v=23',
+  './style.css?v=107',
+  './script.js?v=31',
   './audio-recovery.js?v=1',
   './marquee.js?v=2',
   './media-metadata.js?v=5',
   './player-controls.js?v=28',
-  './lyrics.js?v=27',
+  './lyrics.js?v=28',
   './manifest.json',
   './album-placeholder.svg?v=2',
   './icon-192.png',
@@ -71,7 +71,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   event.respondWith(
-    caches.match(request, { ignoreSearch: true })
+    caches.match(request)
       .then((cachedResponse) => cachedResponse || fetch(request)
         .then((response) => {
           if (response.ok) {

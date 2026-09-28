@@ -539,7 +539,10 @@ function updateLyrics(
 
   lyricsPanel.setAttribute(
     'aria-hidden',
-    String(!hasLyrics)
+    String(
+      !hasLyrics &&
+      !window.matchMedia('(min-width: 56.25rem)').matches
+    )
   );
 
   if (!hasLyrics) {
