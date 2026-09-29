@@ -11,7 +11,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=107">
+  <link rel="stylesheet" href="style.css?v=112">
 
   <style>
     .tagline[class~="marquee"] span {
@@ -137,6 +137,22 @@
 
 <body class="view-now-playing">
 
+  <script>
+    // Restore the last desktop view before the first paint, so a refresh keeps the
+    // page you were on instead of flashing the Now Playing landing page.
+    (function () {
+      try {
+        const storedView = window.localStorage.getItem('thaalam-active-view-v1');
+        if (storedView !== 'home' && storedView !== 'about') return;
+        if (!window.matchMedia('(min-width: 56.25rem)').matches) return;
+        document.body.classList.remove('view-now-playing');
+        document.body.classList.add(`view-${storedView}`);
+      } catch {
+        // Private mode or blocked storage: keep the Now Playing landing page.
+      }
+    })();
+  </script>
+
   <nav class="desktop-nav" aria-label="Main navigation">
     <div class="desktop-nav-links">
       <button type="button" data-view="home">Home</button>
@@ -177,9 +193,56 @@
 
   <main class="site-page about-page" id="aboutPage" aria-labelledby="aboutTitle">
     <div class="site-page-content">
-      <p class="site-page-eyebrow">ABOUT THE STATION</p>
-      <h1 id="aboutTitle" tabindex="-1">Thaalam 24x7</h1>
-      <p class="site-page-copy">Non-stop Tamil radio, streaming live around the clock.</p>
+      <p class="site-page-eyebrow">ABOUT THE PROJECT</p>
+      <div class="about-story">
+        <p class="site-page-copy">India's musical heritage stretches back thousands of years, and much of it survived not on paper but in memory. Ragas, the melodic moods that shape a performance, and thaalam, the repeating cycles of time that hold it together, were handed down from teacher to student, from voice to instrument, from temple to courtyard. Over the centuries the tradition grew into two great classical systems, Hindustani in the north and Carnatic in the south, while folk songs, devotional hymns and film music carried the same spirit into every home and every street. Today that music is heard on every continent, kept alive by the artists, students and listeners who love it.</p>
+        <p class="site-page-copy">Carnatic music is the classical tradition of South India, and it rests on three pillars: raga, tala and the compositions left behind by its composers. Purandara Dasa, honoured as the father of Carnatic music, wrote the earliest lessons that beginners still learn today, and the nineteenth-century trio known as the Trinity, Tyagaraja, Muthuswami Dikshitar and Syama Sastri, left a treasury of kritis that singers return to generation after generation. A concert, or kutcheri, unfolds slowly and then opens out into improvisation and brisk, joyful pieces, and the same songs travel through the year, from small neighbourhood music schools to the grand Tyagaraja Aradhana festival.</p>
+        <p class="site-page-copy">The instruments of Carnatic music were chosen for their ability to sing. The Saraswati veena, a long-necked lute with a deep resonant body, and the bamboo flute, or venu, can glide and bend between notes the way a human voice does, which is exactly what a raga asks for. The violin, adopted from the West in the early nineteenth century and reshaped into a fully Carnatic voice, shares the stage with the singer in almost every concert, while the nadaswaram, a large double-reed horn played at temples and weddings, carries the same melodies at a volume that fills a whole street. Behind them all, the tambura keeps a steady, shimmering drone that holds the raga in place.</p>
+        <p class="site-page-copy">Rhythm in this tradition is not accompaniment but conversation. The mridangam, a double-headed drum tuned to the pitch of the singer, leads the percussion, and it is joined by the ghatam, a clay pot whose open mouth can ring with a clear tone or snap with a dry one, the kanjira, a small frame drum with a single taut head, and the morsing, a metal jaw harp that buzzes along with the cycle. Together they build the tani avartanam, the part of a concert where rhythm takes the spotlight and explores the tala in ever-changing patterns. That conversation between melody and mathematics is the pulse of Indian music, and it is the reason a familiar song can still surprise you on the hundredth listen.</p>
+        <p class="site-page-copy">Thaalam 24x7 is a fan-made, open-source project. It is not a label, a broadcaster or a business: it is a small web radio built by listeners who grew up with this music and wanted it to keep playing. The name comes from thaalam, the rhythmic cycle that gives Indian music its pulse, because this station keeps that pulse going around the clock. The intention is simple and ambitious at the same time: to bring Indian music, to a global level, so that a listener anywhere in the world can tune in without hunting for an old file or a rare recording. The stream is free, the code is open, and everyone who loves this music is welcome to help it grow.</p>
+      </div>
+      <section class="about-voices" aria-label="Malayalam playback voices">
+        <p class="site-page-eyebrow">MALAYALAM LEGENDS</p>
+        <ul class="about-voices-grid">
+          <li class="about-voice">
+            <span class="about-voice-media">
+              <span class="about-voice-monogram" aria-hidden="true">KJY</span>
+              <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/49/K.J_Yesudas.JPG/500px-K.J_Yesudas.JPG" alt="" decoding="async">
+            </span>
+            <span class="about-voice-name">K. J. Yesudas</span>
+            <span class="about-voice-role">Gaanagandharvan &middot; six decades of playback</span>
+          </li>
+          <li class="about-voice">
+            <span class="about-voice-media">
+              <span class="about-voice-monogram" aria-hidden="true">KSC</span>
+              <img src="https://upload.wikimedia.org/wikipedia/commons/f/f0/Melody_Queen_of_Indian_Cinema_Dr._K_S_Chithra_%28cropped%29.jpg" alt="" decoding="async">
+            </span>
+            <span class="about-voice-name">K. S. Chithra</span>
+            <span class="about-voice-role">Melody queen &middot; 25,000+ songs</span>
+          </li>
+          <li class="about-voice">
+            <span class="about-voice-media">
+              <span class="about-voice-monogram" aria-hidden="true">PJ</span>
+              <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/P_jayachandranDSC_0207.jpg/500px-P_jayachandranDSC_0207.jpg" alt="" decoding="async">
+            </span>
+            <span class="about-voice-name">P. Jayachandran</span>
+            <span class="about-voice-role">Bhaava gayakan &middot; 16,000+ songs</span>
+          </li>
+          <li class="about-voice">
+            <span class="about-voice-media">
+              <span class="about-voice-monogram" aria-hidden="true">MGS</span>
+              <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/MG_Sreekumar_%28Cropped%29.jpg/500px-MG_Sreekumar_%28Cropped%29.jpg" alt="" decoding="async">
+            </span>
+            <span class="about-voice-name">M. G. Sreekumar</span>
+            <span class="about-voice-role">Singer and composer &middot; 2,500+ songs</span>
+          </li>
+        </ul>
+        <p class="about-voices-credit">Portraits from Wikimedia Commons: K. J. Yesudas by E P Sajeevan, K. S. Chithra by VARDHANSIMHA, P. Jayachandran by Kannanshanmugam and Shanmugam Studio, Kollam, M. G. Sreekumar by Lijesh K.</p>
+      </section>
+
+      <div class="about-signoff">
+        <h1 id="aboutTitle" tabindex="-1">Thaalam 24x7</h1>
+      </div>
       <button class="site-page-action" type="button" data-view="home">
         Back to Home
       </button>
@@ -542,6 +605,7 @@
     desktopNavigation.addEventListener('change', () => {
       placeStationForViewport();
       placeStreamQualityForViewport();
+      restoreActiveView();
     });
     const pageLoading =
       document.getElementById('pageLoading');
@@ -566,6 +630,7 @@
     const genreResultCache = new Map();
     const GENRE_CACHE_KEY = 'thaalam-itunes-genre-cache-v1';
     const GENRE_CACHE_TTL = 12 * 60 * 60 * 1000;
+    const ACTIVE_VIEW_KEY = 'thaalam-active-view-v1';
     let activeGenre = 'pop';
     let activeSearchTerm = '';
     let suggestionRequestId = 0;
@@ -879,6 +944,61 @@
       });
     });
 
+    function markCurrentView(view) {
+      viewButtons.forEach((button) => {
+        const isCurrent = button.dataset.view === view;
+        button.classList.toggle('is-current', isCurrent);
+        if (isCurrent) {
+          button.setAttribute('aria-current', 'page');
+        } else {
+          button.removeAttribute('aria-current');
+        }
+      });
+    }
+
+    function storeActiveView(view) {
+      try {
+        localStorage.setItem(ACTIVE_VIEW_KEY, view);
+      } catch {
+        // Storage can be blocked; the view still switches for this session.
+      }
+    }
+
+    function readActiveView() {
+      try {
+        const storedView = localStorage.getItem(ACTIVE_VIEW_KEY);
+        return storedView === 'home' || storedView === 'about'
+          ? storedView
+          : 'now-playing';
+      } catch {
+        return 'now-playing';
+      }
+    }
+
+    function applyView(view) {
+      document.body.classList.remove(
+        'view-home',
+        'view-about',
+        'view-now-playing'
+      );
+      document.body.classList.add(`view-${view}`);
+      markCurrentView(view);
+    }
+
+    // A refresh keeps the page you were on, and a first visit still lands on Now
+    // Playing because nothing has been stored yet.
+    function restoreActiveView() {
+      if (!desktopNavigation.matches) return;
+      const storedView = readActiveView();
+      if (storedView === 'now-playing') return;
+      applyView(storedView);
+      requestAnimationFrame(() => window.updateMiniPlayerMarquees?.());
+      if (storedView === 'home') {
+        if (activeGenre.startsWith('search:')) loadCatalog(activeGenre, activeSearchTerm);
+        else loadGenre(activeGenre);
+      }
+    }
+
     function showView(view) {
       if (!desktopNavigation.matches) return;
 
@@ -886,23 +1006,9 @@
       pageLoading.hidden = false;
 
       viewChangeTimeout = window.setTimeout(() => {
-        document.body.classList.remove(
-          'view-home',
-          'view-about',
-          'view-now-playing'
-        );
-        document.body.classList.add(`view-${view}`);
+        applyView(view);
+        storeActiveView(view);
         requestAnimationFrame(() => window.updateMiniPlayerMarquees?.());
-
-        viewButtons.forEach((button) => {
-          const isCurrent = button.dataset.view === view;
-          button.classList.toggle('is-current', isCurrent);
-          if (isCurrent) {
-            button.setAttribute('aria-current', 'page');
-          } else {
-            button.removeAttribute('aria-current');
-          }
-        });
 
         pageLoading.hidden = true;
         if (view === 'home') {
@@ -926,7 +1032,23 @@
         showView(button.dataset.view);
       });
     });
+
+    restoreActiveView();
   </script>
+
+  <script>
+    // Remote portraits: if one fails to load (offline), drop it so the monogram tile shows.
+    document.querySelectorAll('.about-voice-media img').forEach((image) => {
+      const revealMonogram = () => {
+        image.remove();
+      };
+
+      image.addEventListener('error', revealMonogram);
+
+      if (image.complete && image.naturalWidth === 0) revealMonogram();
+    });
+  </script>
+
 
 </body>
 </html>

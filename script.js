@@ -1,6 +1,7 @@
 const HLS_STREAM_URL = 'https://radio.thaalam24x7.in/hls/thaalam_24x7/live.m3u8';
 const NOW_PLAYING_API = 'https://radio.thaalam24x7.in/api/nowplaying/thaalam_24x7';
 const SCHEDULE_API = 'https://radio.thaalam24x7.in/api/station/6/schedule';
+const PLAYBACK_STARTED_KEY = 'thaalam-playback-started-v1';
 
 const radio = document.getElementById('radio');
 const playIcon = document.getElementById('playIcon');

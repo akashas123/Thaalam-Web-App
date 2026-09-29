@@ -1,9 +1,9 @@
-const CACHE_NAME = 'thaalam-24x7-v85';
+const CACHE_NAME = 'thaalam-24x7-v90';
 
 const APP_FILES = [
   './',
   './index.html',
-  './style.css?v=107',
+  './style.css?v=112',
   './script.js?v=31',
   './audio-recovery.js?v=1',
   './marquee.js?v=2',
