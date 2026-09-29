@@ -11,7 +11,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=34">
+  <link rel="stylesheet" href="style.css?v=112">
 
   <style>
     .tagline[class~="marquee"] span {
@@ -45,6 +45,89 @@
         transform: translateX(calc(-50% - 1.5rem));
       }
     }
+
+    @media (min-width: 56.25rem) {
+
+      .desktop-nav-links {
+        position: static;
+        inset: auto;
+        width: fit-content;
+        height: 100%;
+        margin: 0;
+        gap: 0.1rem;
+        align-items: center;
+        justify-content: flex-start;
+      }
+
+      .desktop-nav-links a,
+      .desktop-nav-links button {
+        display: inline-flex;
+        height: calc(100% - 0.1rem);
+        padding: 0 0.8rem;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        line-height: 1;
+      }
+
+      .desktop-nav-links button {
+        appearance: none;
+        -webkit-appearance: none;
+      }
+
+      .desktop-nav-links .is-current {
+        border: 0;
+        background: transparent;
+        color: #d7ecff;
+        font-weight: 600;
+      }
+
+      .desktop-nav-links a:hover,
+      .desktop-nav-links button:hover {
+        background: transparent;
+        box-shadow: none;
+      }
+    }
+  
+    @media (min-width: 56.25rem) {
+      body.view-now-playing #nowPlayingHeading {
+        display: block !important;
+        position: fixed !important;
+        top: calc(4rem + clamp(1.25rem, 3.5vw, 3.5rem) - 1.25rem) !important;
+        left: 50% !important;
+        z-index: 8 !important;
+        width: min(88rem, calc(100vw - 4rem));
+        max-width: none;
+        box-sizing: border-box;
+        padding-left: clamp(1.25rem, 3.5vw, 3.5rem);
+        transform: translateX(-50%) !important;
+        text-align: left;
+        pointer-events: none;
+      }
+
+      #nowPlayingHeading h1 {
+        margin: 0;
+        color: #fff;
+        font-size: clamp(2.25rem, 4.5vw, 4rem);
+        font-weight: 700;
+        letter-spacing: -0.045em;
+        line-height: 1.05;
+        overflow: visible;
+      }
+
+      #nowPlayingHeading p {
+        margin: 0.75rem 0 0;
+        color: rgba(255, 255, 255, 0.75);
+        font-size: clamp(1rem, 1.5vw, 1.2rem);
+        line-height: 1.6;
+      }
+
+      body.view-now-playing #playerView {
+        top: 7.5rem !important;
+        transform: none !important;
+      }
+
+    }
   </style>
 
   <link rel="manifest" href="manifest.json">
@@ -52,9 +135,149 @@
   <meta name="theme-color" content="#05070d">
 </head>
 
-<body>
+<body class="view-now-playing">
 
-  <div class="app">
+  <script>
+    // Restore the last desktop view before the first paint, so a refresh keeps the
+    // page you were on instead of flashing the Now Playing landing page.
+    (function () {
+      try {
+        const storedView = window.localStorage.getItem('thaalam-active-view-v1');
+        if (storedView !== 'home' && storedView !== 'about') return;
+        if (!window.matchMedia('(min-width: 56.25rem)').matches) return;
+        document.body.classList.remove('view-now-playing');
+        document.body.classList.add(`view-${storedView}`);
+      } catch {
+        // Private mode or blocked storage: keep the Now Playing landing page.
+      }
+    })();
+  </script>
+
+  <nav class="desktop-nav" aria-label="Main navigation">
+    <div class="desktop-nav-links">
+      <button type="button" data-view="home">Home</button>
+      <button class="is-current" type="button" data-view="now-playing" aria-current="page">Now Playing</button>
+      <button type="button" data-view="about">About</button>
+    </div>
+  </nav>
+
+  <main class="site-page home-page" id="homePage" aria-labelledby="homeTitle">
+    <div class="site-page-content">
+      <header class="home-catalog-header">
+        <div>
+          <h1 id="homeTitle" tabindex="-1">Browse music</h1>
+          <p class="site-page-copy">Explore songs by genre.</p>
+        </div>
+        <form class="catalog-search" id="catalogSearchForm" role="search">
+          <input id="catalogSearchInput" type="search" autocomplete="off" aria-label="Search songs or artists" aria-autocomplete="list" aria-controls="catalogSuggestions" aria-expanded="false" placeholder="Search songs or artists">
+          <button type="submit" aria-label="Search songs">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.6"></circle><path d="m16 16 4.3 4.3"></path></svg>
+          </button>
+          <button class="catalog-clear-button" id="catalogClearButton" type="button" aria-label="Clear search" title="Clear search" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg>
+          </button>
+          <div class="catalog-suggestions" id="catalogSuggestions" role="listbox" aria-label="Song suggestions" hidden></div>
+        </form>
+      </header>
+      <div class="genre-tabs" role="tablist" aria-label="Music genres">
+        <button class="genre-tab is-selected" type="button" role="tab" aria-selected="true" aria-controls="genreResults" tabindex="0" data-genre="pop">Pop</button>
+        <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="malayalam">Malayalam</button>
+        <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="tamil">Tamil</button>
+      </div>
+      <p class="genre-attribution">Search results from Apple iTunes Store - up to 200 matches</p>
+      <div class="genre-results" id="genreResults" role="tabpanel" aria-live="polite">
+        <p class="genre-empty">Choose a genre to browse songs.</p>
+      </div>
+    </div>
+  </main>
+
+  <main class="site-page about-page" id="aboutPage" aria-labelledby="aboutTitle">
+    <div class="site-page-content">
+      <p class="site-page-eyebrow">ABOUT THE PROJECT</p>
+      <div class="about-story">
+        <p class="site-page-copy">India's musical heritage stretches back thousands of years, and much of it survived not on paper but in memory. Ragas, the melodic moods that shape a performance, and thaalam, the repeating cycles of time that hold it together, were handed down from teacher to student, from voice to instrument, from temple to courtyard. Over the centuries the tradition grew into two great classical systems, Hindustani in the north and Carnatic in the south, while folk songs, devotional hymns and film music carried the same spirit into every home and every street. Today that music is heard on every continent, kept alive by the artists, students and listeners who love it.</p>
+        <p class="site-page-copy">Carnatic music is the classical tradition of South India, and it rests on three pillars: raga, tala and the compositions left behind by its composers. Purandara Dasa, honoured as the father of Carnatic music, wrote the earliest lessons that beginners still learn today, and the nineteenth-century trio known as the Trinity, Tyagaraja, Muthuswami Dikshitar and Syama Sastri, left a treasury of kritis that singers return to generation after generation. A concert, or kutcheri, unfolds slowly and then opens out into improvisation and brisk, joyful pieces, and the same songs travel through the year, from small neighbourhood music schools to the grand Tyagaraja Aradhana festival.</p>
+        <p class="site-page-copy">The instruments of Carnatic music were chosen for their ability to sing. The Saraswati veena, a long-necked lute with a deep resonant body, and the bamboo flute, or venu, can glide and bend between notes the way a human voice does, which is exactly what a raga asks for. The violin, adopted from the West in the early nineteenth century and reshaped into a fully Carnatic voice, shares the stage with the singer in almost every concert, while the nadaswaram, a large double-reed horn played at temples and weddings, carries the same melodies at a volume that fills a whole street. Behind them all, the tambura keeps a steady, shimmering drone that holds the raga in place.</p>
+        <p class="site-page-copy">Rhythm in this tradition is not accompaniment but conversation. The mridangam, a double-headed drum tuned to the pitch of the singer, leads the percussion, and it is joined by the ghatam, a clay pot whose open mouth can ring with a clear tone or snap with a dry one, the kanjira, a small frame drum with a single taut head, and the morsing, a metal jaw harp that buzzes along with the cycle. Together they build the tani avartanam, the part of a concert where rhythm takes the spotlight and explores the tala in ever-changing patterns. That conversation between melody and mathematics is the pulse of Indian music, and it is the reason a familiar song can still surprise you on the hundredth listen.</p>
+        <p class="site-page-copy">Thaalam 24x7 is a fan-made, open-source project. It is not a label, a broadcaster or a business: it is a small web radio built by listeners who grew up with this music and wanted it to keep playing. The name comes from thaalam, the rhythmic cycle that gives Indian music its pulse, because this station keeps that pulse going around the clock. The intention is simple and ambitious at the same time: to bring Indian music, to a global level, so that a listener anywhere in the world can tune in without hunting for an old file or a rare recording. The stream is free, the code is open, and everyone who loves this music is welcome to help it grow.</p>
+      </div>
+      <section class="about-voices" aria-label="Malayalam playback voices">
+        <p class="site-page-eyebrow">MALAYALAM LEGENDS</p>
+        <ul class="about-voices-grid">
+          <li class="about-voice">
+            <span class="about-voice-media">
+              <span class="about-voice-monogram" aria-hidden="true">KJY</span>
+              <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/49/K.J_Yesudas.JPG/500px-K.J_Yesudas.JPG" alt="" decoding="async">
+            </span>
+            <span class="about-voice-name">K. J. Yesudas</span>
+            <span class="about-voice-role">Gaanagandharvan &middot; six decades of playback</span>
+          </li>
+          <li class="about-voice">
+            <span class="about-voice-media">
+              <span class="about-voice-monogram" aria-hidden="true">KSC</span>
+              <img src="https://upload.wikimedia.org/wikipedia/commons/f/f0/Melody_Queen_of_Indian_Cinema_Dr._K_S_Chithra_%28cropped%29.jpg" alt="" decoding="async">
+            </span>
+            <span class="about-voice-name">K. S. Chithra</span>
+            <span class="about-voice-role">Melody queen &middot; 25,000+ songs</span>
+          </li>
+          <li class="about-voice">
+            <span class="about-voice-media">
+              <span class="about-voice-monogram" aria-hidden="true">PJ</span>
+              <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/P_jayachandranDSC_0207.jpg/500px-P_jayachandranDSC_0207.jpg" alt="" decoding="async">
+            </span>
+            <span class="about-voice-name">P. Jayachandran</span>
+            <span class="about-voice-role">Bhaava gayakan &middot; 16,000+ songs</span>
+          </li>
+          <li class="about-voice">
+            <span class="about-voice-media">
+              <span class="about-voice-monogram" aria-hidden="true">MGS</span>
+              <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/MG_Sreekumar_%28Cropped%29.jpg/500px-MG_Sreekumar_%28Cropped%29.jpg" alt="" decoding="async">
+            </span>
+            <span class="about-voice-name">M. G. Sreekumar</span>
+            <span class="about-voice-role">Singer and composer &middot; 2,500+ songs</span>
+          </li>
+        </ul>
+        <p class="about-voices-credit">Portraits from Wikimedia Commons: K. J. Yesudas by E P Sajeevan, K. S. Chithra by VARDHANSIMHA, P. Jayachandran by Kannanshanmugam and Shanmugam Studio, Kollam, M. G. Sreekumar by Lijesh K.</p>
+      </section>
+
+      <div class="about-signoff">
+        <h1 id="aboutTitle" tabindex="-1">Thaalam 24x7</h1>
+      </div>
+      <button class="site-page-action" type="button" data-view="home">
+        Back to Home
+      </button>
+    </div>
+  </main>
+
+  <aside class="mini-player" id="miniPlayer" aria-label="Now playing" hidden>
+    <button class="mini-player-art" type="button" data-view="now-playing" aria-label="Open Now Playing">
+      <img id="miniPlayerArt" src="album-placeholder.svg?v=2" alt="">
+    </button>
+    <button class="mini-player-track" type="button" data-view="now-playing" aria-label="Open Now Playing">
+      <span class="mini-player-title" id="miniPlayerTitle">Thaalam 24x7</span>
+      <span class="mini-player-artist" id="miniPlayerArtist">Live radio</span>
+    </button>
+    <div class="mini-player-time" aria-label="Track time">
+      <span id="miniPlayerElapsed">0:00</span>
+      <span aria-hidden="true">/</span>
+      <span id="miniPlayerDuration">0:00</span>
+    </div>
+    <button class="mini-player-toggle" id="miniPlayerToggle" type="button" onclick="togglePlay()" aria-label="Pause">
+      <svg id="miniPlayerIcon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M6 5h4v14H6zm8 0h4v14h-4z"/>
+      </svg>
+    </button>
+  </aside>
+
+  <div class="page-loading" id="pageLoading" role="status" aria-label="Loading page" hidden>
+    <span class="loading-spinner" aria-hidden="true"></span>
+  </div>
+
+    <header class="now-playing-heading" id="nowPlayingHeading">
+      <h1>Now playing</h1>
+      <p>Discover music through Live</p>
+    </header>
+  <div class="app player-view" id="playerView">
 
     <div class="album-art-card">
       <img id="albumArtImg" src="album-placeholder.svg?v=2" alt="Album artwork placeholder">
@@ -64,8 +287,8 @@
       Thaalam 24x7
     </div>
 
-    <div class="tagline">
-      <span id="nowPlaying">Non-Stop 24x7</span>
+    <div class="tagline now-playing-track">
+      <span id="nowPlaying" data-track-title="Non-Stop 24x7" data-track-artist=""></span>
     </div>
 
     <div class="live-row">
@@ -298,7 +521,7 @@
   </dialog>
 
   <aside
-    class="lyrics-panel"
+    class="player-view lyrics-panel"
     id="lyricsPanel"
     aria-live="polite"
     aria-hidden="true"
@@ -345,12 +568,487 @@
   </aside>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
-  <script src="script.js?v=23"></script>
+  <script src="script.js?v=31"></script>
   <script src="audio-recovery.js?v=1"></script>
   <script src="marquee.js?v=2"></script>
   <script src="media-metadata.js?v=5"></script>
   <script src="player-controls.js?v=28"></script>
-  <script src="lyrics.js?v=27"></script>
+  <script src="lyrics.js?v=28"></script>
+  <script>
+    const desktopNavigation =
+      window.matchMedia('(min-width: 56.25rem)');
+    const playerView = document.getElementById('playerView');
+    const nowPlayingHeading = document.getElementById('nowPlayingHeading');
+    const stationName = document.getElementById('stationName');
+    const playerTagline = playerView?.querySelector('.tagline');
+    const streamQualityBadge = document.getElementById('streamQuality');
+    const playerTrackTime = document.getElementById('trackTime');
+    const playerTrackDuration = document.getElementById('trackDuration');
+    const placeStationForViewport = () => {
+      if (!stationName || !playerView || !nowPlayingHeading) return;
+      if (desktopNavigation.matches) {
+        nowPlayingHeading.appendChild(stationName);
+      } else if (playerTagline) {
+        playerView.insertBefore(stationName, playerTagline);
+      }
+    };
+    const placeStreamQualityForViewport = () => {
+      if (!streamQualityBadge || !playerTrackTime || !playerTrackDuration) return;
+      if (desktopNavigation.matches && playerTagline) {
+        playerTagline.appendChild(streamQualityBadge);
+      } else {
+        playerTrackTime.insertBefore(streamQualityBadge, playerTrackDuration);
+      }
+    };
+    placeStationForViewport();
+    placeStreamQualityForViewport();
+    desktopNavigation.addEventListener('change', () => {
+      placeStationForViewport();
+      placeStreamQualityForViewport();
+      restoreActiveView();
+    });
+    const pageLoading =
+      document.getElementById('pageLoading');
+    const viewButtons =
+      document.querySelectorAll('[data-view]');
+    const genreTabs =
+      document.querySelectorAll('[data-genre]');
+    const genreTabList = document.querySelector('.genre-tabs');
+    const genreResults =
+      document.getElementById('genreResults');
+    const genreAttribution = document.querySelector('.genre-attribution');
+    const homeSubtitle = document.querySelector('.home-page .site-page-copy');
+    const catalogSearchForm = document.getElementById('catalogSearchForm');
+    const catalogSearchInput = document.getElementById('catalogSearchInput');
+    const catalogSuggestions = document.getElementById('catalogSuggestions');
+    const catalogClearButton = document.getElementById('catalogClearButton');
+    const genreSearchTerms = {
+      pop: 'pop music',
+      malayalam: 'malayalam songs',
+      tamil: 'tamil songs'
+    };
+    const genreResultCache = new Map();
+    const GENRE_CACHE_KEY = 'thaalam-itunes-genre-cache-v1';
+    const GENRE_CACHE_TTL = 12 * 60 * 60 * 1000;
+    const ACTIVE_VIEW_KEY = 'thaalam-active-view-v1';
+    let activeGenre = 'pop';
+    let activeSearchTerm = '';
+    let suggestionRequestId = 0;
+    let suggestionTimer = 0;
+    let genreRequestId = 0;
+    let viewChangeTimeout = 0;
+
+    function getGenreCache() {
+      try {
+        const cache = JSON.parse(
+          localStorage.getItem(GENRE_CACHE_KEY) || '{}'
+        );
+        return cache && typeof cache === 'object' ? cache : {};
+      } catch {
+        return {};
+      }
+    }
+
+    function renderGenreResults(songs) {
+      genreResults.replaceChildren();
+
+      if (!songs.length) {
+        const empty = document.createElement('p');
+        empty.className = 'genre-empty';
+        empty.textContent = 'No matching songs were found.';
+        genreResults.appendChild(empty);
+        return;
+      }
+
+      songs.forEach((song) => {
+        const card = document.createElement('article');
+        card.className = 'genre-card';
+
+        const artwork = document.createElement('img');
+        artwork.className = 'genre-card-art';
+        artwork.alt = `${song.trackName || 'Song'} album artwork`;
+        artwork.loading = 'lazy';
+        artwork.src = song.artworkUrl100
+          ? song.artworkUrl100
+              .replace(/^http:/, 'https:')
+              .replace(/\d+x\d+bb\./, '600x600bb.')
+          : 'album-placeholder.svg?v=2';
+        artwork.addEventListener('error', () => {
+          artwork.src = 'album-placeholder.svg?v=2';
+        }, { once: true });
+
+        const details = document.createElement('div');
+        details.className = 'genre-card-details';
+        const title = document.createElement('p');
+        title.className = 'genre-card-title';
+        title.textContent = song.trackName || 'Unknown song';
+        const artist = document.createElement('p');
+        artist.className = 'genre-card-artist';
+        artist.textContent = song.artistName || 'Unknown artist';
+        details.append(title, artist);
+
+        if (song.trackViewUrl) {
+          const link = document.createElement('a');
+          link.className = 'genre-card-link';
+          link.href = song.trackViewUrl.replace(/^http:/, 'https:');
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          link.setAttribute('aria-label', `Open ${song.trackName || 'song'} in the iTunes Store`);
+          link.append(artwork, details);
+          card.appendChild(link);
+        } else {
+          card.append(artwork, details);
+        }
+
+        genreResults.appendChild(card);
+      });
+    }
+
+    function showGenreLoading() {
+      genreResults.replaceChildren();
+      const loading = document.createElement('p');
+      loading.className = 'genre-loading';
+      loading.textContent = 'Loading songs…';
+      genreResults.appendChild(loading);
+    }
+
+    function searchGenre(term, requestId, limit = 200, callbackPrefix = 'thaalamGenreCallback') {
+      return new Promise((resolve, reject) => {
+        const callbackName = `${callbackPrefix}${requestId}`;
+        const query = new URLSearchParams({
+          term,
+          country: 'in',
+          entity: 'song',
+          media: 'music',
+          limit: String(limit),
+          callback: callbackName
+        });
+        const request = document.createElement('script');
+        let settled = false;
+        const timeout = window.setTimeout(() => {
+          finish(new Error('The song search timed out.'));
+        }, 12000);
+
+        function finish(error, data) {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(timeout);
+          delete window[callbackName];
+          request.remove();
+          if (error) reject(error);
+          else resolve(data?.results || []);
+        }
+
+        window[callbackName] = (data) => finish(null, data);
+        request.onerror = () => finish(new Error('The song search is unavailable.'));
+        request.src = `https://itunes.apple.com/search?${query}`;
+        document.head.appendChild(request);
+      });
+    }
+
+    async function loadCatalog(cacheKey, term) {
+      activeGenre = cacheKey;
+      const requestId = ++genreRequestId;
+      const cached = genreResultCache.get(cacheKey);
+      if (cached) {
+        renderGenreResults(cached);
+        return;
+      }
+
+      const storedCache = getGenreCache();
+      const storedEntry = storedCache[cacheKey];
+      if (
+        storedEntry?.savedAt &&
+        Date.now() - storedEntry.savedAt < GENRE_CACHE_TTL &&
+        Array.isArray(storedEntry.songs)
+      ) {
+        genreResultCache.set(cacheKey, storedEntry.songs);
+        renderGenreResults(storedEntry.songs);
+        return;
+      }
+
+      showGenreLoading();
+      try {
+        const songs = await searchGenre(term, requestId);
+        genreResultCache.set(cacheKey, songs);
+        storedCache[cacheKey] = { savedAt: Date.now(), songs };
+        try {
+          localStorage.setItem(GENRE_CACHE_KEY, JSON.stringify(storedCache));
+        } catch {
+          // Keep the in-memory results if storage is full or unavailable.
+        }
+        if (requestId === genreRequestId && activeGenre === cacheKey) {
+          renderGenreResults(songs);
+        }
+      } catch {
+        if (requestId !== genreRequestId || activeGenre !== cacheKey) return;
+        genreResults.replaceChildren();
+        const error = document.createElement('p');
+        error.className = 'genre-empty';
+        error.textContent = 'Could not load songs. Check your connection and try again.';
+        genreResults.appendChild(error);
+      }
+    }
+
+    function hideCatalogSuggestions() {
+      catalogSuggestions.hidden = true;
+      catalogSuggestions.replaceChildren();
+      catalogSearchInput.setAttribute('aria-expanded', 'false');
+    }
+
+    function showCatalogSuggestionMessage(message) {
+      catalogSuggestions.replaceChildren();
+      const status = document.createElement('div');
+      status.className = 'catalog-suggestion-status';
+      status.textContent = message;
+      catalogSuggestions.appendChild(status);
+      catalogSuggestions.hidden = false;
+      catalogSearchInput.setAttribute('aria-expanded', 'true');
+    }
+
+    function renderCatalogSuggestions(songs) {
+      catalogSuggestions.replaceChildren();
+      if (!songs.length) {
+        showCatalogSuggestionMessage('No matching songs found.');
+        return;
+      }
+
+      songs.slice(0, 8).forEach((song) => {
+        const option = document.createElement('button');
+        option.type = 'button';
+        option.className = 'catalog-suggestion';
+        option.setAttribute('role', 'option');
+        option.setAttribute('aria-selected', 'false');
+        const title = document.createElement('span');
+        title.className = 'catalog-suggestion-title';
+        title.textContent = song.trackName || 'Unknown song';
+        const artist = document.createElement('span');
+        artist.className = 'catalog-suggestion-artist';
+        artist.textContent = song.artistName || 'Unknown artist';
+        option.append(title, artist);
+        option.addEventListener('click', () => {
+          catalogSearchInput.value = song.trackName || '';
+          hideCatalogSuggestions();
+          searchCatalog(song.trackName || '');
+        });
+        catalogSuggestions.appendChild(option);
+      });
+      catalogSuggestions.hidden = false;
+      catalogSearchInput.setAttribute('aria-expanded', 'true');
+    }
+
+    function clearCatalogSearch() {
+      window.clearTimeout(suggestionTimer);
+      suggestionRequestId += 1;
+      catalogSearchInput.value = '';
+      catalogClearButton.hidden = true;
+      hideCatalogSuggestions();
+      loadGenre('pop');
+      catalogSearchInput.focus();
+    }
+    function updateCatalogSuggestions() {
+      window.clearTimeout(suggestionTimer);
+      catalogClearButton.hidden = catalogSearchInput.value.length === 0;
+      const term = catalogSearchInput.value.trim();
+      if (term.length < 2) {
+        hideCatalogSuggestions();
+        if (!term && activeGenre.startsWith('search:')) loadGenre('pop');
+        return;
+      }
+
+      showCatalogSuggestionMessage('Finding songs...');
+      suggestionTimer = window.setTimeout(async () => {
+        const requestId = ++suggestionRequestId;
+        try {
+          const songs = await searchGenre(term, requestId, 8, 'thaalamSuggestionCallback');
+          if (requestId !== suggestionRequestId || catalogSearchInput.value.trim() !== term) return;
+          renderCatalogSuggestions(songs);
+        } catch {
+          if (requestId === suggestionRequestId && catalogSearchInput.value.trim() === term) {
+            showCatalogSuggestionMessage('Suggestions are unavailable right now.');
+          }
+        }
+      }, 400);
+    }
+    function loadGenre(genre) {
+      genreTabList.hidden = false;
+      homeSubtitle.textContent = 'Explore songs by genre.';
+      genreTabs.forEach((tab) => {
+        const selected = tab.dataset.genre === genre;
+        tab.classList.toggle('is-selected', selected);
+        tab.setAttribute('aria-selected', String(selected));
+        tab.tabIndex = selected ? 0 : -1;
+      });
+      genreAttribution.textContent = 'Search results from Apple iTunes Store - up to 200 matches';
+      return loadCatalog(genre, genreSearchTerms[genre]);
+    }
+
+    function searchCatalog(term) {
+      const normalizedTerm = term.trim();
+      if (!normalizedTerm) return;
+      genreTabList.hidden = true;
+      homeSubtitle.textContent = 'Explore songs by search.';
+      genreTabs.forEach((tab) => {
+        tab.classList.remove('is-selected');
+        tab.setAttribute('aria-selected', 'false');
+        tab.tabIndex = -1;
+      });
+      activeSearchTerm = normalizedTerm;
+      genreAttribution.textContent = `Search results for "${normalizedTerm}" - Apple iTunes Store`;
+      return loadCatalog(`search:${normalizedTerm.toLowerCase()}`, normalizedTerm);
+    }
+
+    catalogSearchForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      hideCatalogSuggestions();
+      searchCatalog(catalogSearchInput.value);
+    });
+    catalogSearchInput.addEventListener('input', updateCatalogSuggestions);
+    catalogClearButton.addEventListener('click', clearCatalogSearch);
+    catalogSearchInput.addEventListener('search', updateCatalogSuggestions);
+    catalogSearchInput.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowDown' && !catalogSuggestions.hidden) {
+        event.preventDefault();
+        catalogSuggestions.querySelector('.catalog-suggestion')?.focus();
+      }
+      if (event.key === 'Escape') hideCatalogSuggestions();
+    });
+    catalogSuggestions.addEventListener('keydown', (event) => {
+      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Escape') return;
+      if (event.key === 'Escape') {
+        hideCatalogSuggestions();
+        catalogSearchInput.focus();
+        return;
+      }
+      event.preventDefault();
+      const options = Array.from(catalogSuggestions.querySelectorAll('.catalog-suggestion'));
+      const current = options.indexOf(document.activeElement);
+      const direction = event.key === 'ArrowDown' ? 1 : -1;
+      options[(current + direction + options.length) % options.length]?.focus();
+    });
+    document.addEventListener('click', (event) => {
+      if (!catalogSearchForm.contains(event.target)) hideCatalogSuggestions();
+    });
+
+    genreTabs.forEach((tab) => {
+      tab.addEventListener('click', () => loadGenre(tab.dataset.genre));
+      tab.addEventListener('keydown', (event) => {
+        if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
+        event.preventDefault();
+        const tabs = Array.from(genreTabs);
+        const direction = event.key === 'ArrowRight' ? 1 : -1;
+        const currentIndex = tabs.indexOf(tab);
+        const nextTab = tabs[(currentIndex + direction + tabs.length) % tabs.length];
+        nextTab.focus();
+        loadGenre(nextTab.dataset.genre);
+      });
+    });
+
+    function markCurrentView(view) {
+      viewButtons.forEach((button) => {
+        const isCurrent = button.dataset.view === view;
+        button.classList.toggle('is-current', isCurrent);
+        if (isCurrent) {
+          button.setAttribute('aria-current', 'page');
+        } else {
+          button.removeAttribute('aria-current');
+        }
+      });
+    }
+
+    function storeActiveView(view) {
+      try {
+        localStorage.setItem(ACTIVE_VIEW_KEY, view);
+      } catch {
+        // Storage can be blocked; the view still switches for this session.
+      }
+    }
+
+    function readActiveView() {
+      try {
+        const storedView = localStorage.getItem(ACTIVE_VIEW_KEY);
+        return storedView === 'home' || storedView === 'about'
+          ? storedView
+          : 'now-playing';
+      } catch {
+        return 'now-playing';
+      }
+    }
+
+    function applyView(view) {
+      document.body.classList.remove(
+        'view-home',
+        'view-about',
+        'view-now-playing'
+      );
+      document.body.classList.add(`view-${view}`);
+      markCurrentView(view);
+    }
+
+    // A refresh keeps the page you were on, and a first visit still lands on Now
+    // Playing because nothing has been stored yet.
+    function restoreActiveView() {
+      if (!desktopNavigation.matches) return;
+      const storedView = readActiveView();
+      if (storedView === 'now-playing') return;
+      applyView(storedView);
+      requestAnimationFrame(() => window.updateMiniPlayerMarquees?.());
+      if (storedView === 'home') {
+        if (activeGenre.startsWith('search:')) loadCatalog(activeGenre, activeSearchTerm);
+        else loadGenre(activeGenre);
+      }
+    }
+
+    function showView(view) {
+      if (!desktopNavigation.matches) return;
+
+      window.clearTimeout(viewChangeTimeout);
+      pageLoading.hidden = false;
+
+      viewChangeTimeout = window.setTimeout(() => {
+        applyView(view);
+        storeActiveView(view);
+        requestAnimationFrame(() => window.updateMiniPlayerMarquees?.());
+
+        pageLoading.hidden = true;
+        if (view === 'home') {
+          if (activeGenre.startsWith('search:')) loadCatalog(activeGenre, activeSearchTerm);
+          else loadGenre(activeGenre);
+        }
+        document.getElementById(
+          view === 'home'
+            ? 'homePage'
+            : view === 'about'
+              ? 'aboutPage'
+              : 'playerView'
+        )
+          ?.querySelector('h1')
+          ?.focus({ preventScroll: true });
+      }, 350);
+    }
+
+    viewButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        showView(button.dataset.view);
+      });
+    });
+
+    restoreActiveView();
+  </script>
+
+  <script>
+    // Remote portraits: if one fails to load (offline), drop it so the monogram tile shows.
+    document.querySelectorAll('.about-voice-media img').forEach((image) => {
+      const revealMonogram = () => {
+        image.remove();
+      };
+
+      image.addEventListener('error', revealMonogram);
+
+      if (image.complete && image.naturalWidth === 0) revealMonogram();
+    });
+  </script>
+
 
 </body>
 </html>

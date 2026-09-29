@@ -1,6 +1,7 @@
 const HLS_STREAM_URL = 'https://radio.thaalam24x7.in/hls/thaalam_24x7/live.m3u8';
 const NOW_PLAYING_API = 'https://radio.thaalam24x7.in/api/nowplaying/thaalam_24x7';
 const SCHEDULE_API = 'https://radio.thaalam24x7.in/api/station/6/schedule';
+const PLAYBACK_STARTED_KEY = 'thaalam-playback-started-v1';
 
 const radio = document.getElementById('radio');
 const playIcon = document.getElementById('playIcon');
@@ -8,6 +9,14 @@ const playButton = document.getElementById('playButton');
 const nowPlayingEl = document.getElementById('nowPlaying');
 const stationNameEl = document.getElementById('stationName');
 const albumArtImage = document.getElementById('albumArtImg');
+const miniPlayer = document.getElementById('miniPlayer');
+const miniPlayerArt = document.getElementById('miniPlayerArt');
+const miniPlayerTitle = document.getElementById('miniPlayerTitle');
+const miniPlayerArtist = document.getElementById('miniPlayerArtist');
+const miniPlayerElapsed = document.getElementById('miniPlayerElapsed');
+const miniPlayerDuration = document.getElementById('miniPlayerDuration');
+const miniPlayerToggle = document.getElementById('miniPlayerToggle');
+const miniPlayerIcon = document.getElementById('miniPlayerIcon');
 const root = document.documentElement;
 
 document.addEventListener('contextmenu', (event) => {
@@ -45,6 +54,7 @@ let isConnecting = false;
 let isStreamOffline = false;
 let shouldResumePlayback = false;
 let audioIsAdvancing = false;
+let hasStartedPlayback = false;
 let streamStallTimer = 0;
 let hlsPlayer = null;
 const streamQuality = document.getElementById('streamQuality');
@@ -147,6 +157,15 @@ function updateAlbumColors(imageUrl, requestId) {
 
 function setVisualState(isPlaying) {
   const tagline = document.querySelector('.tagline');
+  if (isPlaying) hasStartedPlayback = true;
+
+  document.body.classList.toggle('mini-player-visible', hasStartedPlayback);
+  miniPlayer?.classList.toggle('is-playing', isPlaying);
+  if (miniPlayer) miniPlayer.hidden = !hasStartedPlayback;
+  miniPlayerToggle?.setAttribute('aria-label', isPlaying ? 'Pause' : 'Play');
+  if (isPlaying) showPauseIcon();
+  else showPlayIcon();
+
   if (!tagline) return;
 
   if (isPlaying) {
@@ -160,19 +179,61 @@ function setVisualState(isPlaying) {
 
 function showPlayIcon() {
   if (playIcon) playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+  if (miniPlayerIcon) miniPlayerIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
 }
 
 function showPauseIcon() {
   if (playIcon) playIcon.innerHTML = '<path d="M6 5h4v14H6zm8 0h4v14h-4z"/>';
+  if (miniPlayerIcon) miniPlayerIcon.innerHTML = '<path d="M6 5h4v14H6zm8 0h4v14h-4z"/>';
 }
 
 function setStreamLoading(isLoading) {
   playButton?.classList.toggle('is-loading', isLoading);
+  miniPlayerToggle?.classList.toggle('is-loading', isLoading);
   playButton?.setAttribute(
     'aria-label',
     isLoading ? 'Reconnecting to stream' : radio?.paused ? 'Play' : 'Pause'
   );
 }
+
+function formatMiniTime(seconds) {
+  const safeSeconds = Math.max(0, Math.floor(Number(seconds) || 0));
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainingSeconds = safeSeconds % 60;
+  return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
+}
+
+function updateMiniPlayerTime() {
+  if (!miniPlayerElapsed || !miniPlayerDuration) return;
+  const clock = window.getAudibleTrackClock?.();
+  if (clock) {
+    miniPlayerElapsed.textContent = formatMiniTime(clock.elapsed);
+    miniPlayerDuration.textContent = formatMiniTime(clock.duration);
+    return;
+  }
+  miniPlayerElapsed.textContent = document.getElementById('trackElapsed')?.textContent || '0:00';
+  miniPlayerDuration.textContent = document.getElementById('trackDuration')?.textContent || '0:00';
+}
+
+function updateMiniPlayerMarquees() {
+  [miniPlayerTitle, miniPlayerArtist].forEach((element) => {
+    if (!element) return;
+    const text = element.textContent.trim();
+    element.dataset.marqueeText = text;
+    const isOverflowing = element.scrollWidth > element.clientWidth + 1;
+    element.classList.toggle('is-marquee', isOverflowing);
+    if (isOverflowing) {
+      element.style.setProperty(
+        '--mini-marquee-duration',
+        `${Math.max(18, (element.scrollWidth + 150) / 24)}s`
+      );
+    }
+  });
+}
+
+window.updateMiniPlayerMarquees = updateMiniPlayerMarquees;
+setInterval(updateMiniPlayerTime, 250);
+window.addEventListener('resize', updateMiniPlayerMarquees);
 
 function setStreamOffline(isOffline) {
   if (!streamQuality) return;
@@ -250,6 +311,7 @@ async function startLiveStream() {
           if (data.type === window.Hls.ErrorTypes.NETWORK_ERROR) {
             captureAudibleNowPlayingSnapshot();
             audioIsAdvancing = false;
+            setVisualState(false);
             setStreamLoading(true);
             setStreamOffline(true);
             player.startLoad();
@@ -271,6 +333,7 @@ async function startLiveStream() {
 
   } catch (error) {
     console.log('Unable to start live stream:', error);
+    setVisualState(false);
     setStreamOffline(true);
     setStreamLoading(shouldResumePlayback);
   } finally {
@@ -420,6 +483,7 @@ if (radio) {
     if (radio.paused) return;
     captureAudibleNowPlayingSnapshot();
     audioIsAdvancing = false;
+    setVisualState(false);
     setStreamLoading(true);
     window.clearTimeout(streamStallTimer);
     streamStallTimer = window.setTimeout(() => {
@@ -433,6 +497,7 @@ if (radio) {
     if (!shouldResumePlayback) return;
     captureAudibleNowPlayingSnapshot();
     audioIsAdvancing = false;
+    setVisualState(false);
     setStreamLoading(true);
     setStreamOffline(true);
   });
@@ -468,6 +533,7 @@ window.addEventListener('offline', () => {
   if (!shouldResumePlayback) return;
   captureAudibleNowPlayingSnapshot();
   audioIsAdvancing = false;
+  setVisualState(false);
   setStreamOffline(true);
   setStreamLoading(true);
 });
@@ -519,6 +585,7 @@ function updateAlbumArt(artworkUrl) {
     lastArtwork = '';
     albumArtImage.src = 'album-placeholder.svg?v=2';
     albumArtImage.style.opacity = '1';
+    if (miniPlayerArt) miniPlayerArt.src = 'album-placeholder.svg?v=2';
     return;
   }
   lastArtwork = artworkUrl;
@@ -530,12 +597,14 @@ function updateAlbumArt(artworkUrl) {
       if (requestId !== artworkRequestId) return;
       albumArtImage.src = artworkUrl;
       albumArtImage.style.opacity = '1';
+      if (miniPlayerArt) miniPlayerArt.src = artworkUrl;
     }, 200);
   };
   image.onerror = () => {
     if (requestId !== artworkRequestId) return;
     albumArtImage.src = 'album-placeholder.svg?v=2';
     albumArtImage.style.opacity = '1';
+    if (miniPlayerArt) miniPlayerArt.src = 'album-placeholder.svg?v=2';
   };
   image.src = artworkUrl;
   updateAlbumColors(artworkUrl, requestId);
@@ -579,11 +648,19 @@ async function updateNowPlaying() {
     const title = song.title?.trim() || '';
     const artist = song.artist?.trim() || '';
     const songText = title ? `${title} – ${artist}` : artist;
+    if (miniPlayerTitle) miniPlayerTitle.textContent = title || 'Thaalam 24x7';
+    if (miniPlayerArtist) miniPlayerArtist.textContent = artist || 'Live radio';
+    requestAnimationFrame(updateMiniPlayerMarquees);
+    updateMiniPlayerTime();
     if (!songText) return;
 
     if (songText !== lastSongText) {
       lastSongText = songText;
-      if (nowPlayingEl) nowPlayingEl.innerText = songText;
+      if (nowPlayingEl) {
+        nowPlayingEl.dataset.trackTitle = title;
+        nowPlayingEl.dataset.trackArtist = artist;
+        nowPlayingEl.innerText = songText;
+      }
       if (window.updateMarquee) window.updateMarquee();
     }
   } catch (error) {
@@ -608,7 +685,33 @@ document.addEventListener('DOMContentLoaded', () => {
   const tagline = document.querySelector('.tagline');
   if (tagline && nowPlayingEl) {
     window.updateMarquee = () => {
+      if (window.matchMedia('(min-width: 56.25rem)').matches) {
+        const availableWidth = tagline.clientWidth;
+        const measureText = (text, pseudo) => {
+          const styles = getComputedStyle(nowPlayingEl, pseudo);
+          const measure = document.createElement('span');
+          measure.textContent = text;
+          measure.style.cssText = `position:absolute;visibility:hidden;white-space:nowrap;font:${styles.font};letter-spacing:${styles.letterSpacing};`;
+          tagline.appendChild(measure);
+          const width = measure.getBoundingClientRect().width;
+          measure.remove();
+          return width;
+        };
+        const titleWidth = measureText(nowPlayingEl.dataset.trackTitle || '', '::before');
+        const artistWidth = measureText(nowPlayingEl.dataset.trackArtist || '', '::after');
+        const titleDistance = Math.max(0, titleWidth - availableWidth);
+        const artistDistance = Math.max(0, artistWidth - availableWidth);
+        tagline.classList.toggle('title-marquee', titleDistance > 1);
+        tagline.classList.toggle('artist-marquee', artistDistance > 1);
+        nowPlayingEl.style.setProperty('--title-marquee-distance', `${-titleDistance}px`);
+        nowPlayingEl.style.setProperty('--artist-marquee-distance', `${-artistDistance}px`);
+        nowPlayingEl.style.setProperty('--title-marquee-duration', `${Math.max(18, (titleWidth + 180) / 24)}s`);
+        nowPlayingEl.style.setProperty('--artist-marquee-duration', `${Math.max(18, (artistWidth + 180) / 24)}s`);
+        return;
+      }
+
       tagline.classList.remove('marquee');
+      tagline.classList.remove('title-marquee', 'artist-marquee');
       requestAnimationFrame(() => {
         if (nowPlayingEl.scrollWidth > tagline.clientWidth) {
           tagline.classList.add('marquee');
@@ -616,6 +719,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     };
     window.updateMarquee();
+    window.addEventListener('resize', window.updateMarquee);
   }
 
   if ('serviceWorker' in navigator) {
