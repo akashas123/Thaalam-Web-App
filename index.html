@@ -11,7 +11,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=114">
+  <link rel="stylesheet" href="style.css?v=121">
   <link rel="icon" type="image/png" href="icon-512.png?v=3">
   <link rel="apple-touch-icon" href="icon-192.png?v=3">
 
@@ -303,8 +303,13 @@
       </div>
     </div>
 
-    <div class="station" id="stationName">
-      Thaalam 24x7
+    <div class="station-row" id="stationRow">
+      <div class="station" id="stationName">
+        Thaalam 24x7
+      </div>
+      <button class="return-to-live-button" id="returnToLiveButton" type="button" hidden>
+        Back to Live
+      </button>
     </div>
 
     <div class="tagline now-playing-track">
@@ -317,11 +322,21 @@
       <div class="live-text">
         LIVE
       </div>
-      <button class="return-to-live-button" id="returnToLiveButton" type="button" hidden>
-        Back to Live
-      </button>
 
       <div class="live-line"></div>
+
+      <div
+        class="progress-bar"
+        id="progressBar"
+        role="progressbar"
+        aria-label="Track progress"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        aria-valuenow="0"
+      >
+        <div class="progress-fill" id="progressFill"></div>
+        <span class="progress-thumb" id="progressThumb" aria-hidden="true"></span>
+      </div>
     </div>
 
     <div
@@ -337,6 +352,21 @@
     <audio id="radio"></audio>
 
     <div class="player-controls">
+
+      <button
+        class="transport-btn"
+        id="onDemandPrevButton"
+        type="button"
+        aria-label="Previous song"
+        title="Previous song"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <path d="M6 6h2v12H6zm12 0-8.5 6L18 18z"/>
+        </svg>
+      </button>
 
       <button
         class="rating-btn"
@@ -393,6 +423,21 @@
           aria-hidden="true"
         >
           <path d="M20.2 15.1A8.5 8.5 0 0 1 8.9 3.8 8.6 8.6 0 1 0 20.2 15.1Z"/>
+        </svg>
+      </button>
+
+      <button
+        class="transport-btn"
+        id="onDemandNextButton"
+        type="button"
+        aria-label="Next song"
+        title="Next song"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <path d="M16 6h2v12h-2zM6 6l8.5 6L6 18z"/>
         </svg>
       </button>
 
@@ -603,29 +648,31 @@
   </aside>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
-  <script src="script.js?v=34"></script>
-  <script src="youtube-player.js?v=5"></script>
+  <script src="script.js?v=37"></script>
+  <script src="youtube-player.js?v=21"></script>
   <script src="audio-recovery.js?v=1"></script>
   <script src="marquee.js?v=2"></script>
   <script src="media-metadata.js?v=6"></script>
   <script src="player-controls.js?v=29"></script>
-  <script src="lyrics.js?v=29"></script>
+  <script src="lyrics.js?v=30"></script>
   <script>
     const desktopNavigation =
       window.matchMedia('(min-width: 56.25rem) and (pointer: fine)');
     const playerView = document.getElementById('playerView');
     const nowPlayingHeading = document.getElementById('nowPlayingHeading');
     const stationName = document.getElementById('stationName');
+    const stationRow = document.getElementById('stationRow');
     const playerTagline = playerView?.querySelector('.tagline');
     const streamQualityBadge = document.getElementById('streamQuality');
     const playerTrackTime = document.getElementById('trackTime');
     const playerTrackDuration = document.getElementById('trackDuration');
     const placeStationForViewport = () => {
-      if (!stationName || !playerView || !nowPlayingHeading) return;
+      const stationTarget = stationRow || stationName;
+      if (!stationTarget || !playerView || !nowPlayingHeading) return;
       if (desktopNavigation.matches) {
-        nowPlayingHeading.appendChild(stationName);
+        nowPlayingHeading.appendChild(stationTarget);
       } else if (playerTagline) {
-        playerView.insertBefore(stationName, playerTagline);
+        playerView.insertBefore(stationTarget, playerTagline);
       }
     };
     const placeStreamQualityForViewport = () => {
@@ -639,6 +686,10 @@
     placeStationForViewport();
     placeStreamQualityForViewport();
     desktopNavigation.addEventListener('change', () => {
+      // On-demand is deliberately NOT torn down here. Crossing the breakpoint is
+      // not a listener decision, so the track keeps playing through it and the
+      // row is simply moved to its new home below. Live radio only returns when
+      // the listener explicitly presses "Back to Live".
       placeStationForViewport();
       placeStreamQualityForViewport();
       restoreActiveView();
@@ -672,7 +723,10 @@
     const genreResultCache = new Map();
     const artistInfoCache = new Map();
     const artistInfoRequests = new Map();
-    const GENRE_CACHE_KEY = 'thaalam-itunes-genre-cache-v1';
+    // v5: v1 was the India storefront; v2-v4 screened results with hardcoded
+    // lists of song titles and composer names. v5 screens on Apple's genre
+    // taxonomy instead, so every earlier cache entry is abandoned.
+    const GENRE_CACHE_KEY = 'thaalam-itunes-genre-cache-v5';
     const GENRE_CACHE_TTL = 12 * 60 * 60 * 1000;
     const ARTIST_INFO_STORAGE_KEY = 'thaalam-catalog-artist-info-v4';
     const ARTIST_INFO_CACHE_LIMIT = 600;
@@ -981,8 +1035,8 @@
         const playButton = document.createElement('button');
         playButton.className = 'genre-play-button';
         playButton.type = 'button';
-        playButton.setAttribute('aria-label', `Play ${song.trackName || 'song'} on YouTube Music`);
-        playButton.title = 'Play on YouTube Music';
+        playButton.setAttribute('aria-label', `Play ${song.trackName || 'song'} on demand`);
+        playButton.title = 'Play on demand';
         playButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
         playButton.addEventListener('click', () => {
           window.startOnDemandSong?.(song);
@@ -1074,12 +1128,109 @@
       genreResults.appendChild(placeholders);
     }
 
+    // iTunes has no language filter, so results are restricted to the US
+    // storefront and then screened out below if their text uses a non-Latin
+    // script. Latin accented characters (Bjork, Celine Dion) are kept.
+    const NON_LATIN_SCRIPT = new RegExp([
+      '[\\u0370-\\u03FF]',   // Greek
+      '[\\u1F00-\\u1FFF]',   // Greek Extended
+      '[\\u0400-\\u052F]',   // Cyrillic
+      '[\\u2DE0-\\u2DFF]',   // Cyrillic Extended
+      '[\\uA640-\\uA69F]',   // Cyrillic Extended-B
+      '[\\u0530-\\u058F]',   // Armenian
+      '[\\u0590-\\u05FF]',   // Hebrew
+      '[\\u0600-\\u06FF]',   // Arabic
+      '[\\u0700-\\u07BF]',   // Syriac, Thaana, NKo
+      '[\\u0780-\\u07BF]',   // Thaana
+      '[\\u07C0-\\u07FF]',   // NKo
+      '[\\u0900-\\u097F]',   // Devanagari
+      '[\\u0980-\\u09FF]',   // Bengali
+      '[\\u0A00-\\u0A7F]',   // Gurmukhi
+      '[\\u0A80-\\u0AFF]',   // Gujarati
+      '[\\u0B00-\\u0B7F]',   // Oriya
+      '[\\u0B80-\\u0BFF]',   // Tamil
+      '[\\u0C00-\\u0C7F]',   // Telugu
+      '[\\u0C80-\\u0CFF]',   // Kannada
+      '[\\u0D00-\\u0D7F]',   // Malayalam
+      '[\\u0D80-\\u0DFF]',   // Sinhala
+      '[\\u0E00-\\u0E7F]',   // Thai
+      '[\\u0E80-\\u0EFF]',   // Lao
+      '[\\u0F00-\\u0FFF]',   // Tibetan
+      '[\\u1000-\\u109F]',   // Myanmar
+      '[\\u10A0-\\u10FF]',   // Georgian
+      '[\\u1100-\\u11FF]',   // Hangul Jamo
+      '[\\u1200-\\u137F]',   // Ethiopic
+      '[\\u13A0-\\u13FF]',   // Cherokee
+      '[\\u1400-\\u167F]',   // Canadian Aboriginal
+      '[\\u1680-\\u169F]',   // Ogham
+      '[\\u16A0-\\u16FF]',   // Runic
+      '[\\u1780-\\u17FF]',   // Khmer
+      '[\\u1800-\\u18AF]',   // Mongolian
+      '[\\u2E80-\\u2FFF]',   // CJK radicals
+      '[\\u3000-\\u303F]',   // CJK symbols and punctuation
+      '[\\u3040-\\u309F]',   // Hiragana
+      '[\\u30A0-\\u30FF]',   // Katakana
+      '[\\u3100-\\u312F]',   // Bopomofo
+      '[\\u3130-\\u318F]',   // Hangul compatibility Jamo
+      '[\\u31F0-\\u31FF]',   // Katakana phonetic extensions
+      '[\\u3200-\\u33FF]',   // Enclosed CJK, CJK compatibility
+      '[\\u3400-\\u4DBF]',   // CJK extension A
+      '[\\u4E00-\\u9FFF]',   // CJK unified ideographs
+      '[\\uF900-\\uFAFF]',   // CJK compatibility ideographs
+      '[\\uAC00-\\uD7FF]',   // Hangul syllables
+      '[\\uFF00-\\uFFEF]',   // Fullwidth and halfwidth forms
+      '[\\U00020000-\\U0002A6DF]' // CJK extension B and beyond
+    ].join(''));
+
+    // iTunes exposes no language field, so English-only results are enforced
+    // from the two signals the API does return: the genre taxonomy on each
+    // record, and the writing system of its text. Nothing here lists a title,
+    // an artist or a word of a song.
+    //
+    // Apple files Indian and South-Asian language catalogues under their own
+    // genre labels, so the genre field is what identifies them. The list below
+    // is Apple's vocabulary rather than ours: languages and catalogues, not
+    // song titles or credit names. Matching is per word, so compound labels
+    // such as "Indian Pop", "Regional Indian" and "Tamil Folk" are all covered
+    // without having to enumerate every combination.
+    const NON_ENGLISH_GENRE_WORDS = new Set([
+      'indian', 'bollywood', 'filmi', 'bhangra', 'desi',
+      'hindi', 'malayalam', 'tamil', 'telugu', 'kannada', 'marathi', 'bengali',
+      'gujarati', 'punjabi', 'haryanvi', 'assamese', 'odia', 'oriya', 'bhojpuri',
+      'maithili', 'dogri', 'konkani', 'sindhi', 'kashmiri', 'manipuri', 'nepali',
+      'tibetan', 'sinhala', 'sanskrit', 'urdu', 'tulu', 'kodava', 'qawwali',
+      'ghazal', 'world', 'soundtrack', 'musical'
+    ]);
+
+    function isEnglishSong(song) {
+      const title = song?.trackName || '';
+      const artist = song?.artistName || '';
+      const album = song?.collectionName || '';
+      if (!`${title} ${artist}`.trim()) return false;
+
+      // Writing system. Latin with accents is kept, so Bjork and Celine Dion
+      // survive; anything in another script is not an English-language record.
+      if (NON_LATIN_SCRIPT.test(`${title} ${artist} ${album}`)) return false;
+
+      // Language catalogue, from the genre fields on the record.
+      const genreWords = [
+        song?.primaryGenreName,
+        song?.collectionGenreName,
+        song?.trackGenreName
+      ]
+        .filter(Boolean)
+        .flatMap((genre) => String(genre).toLowerCase().split(/[^a-z]+/));
+      if (genreWords.some((word) => NON_ENGLISH_GENRE_WORDS.has(word))) return false;
+
+      return true;
+    }
+
     function searchGenre(term, requestId, limit = 200, callbackPrefix = 'thaalamGenreCallback') {
       return new Promise((resolve, reject) => {
         const callbackName = `${callbackPrefix}${requestId}`;
         const query = new URLSearchParams({
           term,
-          country: 'in',
+          country: 'us',
           entity: 'song',
           media: 'music',
           limit: String(limit),
@@ -1098,7 +1249,7 @@
           delete window[callbackName];
           request.remove();
           if (error) reject(error);
-          else resolve(data?.results || []);
+          else resolve((data?.results || []).filter(isEnglishSong));
         }
 
         window[callbackName] = (data) => finish(null, data);

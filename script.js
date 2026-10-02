@@ -48,6 +48,7 @@ document.addEventListener('click', (event) => {
 
 let lastSongText = '';
 let lastArtwork = '';
+let lastStationLabel = 'Thaalam 24x7';
 let artworkRequestId = 0;
 let nowPlayingRequestId = 0;
 let isConnecting = false;
@@ -170,6 +171,10 @@ function updateAlbumColors(imageUrl, requestId) {
   image.onerror = () => console.log('Album artwork could not be loaded for color extraction');
   image.src = `${imageUrl}${imageUrl.includes('?') ? '&' : '?'}color=${Date.now()}`;
 }
+
+// Let other modules (e.g. on-demand playback) reuse the same gradient extraction.
+window.updateAlbumColors = updateAlbumColors;
+window.bumpArtworkRequestId = () => ++artworkRequestId;
 
 function setVisualState(isPlaying) {
   const tagline = document.querySelector('.tagline');
@@ -602,17 +607,30 @@ window.addEventListener('online', () => {
   }
 });
 
+// Single writer for the station/schedule label. The resolved text is cached so
+// it can be repainted synchronously (see restoreLiveRadioUi) without waiting on
+// the network, then corrected once the next fetch settles.
+function paintStationLabel(label) {
+  lastStationLabel = label;
+  if (stationNameEl) stationNameEl.innerText = label;
+}
+
 async function updateStationNameFromSchedule() {
   if (window.onDemandPlaybackActive) return;
 
   try {
     const response = await fetch(SCHEDULE_API, { cache: 'no-store' });
     const schedule = await response.json();
+    // On-demand may have started while this request was in flight; that mode
+    // owns the station label, so drop the late response.
+    if (window.onDemandPlaybackActive) return;
+    // The station mostly publishes "playlist" slots, so fall back to any
+    // entry flagged is_now when no "live" slot is currently on air.
     const currentShow = schedule.find((item) => item.is_now === true && item.type === 'live') ||
       schedule.find((item) => item.is_now === true);
 
     if (!currentShow) {
-      stationNameEl.innerText = 'Thaalam 24x7';
+      paintStationLabel('Thaalam 24x7');
       return;
     }
 
@@ -625,12 +643,14 @@ async function updateStationNameFromSchedule() {
       const formatTime = (date) => date.toLocaleTimeString([], {
         hour: '2-digit', minute: '2-digit', hour12: true
       }).trim();
-      stationNameEl.innerText = `${showName} (${formatTime(start)} – ${formatTime(end)})`;
+      paintStationLabel(`${showName} (${formatTime(start)} – ${formatTime(end)})`);
     } else {
-      stationNameEl.innerText = showName;
+      paintStationLabel(showName);
     }
   } catch (_) {
-    if (stationNameEl) stationNameEl.innerText = 'Thaalam 24x7';
+    if (!window.onDemandPlaybackActive) {
+      paintStationLabel('Thaalam 24x7');
+    }
   }
 }
 
@@ -694,8 +714,8 @@ async function updateNowPlaying() {
     const song = nowPlaying?.song;
     window.currentNowPlayingSong = song || null;
 
-    if (nowPlaying?.is_live && nowPlaying?.streamer_name && stationNameEl) {
-      stationNameEl.innerText = `LIVE • ${nowPlaying.streamer_name}`;
+    if (nowPlaying?.is_live && nowPlaying?.streamer_name) {
+      paintStationLabel(`LIVE • ${nowPlaying.streamer_name}`);
     }
 
     if (!song) {
@@ -726,6 +746,26 @@ async function updateNowPlaying() {
     console.log('Now Playing update failed:', error);
   }
 }
+
+// On-demand playback paints the artwork, the now-playing text and the media
+// metadata directly, without touching lastArtwork/lastSongText. Returning to
+// live would therefore hit the "nothing changed" guards above and leave the
+// on-demand song on screen, so drop both caches and re-run the same refresh
+// pair used on page load (station/schedule label + now playing).
+function restoreLiveRadioUi() {
+  lastSongText = '';
+  lastArtwork = '';
+  // Drop the paused-stream snapshot: it is what keeps the UI frozen while the
+  // stream is stalled, but here it would pin the pre-on-demand song on screen.
+  // It is re-established by updateNowPlaying() once the stream resumes.
+  window.lastAudibleNowPlayingData = null;
+  // Repaint the cached show name synchronously so the label never sits on the
+  // "Thaalam 24x7" placeholder while the schedule request is in flight.
+  paintStationLabel(lastStationLabel);
+  refreshStationAndTrackInfo();
+}
+
+window.restoreLiveRadioUi = restoreLiveRadioUi;
 
 document.addEventListener('DOMContentLoaded', () => {
   if (radio) radio.preload = 'none';
@@ -795,6 +835,7 @@ function refreshStationAndTrackInfo() {
 
 setVisualState(false);
 showPlayIcon();
+paintStationLabel(lastStationLabel);
 refreshStationAndTrackInfo();
 setInterval(updateStationNameFromSchedule, 60000);
 setInterval(updateNowPlaying, 15000);

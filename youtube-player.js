@@ -12,6 +12,11 @@ const onDemandDuration = document.getElementById('trackDuration');
 const onDemandMiniTitle = document.getElementById('miniPlayerTitle');
 const onDemandMiniArtist = document.getElementById('miniPlayerArtist');
 const onDemandMiniArtwork = document.getElementById('miniPlayerArt');
+const playbackProgressBar = document.getElementById('progressBar');
+const playbackProgressFill = document.getElementById('progressFill');
+const playbackProgressThumb = document.getElementById('progressThumb');
+const onDemandPrevButton = document.getElementById('onDemandPrevButton');
+const onDemandNextButton = document.getElementById('onDemandNextButton');
 
 let youtubeApiPromise = null;
 let youtubePlayerPromise = null;
@@ -22,6 +27,108 @@ let selectedDuration = 0;
 let songRequestId = 0;
 let videoCandidates = [];
 let videoCandidateIndex = 0;
+
+/* Every on-demand song played this session, in order. The previous/next
+   buttons walk this list; the live feed is not part of it. */
+let onDemandQueue = [];
+let onDemandQueueIndex = -1;
+let isScrubbing = false;
+let scrubTargetSeconds = 0;
+
+/* Similar-songs list for the track that is currently playing, fetched as soon
+   as a track starts so the next one is ready the moment this one ends. */
+let relatedTrackCache = [];
+let relatedTrackCursor = 0;
+let isFetchingRelated = false;
+let prefetchToken = 0;
+let autoplayRetryTimer = 0;
+
+/* VideoIds already played this session, so a radio playlist that circles back
+   to an earlier track does not replay it. */
+const playedVideoIds = new Set();
+
+/* On-demand is a mode, not a momentary action: it has to outlive a refresh and
+   closing the tab, so the current track is written to storage as it plays and
+   replayed on the next load. Only the "Back to Live" button clears it. */
+const ON_DEMAND_STORAGE_KEY = 'thaalam-on-demand-session-v1';
+
+/* TEMPORARY DIAGNOSTIC: set to false to silence. Reports what is written, what
+   is read back, and which branch the restore actually takes. */
+const ON_DEMAND_DEBUG = true;
+const logOnDemand = (...parts) => {
+  if (ON_DEMAND_DEBUG) console.log('[on-demand]', ...parts);
+};
+
+function saveOnDemandSession(song, videoId) {
+  try {
+    const payload = JSON.stringify({
+      song,
+      videoId,
+      // Paused state is part of the session: reopening should not start making
+      // noise on its own if the listener had deliberately stopped the song.
+      playing: window.onDemandPlaying === true
+    });
+    localStorage.setItem(ON_DEMAND_STORAGE_KEY, payload);
+    logOnDemand('saved', {
+      trackName: song?.trackName,
+      videoId,
+      playing: window.onDemandPlaying === true,
+      bytes: payload.length
+    });
+  } catch (error) {
+    // Storage can be blocked or full; on-demand still works for this visit.
+    console.error('[on-demand] save failed:', error);
+  }
+}
+
+function readOnDemandSession() {
+  let raw = null;
+  try {
+    raw = localStorage.getItem(ON_DEMAND_STORAGE_KEY);
+    logOnDemand('raw storage read', raw === null ? '(absent)' : 'present');
+    const stored = JSON.parse(raw || 'null');
+    if (!stored) {
+      logOnDemand('no usable session (absent or unparseable)');
+      return null;
+    }
+    if (!stored?.song?.trackName || !stored?.videoId) {
+      logOnDemand('session present but incomplete', {
+        hasSong: Boolean(stored?.song),
+        hasTrackName: Boolean(stored?.song?.trackName),
+        hasVideoId: Boolean(stored?.videoId),
+        keys: Object.keys(stored)
+      });
+      return null;
+    }
+    logOnDemand('session restored from storage', stored.song.trackName, stored.videoId);
+    return stored;
+  } catch (error) {
+    console.error('[on-demand] read failed:', error);
+    return null;
+  }
+}
+
+function clearOnDemandSession() {
+  try {
+    localStorage.removeItem(ON_DEMAND_STORAGE_KEY);
+  } catch {
+  }
+}
+
+/* The song and videoId currently loaded in the iframe. Kept as module state so
+   pause/play changes can rewrite the stored session without re-running a search. */
+let currentOnDemandSong = null;
+let currentOnDemandVideoId = '';
+
+function setCurrentOnDemandTrack(song, videoId) {
+  currentOnDemandSong = song;
+  currentOnDemandVideoId = videoId || '';
+}
+
+function persistCurrentOnDemandSession() {
+  if (!currentOnDemandSong?.trackName || !currentOnDemandVideoId) return;
+  saveOnDemandSession(currentOnDemandSong, currentOnDemandVideoId);
+}
 
 function formatOnDemandTime(seconds) {
   const safeSeconds = Math.max(0, Math.floor(Number(seconds) || 0));
@@ -39,37 +146,148 @@ function loadYouTubeApi() {
   if (youtubeApiPromise) return youtubeApiPromise;
 
   youtubeApiPromise = new Promise((resolve, reject) => {
-    window.onYouTubeIframeAPIReady = () => {
-      resolve();
-    };
     const script = document.createElement('script');
     script.src = 'https://www.youtube.com/iframe_api';
     script.async = true;
+
+    // The API script can vanish without ever firing onerror: blocked by an
+    // extension, throttled, or swallowed by a captive portal. With no deadline
+    // the promise simply never settles, so the restore await below waited
+    // forever and left the player stuck on "Resuming on demand" instead of
+    // falling back. Fail fast and let the caller recover.
+    const timeoutId = window.setTimeout(() => {
+      youtubeApiPromise = null;
+      script.remove();
+      reject(new Error('YouTube player timed out loading.'));
+    }, 12000);
+
+    window.onYouTubeIframeAPIReady = () => {
+      window.clearTimeout(timeoutId);
+      resolve();
+    };
+
     script.onerror = () => {
+      window.clearTimeout(timeoutId);
       youtubeApiPromise = null;
       reject(new Error('YouTube player failed to load.'));
     };
+
     document.head.appendChild(script);
   });
 
   return youtubeApiPromise;
 }
 
-function updateOnDemandTime() {
-  if (!window.onDemandPlaybackActive) return;
+function setPlaybackProgress(elapsed, duration) {
+  if (!playbackProgressBar || !playbackProgressFill) return;
 
-  let elapsed = 0;
-  let duration = selectedDuration;
-  if (youtubePlayerReady) {
-    elapsed = youtubePlayer.getCurrentTime() || 0;
-    duration = youtubePlayer.getDuration() || duration;
+  const safeDuration = Number(duration) || 0;
+  const safeElapsed = Math.max(0, Number(elapsed) || 0);
+  const percent = safeDuration > 0
+    ? Math.min(100, (safeElapsed / safeDuration) * 100)
+    : 0;
+
+  playbackProgressFill.style.width = `${percent}%`;
+  if (playbackProgressThumb) playbackProgressThumb.style.left = `${percent}%`;
+  playbackProgressBar.setAttribute('aria-valuenow', String(Math.round(percent)));
+}
+
+function updatePlaybackProgress() {
+  if (window.onDemandPlaybackActive) {
+    let elapsed = 0;
+    let duration = selectedDuration;
+    if (youtubePlayerReady) {
+      elapsed = youtubePlayer.getCurrentTime() || 0;
+      duration = youtubePlayer.getDuration() || duration;
+    }
+
+    // While dragging, report the pointer's target instead of the player's
+    // position so the readout matches what the user is holding.
+    if (isScrubbing) {
+      elapsed = scrubTargetSeconds;
+      if (!duration) duration = selectedDuration;
+    }
+
+    onDemandElapsed.textContent = formatOnDemandTime(elapsed);
+    onDemandDuration.textContent = formatOnDemandTime(duration);
+    setPlaybackProgress(elapsed, duration);
+    return;
   }
 
-  onDemandElapsed.textContent = formatOnDemandTime(elapsed);
-  onDemandDuration.textContent = formatOnDemandTime(duration);
+  // Live radio: show progress for the song currently on air.
+  const liveClock = window.getAudibleTrackClock?.();
+  if (liveClock && Number(liveClock.duration) > 0) {
+    setPlaybackProgress(liveClock.elapsed, liveClock.duration);
+  } else {
+    setPlaybackProgress(0, 0);
+  }
+}
+
+/* Resolves the seconds a pointer x-position maps to, clamped to the track. */
+function getScrubSecondsFromPointer(clientX) {
+  if (!playbackProgressBar || !youtubePlayerReady) return null;
+
+  const rect = playbackProgressBar.getBoundingClientRect();
+  if (!rect.width) return null;
+
+  const duration = youtubePlayer.getDuration() || selectedDuration;
+  if (!(duration > 0)) return null;
+
+  const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+  return ratio * duration;
+}
+
+function commitScrub() {
+  if (!isScrubbing || !youtubePlayerReady) return;
+  isScrubbing = false;
+  playbackProgressBar?.classList.remove('is-scrubbing');
+
+  // Nudge a few milliseconds past the target: the YouTube API can ignore a
+  // seek to the exact position it is already reporting.
+  const target = Math.min(
+    (youtubePlayer.getDuration() || selectedDuration || 0),
+    Math.max(0, scrubTargetSeconds + 0.05)
+  );
+  if (target > 0 || scrubTargetSeconds <= 0) {
+    youtubePlayer.seekTo(target, true);
+  }
+}
+
+if (playbackProgressBar) {
+  playbackProgressBar.addEventListener('pointerdown', (event) => {
+    if (!window.onDemandPlaybackActive || !youtubePlayerReady) return;
+
+    const seconds = getScrubSecondsFromPointer(event.clientX);
+    if (seconds === null) return;
+
+    isScrubbing = true;
+    scrubTargetSeconds = seconds;
+    playbackProgressBar.classList.add('is-scrubbing');
+    playbackProgressBar.setPointerCapture?.(event.pointerId);
+    updatePlaybackProgress();
+  });
+
+  playbackProgressBar.addEventListener('pointermove', (event) => {
+    if (!isScrubbing) return;
+
+    const seconds = getScrubSecondsFromPointer(event.clientX);
+    if (seconds === null) return;
+
+    scrubTargetSeconds = seconds;
+    updatePlaybackProgress();
+  });
+
+  playbackProgressBar.addEventListener('pointerup', commitScrub);
+  playbackProgressBar.addEventListener('pointercancel', commitScrub);
 }
 
 function setOnDemandPlaying(isPlaying) {
+  // Mirror of the live flag, so a restored session can reapply the pause state
+  // the listener had chosen instead of always resuming with sound.
+  window.onDemandPlaying = isPlaying;
+  // Keep the stored session in step with the transport, otherwise a reload
+  // would replay a song the listener had already paused.
+  if (window.onDemandPlaybackActive) persistCurrentOnDemandSession();
   window.setPlayerVisualState?.(isPlaying);
   if (navigator.mediaSession) {
     navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
@@ -83,6 +301,8 @@ function setOnDemandPlaying(isPlaying) {
 }
 
 function handleYouTubeState(event) {
+  logOnDemand('player state ->', event.data,
+    '(active =', window.onDemandPlaybackActive, ')');
   if (!window.onDemandPlaybackActive) return;
 
   const states = window.YT.PlayerState;
@@ -92,9 +312,14 @@ function handleYouTubeState(event) {
   } else if (event.data === states.BUFFERING) {
     onDemandModeLabel.textContent = 'BUFFERING';
     onDemandPlayButton?.classList.add('is-loading');
+  } else if (event.data === states.ENDED) {
+    onDemandModeLabel.textContent = 'ON DEMAND';
+    setOnDemandPlaying(false);
+    // Autoplay continues into a similar song; the label is updated by
+    // advanceToSimilarSong() while the related list is being fetched.
+    advanceToSimilarSong();
   } else if (
     event.data === states.PAUSED ||
-    event.data === states.ENDED ||
     event.data === states.CUED
   ) {
     onDemandModeLabel.textContent = 'ON DEMAND';
@@ -103,6 +328,9 @@ function handleYouTubeState(event) {
 }
 
 function handleYouTubeError(event) {
+  logOnDemand('player ERROR code =', event?.data,
+    '(active =', window.onDemandPlaybackActive,
+    ', candidates =', videoCandidates.length, ')');
   if (!window.onDemandPlaybackActive) return;
   if (videoCandidateIndex + 1 < videoCandidates.length) {
     videoCandidateIndex += 1;
@@ -127,7 +355,10 @@ async function loadVideo(videoId, requestId) {
   await loadYouTubeApi();
   if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
   onDemandMount.hidden = false;
-  onDemandArtwork.hidden = true;
+  // Keep the album artwork visible on top of the YouTube iframe so the
+  // embedded video player stays masked while its audio keeps playing.
+  onDemandArtwork.hidden = false;
+  onDemandArtwork.style.opacity = '1';
 
   if (youtubePlayerReady) {
     youtubePlayer.loadVideoById(videoId);
@@ -203,7 +434,7 @@ function updateOnDemandMetadata(song, video) {
   window.currentNowPlayingSong = nowPlaying;
   window.latestNowPlayingData = data;
   document.title = `${title} - ${artist} | Thaalam 24x7`;
-  onDemandStation.textContent = 'YouTube Music';
+  onDemandStation.textContent = 'On-Demand';
   onDemandModeLabel.textContent = 'LOADING';
   onDemandTrack.dataset.trackTitle = title;
   onDemandTrack.dataset.trackArtist = artist;
@@ -213,6 +444,9 @@ function updateOnDemandMetadata(song, video) {
   if (artwork) {
     onDemandArtwork.src = artwork;
     onDemandMiniArtwork.src = artwork;
+    // Match the live-radio UX: tint the page gradient from the album art.
+    const colorRequestId = window.bumpArtworkRequestId?.() ?? 0;
+    window.updateAlbumColors?.(artwork, colorRequestId);
   }
   window.updateMarquee?.();
   window.updateMiniPlayerMarquees?.();
@@ -228,11 +462,218 @@ function updateOnDemandMetadata(song, video) {
   }
 }
 
+/* Appends a song to the session queue unless it is already the current entry
+   (re-selecting the same track should not create a duplicate step). */
+function enqueueOnDemandSong(song) {
+  const current = onDemandQueue[onDemandQueueIndex];
+  const isSameAsCurrent =
+    current &&
+    current.trackName === song.trackName &&
+    (current.artistName || '') === (song.artistName || '');
+
+  if (isSameAsCurrent) return;
+
+  // Playing a new song after going back truncates the forward history, the way
+  // a browser's back/forward stack behaves.
+  onDemandQueue = onDemandQueue.slice(0, onDemandQueueIndex + 1);
+  onDemandQueue.push(song);
+  onDemandQueueIndex = onDemandQueue.length - 1;
+}
+
+function updateTransportButtonState() {
+  if (onDemandPrevButton) {
+    onDemandPrevButton.disabled = onDemandQueueIndex <= 0;
+  }
+  if (onDemandNextButton) {
+    // Next stays enabled while unplayed related tracks remain, so the listener
+    // can move on before the current song ends.
+    const hasQueuedNext = onDemandQueueIndex >= 0 && onDemandQueueIndex < onDemandQueue.length - 1;
+    const hasRelatedNext = relatedTrackCursor < relatedTrackCache.length;
+    onDemandNextButton.disabled = onDemandQueueIndex < 0 || (!hasQueuedNext && !hasRelatedNext);
+  }
+}
+
+function skipOnDemandSong(offset) {
+  // At the end of the played queue, move into the related list we already
+  // fetched rather than trying to walk past the last entry.
+  if (offset > 0 && onDemandQueueIndex >= onDemandQueue.length - 1) {
+    const nextRelated = relatedTrackCache[relatedTrackCursor];
+    if (!nextRelated) return;
+
+    relatedTrackCursor += 1;
+    playRelatedTrack(nextRelated);
+    return;
+  }
+
+  const nextIndex = onDemandQueueIndex + offset;
+  const nextSong = onDemandQueue[nextIndex];
+  if (!nextSong) return;
+
+  onDemandQueueIndex = nextIndex;
+  updateTransportButtonState();
+  startOnDemandSong(nextSong);
+}
+
+onDemandPrevButton?.addEventListener('click', () => skipOnDemandSong(-1));
+onDemandNextButton?.addEventListener('click', () => skipOnDemandSong(1));
+
+/* Fetches a similar-songs list for a video. Returns [] rather than throwing so
+   a failed lookup simply leaves the player stopped at the end of the track. */
+async function fetchRelatedTracks(videoId, song) {
+  if (!videoId && !song?.artistName) return [];
+
+  // title/artist travel with the request so the server can fall back to an
+  // artist search when the radio playlist is unavailable.
+  const query = new URLSearchParams({
+    videoId: videoId || '',
+    title: song?.trackName || '',
+    artist: song?.artistName || '',
+    limit: '25'
+  });
+
+  try {
+    const response = await fetch(`/api/youtube/related?${query}`, { cache: 'no-store' });
+    const payload = await response.json();
+    if (!response.ok) {
+      // A 404 almost always means the Flask server is running an older build:
+      // it only picks up new routes after a restart (app.run has no reloader).
+      console.warn(
+        `Autoplay: /api/youtube/related returned ${response.status}.` +
+        (response.status === 404
+          ? ' Restart the Flask server to load the related-tracks route.'
+          : ''),
+        payload?.errors || payload
+      );
+      return [];
+    }
+    console.info('Autoplay: related tracks via', payload.source);
+    return Array.isArray(payload.tracks) ? payload.tracks : [];
+  } catch (error) {
+    console.warn('Autoplay: related-tracks request failed.', error);
+    return [];
+  }
+}
+
+/* Kicks off a background lookup for the track that just started, so the queue
+   of similar songs is already populated by the time it finishes playing. */
+function prefetchRelatedTracks(videoId, song) {
+  if (!videoId && !song?.artistName) return;
+
+  const token = ++prefetchToken;
+  isFetchingRelated = true;
+
+  fetchRelatedTracks(videoId, song)
+    .then((tracks) => {
+      // Ignore a response for a track the listener has already moved past.
+      if (token !== prefetchToken) return;
+      relatedTrackCache = tracks.filter((track) => !playedVideoIds.has(track.videoId));
+      relatedTrackCursor = 0;
+      updateTransportButtonState();
+    })
+    .finally(() => {
+      if (token === prefetchToken) isFetchingRelated = false;
+    });
+}
+
+/* Normalises a related track into the song shape the rest of the module uses
+   (startOnDemandSong and updateOnDemandMetadata both expect trackName/
+   artistName/artworkUrl100, matching the iTunes catalog shape). */
+function relatedTrackToSong(track) {
+  return {
+    trackName: track.title || 'Unknown song',
+    artistName: track.artist || '',
+    collectionName: '',
+    artworkUrl100: track.thumbnail || '',
+    trackTimeMillis: (parseVideoDuration(track.duration) || 0) * 1000
+  };
+}
+
+/* Called when a track ends. Plays the next prefetched similar song straight
+   away, with no waiting on the network. */
+function advanceToSimilarSong() {
+  if (!window.onDemandPlaybackActive) return;
+
+  const nextTrack = relatedTrackCache[relatedTrackCursor];
+  if (nextTrack) {
+    relatedTrackCursor += 1;
+    playRelatedTrack(nextTrack);
+    return;
+  }
+
+  // The prefetch has not landed yet (or returned nothing). Retry briefly rather
+  // than leaving the listener at a silent dead end, then say so on screen.
+  let attempts = 0;
+  window.clearInterval(autoplayRetryTimer);
+  autoplayRetryTimer = window.setInterval(() => {
+    if (!window.onDemandPlaybackActive) {
+      window.clearInterval(autoplayRetryTimer);
+      return;
+    }
+
+    const retryTrack = relatedTrackCache[relatedTrackCursor];
+    if (retryTrack) {
+      window.clearInterval(autoplayRetryTimer);
+      relatedTrackCursor += 1;
+      playRelatedTrack(retryTrack);
+      return;
+    }
+
+    attempts += 1;
+    if (attempts > 20 || (!isFetchingRelated && attempts > 4)) {
+      window.clearInterval(autoplayRetryTimer);
+      onDemandModeLabel.textContent = 'ON DEMAND';
+      // Surface the reason in the station slot: the mode label is hidden while
+      // on-demand is active, so without this the player just stops silently.
+      onDemandStation.textContent = 'No more similar songs';
+    }
+  }, 250);
+}
+
+/* Starts a track that came from the related list. It already has a resolved
+   videoId, so it skips the search round-trip that startOnDemandSong performs. */
+async function playRelatedTrack(track) {
+  const song = relatedTrackToSong(track);
+  const requestId = ++songRequestId;
+
+  selectedDuration = Number(song.trackTimeMillis) / 1000 || 0;
+  onDemandQueue.push(song);
+  onDemandQueueIndex = onDemandQueue.length - 1;
+  updateTransportButtonState();
+
+  isScrubbing = false;
+  scrubTargetSeconds = 0;
+  playbackProgressBar?.classList.remove('is-scrubbing');
+
+  // A related track may be a poor match for the iframe, so keep the same
+  // candidate fallback the search path uses.
+  videoCandidates = [track.videoId];
+  videoCandidateIndex = 0;
+
+  // Record the track before it loads, so a refresh mid-load still restores.
+  setCurrentOnDemandTrack(song, track.videoId);
+  persistCurrentOnDemandSession();
+
+  updateOnDemandMetadata(song, { videoId: track.videoId });
+  await loadVideo(track.videoId, requestId);
+  if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
+  updatePlaybackProgress();
+  // Chain: start pulling similar songs for this track straight away, so the
+  // list is ready long before this one finishes.
+  playedVideoIds.add(track.videoId);
+  prefetchRelatedTracks(track.videoId, song);
+}
+
 async function startOnDemandSong(song) {
   if (!song?.trackName) return;
   const requestId = ++songRequestId;
   selectedDuration = Number(song.trackTimeMillis) / 1000 || 0;
+  enqueueOnDemandSong(song);
+  updateTransportButtonState();
+  isScrubbing = false;
+  scrubTargetSeconds = 0;
+  playbackProgressBar?.classList.remove('is-scrubbing');
   window.onDemandPlaybackActive = true;
+  document.body.classList.add('on-demand-active');
   window.pauseLiveStreamForOnDemand?.();
   returnToLiveButton.hidden = false;
   onDemandModeLabel.textContent = 'LOADING';
@@ -257,9 +698,17 @@ async function startOnDemandSong(song) {
     videoCandidates = [...new Set([video.videoId, ...(video.alternatives || [])])];
     videoCandidateIndex = 0;
     selectedDuration = parseVideoDuration(video.duration) || selectedDuration;
+    // The videoId is known now, so the session becomes restorable immediately.
+    setCurrentOnDemandTrack(song, video.videoId);
+    persistCurrentOnDemandSession();
     updateOnDemandMetadata(song, video);
     await loadVideo(video.videoId, requestId);
-    updateOnDemandTime();
+    if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
+    updatePlaybackProgress();
+    // Warm the similar-songs list for this track so the next one is ready
+    // before the current song ends.
+    playedVideoIds.add(video.videoId);
+    prefetchRelatedTracks(video.videoId, song);
   } catch (error) {
     if (requestId !== songRequestId) return;
     console.error('Unable to start on-demand playback:', error);
@@ -283,11 +732,105 @@ function toggleOnDemandPlayback(shouldPlay) {
   }
 }
 
+/* Re-enters on-demand playback after a refresh or a reopened tab.
+
+   The live feed is deliberately not restarted first: the point is that the app
+   comes back exactly as the listener left it, so the stored videoId is loaded
+   directly and the search round-trip is skipped. */
+async function restoreOnDemandSession() {
+  logOnDemand('restoreOnDemandSession() called');
+  const stored = readOnDemandSession();
+  if (!stored) {
+    logOnDemand('ABORT: nothing to restore');
+    return;
+  }
+
+  const song = stored.song;
+  // Enter the same on-demand state a fresh selection would, before any live
+  // data arrives, so the radio cannot paint over the restored song.
+  window.onDemandPlaybackActive = true;
+  document.body.classList.add('on-demand-active');
+  window.pauseLiveStreamForOnDemand?.();
+  returnToLiveButton.hidden = false;
+  onDemandModeLabel.textContent = 'LOADING';
+  onDemandStation.textContent = 'Resuming on demand';
+  onDemandPlayButton.disabled = false;
+  onDemandMiniToggle.disabled = false;
+
+  const requestId = ++songRequestId;
+  selectedDuration = Number(song.trackTimeMillis) / 1000 || 0;
+  enqueueOnDemandSong(song);
+  updateTransportButtonState();
+  setCurrentOnDemandTrack(song, stored.videoId);
+
+  try {
+    // Deliberately no showView() call here. The listener's view (Home, About or
+    // Now Playing) has already been restored by restoreActiveView(), and forcing
+    // this module back to Now Playing would yank them out of the page they were
+    // on. On-demand surfaces in the mini player, which is visible from every
+    // view, so restoring the track itself is enough.
+    if (requestId !== songRequestId) return;
+
+    // A resolved videoId is stored, so load it without searching for it again.
+    videoCandidates = [stored.videoId];
+    videoCandidateIndex = 0;
+    updateOnDemandMetadata(song, { videoId: stored.videoId });
+    await loadVideo(stored.videoId, requestId);
+    logOnDemand('loadVideo() resolved; playerReady =', youtubePlayerReady,
+      'state =', youtubePlayerReady ? youtubePlayer.getPlayerState() : 'n/a');
+    if (requestId !== songRequestId || !window.onDemandPlaybackActive) {
+      logOnDemand('ABORT after loadVideo: superseded or no longer on-demand');
+      return;
+    }
+
+    updatePlaybackProgress();
+    playedVideoIds.add(stored.videoId);
+    prefetchRelatedTracks(stored.videoId, song);
+    // Honour the pause state the session was closed with.
+    if (stored.playing === false) toggleOnDemandPlayback(false);
+  } catch (error) {
+    console.error('Unable to restore on-demand playback:', error);
+    // The YouTube script is third-party, so one blocked or flaky load must not
+    // silently drop the listener back to the radio: they would come back to a
+    // different station and no sign their track ever existed. Stay in on-demand
+    // mode, keep the artwork/title/Back to Live already on screen, and let the
+    // transport retry instead. returnToLive() runs only on an explicit press.
+    onDemandModeLabel.textContent = 'RETRY';
+    onDemandStation.textContent = error.message || 'Playback unavailable';
+    onDemandPlayButton?.classList.add('is-loading');
+    onDemandMiniToggle?.classList.add('is-loading');
+    setPlaybackProgress(0, 0);
+  }
+}
+
+/* The one and only exit from on-demand. Every other path (refresh, resize,
+   a failed video load) deliberately stays in on-demand mode, so this runs only
+   when the listener explicitly presses "Back to Live". */
 function returnToLive() {
-  if (!window.onDemandPlaybackActive) return;
+  logOnDemand('returnToLive() via explicit Back to Live');
+  if (!window.onDemandPlaybackActive) {
+    logOnDemand('  -> no-op, on-demand was not active');
+    return;
+  }
   songRequestId += 1;
   if (youtubePlayerReady) youtubePlayer.pauseVideo();
+  isScrubbing = false;
+  scrubTargetSeconds = 0;
+  playbackProgressBar?.classList.remove('is-scrubbing');
+  // Cancel any in-flight related-tracks lookup so a late response cannot
+  // restart on-demand playback after the listener has gone back to live.
+  window.clearInterval(autoplayRetryTimer);
+  prefetchToken += 1;
+  relatedTrackCache = [];
+  relatedTrackCursor = 0;
+  isFetchingRelated = false;
+  // The only path off on-demand, so it is also the only place that clears the
+  // stored session.
+  clearOnDemandSession();
+  setCurrentOnDemandTrack(null, '');
+  window.onDemandPlaying = false;
   window.onDemandPlaybackActive = false;
+  document.body.classList.remove('on-demand-active');
   onDemandMount.hidden = true;
   onDemandArtwork.hidden = false;
   returnToLiveButton.hidden = true;
@@ -297,8 +840,10 @@ function returnToLive() {
   onDemandMiniToggle.disabled = false;
   onDemandElapsed.textContent = '0:00';
   onDemandDuration.textContent = '0:00';
+  setPlaybackProgress(0, 0);
   setOnDemandPlaying(false);
-  window.updateNowPlaying?.();
+  // Repaint album art, station/schedule and metadata from the live radio feed.
+  window.restoreLiveRadioUi?.();
   window.togglePlay?.();
 }
 
@@ -313,4 +858,17 @@ window.getOnDemandTrackClock = () => {
 };
 
 returnToLiveButton.addEventListener('click', returnToLive);
-window.setInterval(updateOnDemandTime, 500);
+window.setInterval(updatePlaybackProgress, 500);
+
+/* On-demand survives a refresh, so it is restored on load. This runs on
+   DOMContentLoaded (rather than inline) so the live-radio startup in script.js
+   has finished wiring itself up before on-demand takes over the UI. */
+if (document.readyState === 'loading') {
+  logOnDemand('readyState=loading, waiting for DOMContentLoaded to restore');
+  document.addEventListener('DOMContentLoaded', () => {
+    logOnDemand('DOMContentLoaded fired -> restoring');
+    void restoreOnDemandSession();
+  });
+} else {
+  void restoreOnDemandSession();
+}
