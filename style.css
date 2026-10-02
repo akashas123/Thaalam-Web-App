@@ -1850,6 +1850,11 @@ body::after {
   margin: 0;
 }
 
+.install-app-description.is-unsupported {
+  color: #ff8585;
+  font-weight: 700;
+}
+
 .install-app-steps {
   margin: 0.9rem 0 0;
   padding-left: 1.25rem;
@@ -1880,6 +1885,14 @@ body::after {
   flex: 1;
   background: #f0e5d8;
   color: #211914;
+}
+
+.install-app-primary:disabled {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: #77797c;
+  color: #292a2c;
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 .install-app-secondary {
