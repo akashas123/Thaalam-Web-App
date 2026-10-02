@@ -73,6 +73,16 @@ function setAlbumColors(colors) {
   ['--c1', '--c2', '--c3', '--c4', '--c5'].forEach((property, index) => {
     root.style.setProperty(property, colors[index]);
   });
+
+  const palette = colors.slice(0, 5).map((color) => {
+    const hex = color.replace('#', '');
+    return [0, 2, 4].map((offset) => parseInt(hex.slice(offset, offset + 2), 16));
+  });
+  const average = [0, 1, 2].map((channel) =>
+    palette.reduce((total, color) => total + color[channel], 0) / palette.length
+  );
+  const themeColor = document.querySelector('meta[name="theme-color"]');
+  themeColor?.setAttribute('content', rgbToHex(...average.map((channel) => channel * 0.34)));
 }
 
 function rgbToHex(red, green, blue) {
@@ -687,7 +697,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const favicon = document.createElement('link');
   favicon.rel = 'icon';
   favicon.type = 'image/png';
-  favicon.href = 'icon-512.png?v=2';
+  favicon.href = 'icon-512.png?v=3';
   document.head.prepend(favicon);
 
   const albumBackground = document.createElement('div');
