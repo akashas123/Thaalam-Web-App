@@ -273,12 +273,12 @@
       <button class="dialog-close" aria-label="Close install prompt">&times;</button>
     </form>
     <img class="install-app-mark" src="logo.png" alt="">
-    <p class="site-page-eyebrow">TAKE THE MUSIC WITH YOU</p>
+    <p class="site-page-eyebrow">Non-Stop 24x7</p>
     <h2 id="installAppTitle">Install Thaalam 24x7</h2>
     <p class="install-app-description" id="installAppDescription"></p>
     <ol class="install-app-steps" id="installAppSteps" hidden>
-      <li>Open this page in Safari.</li>
-      <li>Tap Share, then choose Add to Home Screen.</li>
+      <li id="installAppStepOne">Open this page in Safari.</li>
+      <li id="installAppStepTwo">Tap Share, then choose Add to Home Screen.</li>
     </ol>
     <div class="install-app-actions">
       <button class="install-app-primary" id="installAppAction" type="button">Install app</button>
@@ -1385,6 +1385,8 @@
       const installDialog = document.getElementById('installAppDialog');
       const installDescription = document.getElementById('installAppDescription');
       const installSteps = document.getElementById('installAppSteps');
+      const installStepOne = document.getElementById('installAppStepOne');
+      const installStepTwo = document.getElementById('installAppStepTwo');
       const installAction = document.getElementById('installAppAction');
       const installDismiss = document.getElementById('installAppDismiss');
       const installDismissedKey = 'thaalam-install-dismissed-v1';
@@ -1420,20 +1422,24 @@
         installSteps.hidden = true;
         installAction.hidden = false;
         installDismiss.textContent = 'Not now';
+        installDismiss.hidden = false;
 
         if (installPlatform === 'ios') {
-          installDescription.textContent = 'Add Thaalam to your Home Screen for quick access to the music.';
+          installDescription.textContent = 'Continue in the iOS share sheet and choose Add to Home Screen.';
           installSteps.hidden = false;
-          installAction.textContent = 'Got it';
+          installStepOne.textContent = 'Tap Share in the sheet that opens.';
+          installStepTwo.textContent = 'Choose Add to Home Screen, then confirm.';
+          installAction.textContent = 'Install now';
           installDismiss.hidden = true;
         } else if (deferredInstallPrompt) {
           installDescription.textContent = 'Keep Thaalam close and open it like any other app.';
-          installAction.textContent = 'Install app';
-          installDismiss.hidden = false;
+          installAction.textContent = 'Install now';
         } else {
-          installDescription.textContent = 'Use your browser menu and choose Install app or Add to Home Screen.';
-          installAction.textContent = 'Got it';
-          installDismiss.hidden = false;
+          installDescription.textContent = 'This browser has not offered direct installation. Use its menu to add Thaalam to your Home Screen.';
+          installSteps.hidden = false;
+          installStepOne.textContent = 'Open your browser menu or Share menu.';
+          installStepTwo.textContent = 'Choose Install app or Add to Home Screen.';
+          installAction.textContent = 'Install now';
         }
       }
 
@@ -1457,8 +1463,25 @@
       installDismiss.addEventListener('click', dismissInstallDialog);
       installDialog.addEventListener('close', () => markPromptSeen(installDismissedKey));
       installAction.addEventListener('click', async () => {
+        if (installPlatform === 'ios') {
+          if (!navigator.share) {
+            installDescription.textContent = 'Use Safari’s Share button, then choose Add to Home Screen.';
+            return;
+          }
+          try {
+            await navigator.share({ title: document.title, url: window.location.href });
+            dismissInstallDialog();
+          } catch (error) {
+            if (error.name !== 'AbortError') {
+              installDescription.textContent = 'Use Safari’s Share button, then choose Add to Home Screen.';
+            }
+          }
+          return;
+        }
+
         if (installPlatform !== 'android' || !deferredInstallPrompt) {
-          dismissInstallDialog();
+          installDescription.textContent = 'Open your browser menu and choose Install app or Add to Home Screen to finish installation.';
+          installSteps.hidden = false;
           return;
         }
 
