@@ -1389,8 +1389,7 @@
       const installStepTwo = document.getElementById('installAppStepTwo');
       const installAction = document.getElementById('installAppAction');
       const installDismiss = document.getElementById('installAppDismiss');
-      const installDismissedKey = 'thaalam-install-dismissed-v1';
-      const installShownKey = 'thaalam-install-shown-v1';
+      const installDismissedKey = 'thaalam-install-dismissed-v2';
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
       const isAndroid = /Android/i.test(navigator.userAgent);
@@ -1404,16 +1403,15 @@
 
       function hasSeenPrompt() {
         try {
-          return localStorage.getItem(installDismissedKey) === 'true' ||
-            localStorage.getItem(installShownKey) === 'true';
+          return localStorage.getItem(installDismissedKey) === 'true';
         } catch {
           return false;
         }
       }
 
-      function markPromptSeen(key = installShownKey) {
+      function markPromptDismissed() {
         try {
-          localStorage.setItem(key, 'true');
+          localStorage.setItem(installDismissedKey, 'true');
         } catch {
         }
       }
@@ -1430,12 +1428,11 @@
           installStepOne.textContent = 'Tap Share in the sheet that opens.';
           installStepTwo.textContent = 'Choose Add to Home Screen, then confirm.';
           installAction.textContent = 'Install now';
-          installDismiss.hidden = true;
         } else if (deferredInstallPrompt) {
           installDescription.textContent = 'Keep Thaalam close and open it like any other app.';
           installAction.textContent = 'Install now';
         } else {
-          installDescription.textContent = 'This browser has not offered direct installation. Use its menu to add Thaalam to your Home Screen.';
+          installDescription.textContent = 'Install Thaalam from your browser menu for quick access.';
           installSteps.hidden = false;
           installStepOne.textContent = 'Open your browser menu or Share menu.';
           installStepTwo.textContent = 'Choose Install app or Add to Home Screen.';
@@ -1451,17 +1448,16 @@
       });
 
       window.addEventListener('appinstalled', () => {
-        markPromptSeen(installDismissedKey);
+        markPromptDismissed();
         if (installDialog.open) installDialog.close();
       });
 
       function dismissInstallDialog() {
-        markPromptSeen(installDismissedKey);
+        markPromptDismissed();
         if (installDialog.open) installDialog.close();
       }
 
       installDismiss.addEventListener('click', dismissInstallDialog);
-      installDialog.addEventListener('close', () => markPromptSeen(installDismissedKey));
       installAction.addEventListener('click', async () => {
         if (installPlatform === 'ios') {
           if (!navigator.share) {
@@ -1470,7 +1466,7 @@
           }
           try {
             await navigator.share({ title: document.title, url: window.location.href });
-            dismissInstallDialog();
+            installDialog.close();
           } catch (error) {
             if (error.name !== 'AbortError') {
               installDescription.textContent = 'Use Safari’s Share button, then choose Add to Home Screen.';
@@ -1480,7 +1476,7 @@
         }
 
         if (installPlatform !== 'android' || !deferredInstallPrompt) {
-          installDescription.textContent = 'Open your browser menu and choose Install app or Add to Home Screen to finish installation.';
+          installDescription.textContent = 'Open your browser menu or Share menu to finish adding Thaalam to your Home Screen.';
           installSteps.hidden = false;
           return;
         }
@@ -1489,15 +1485,14 @@
         deferredInstallPrompt = null;
         await promptEvent.prompt();
         const choice = await promptEvent.userChoice;
-        if (choice?.outcome === 'accepted') markPromptSeen(installDismissedKey);
-        dismissInstallDialog();
+        if (choice?.outcome === 'accepted') markPromptDismissed();
+        installDialog.close();
       });
 
       if (!hasSeenPrompt()) {
         window.setTimeout(() => {
           if (document.visibilityState !== 'visible' || hasSeenPrompt()) return;
           configureInstallDialog();
-          markPromptSeen();
           installDialog.showModal();
         }, 3000);
       }
