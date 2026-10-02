@@ -902,16 +902,9 @@ body::after {
     display: block;
   }
 
-  .genre-art-button {
-    display: block;
+  .genre-card-media {
+    position: relative;
     width: 100%;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
   }
 
   .genre-card-art-frame {
@@ -939,16 +932,61 @@ body::after {
     opacity: 1;
   }
 
-  .genre-art-button:hover .genre-card-art-frame,
-  .genre-art-button:focus-visible .genre-card-art-frame {
+  .genre-card-media:hover .genre-card-art-frame {
     border-color: rgba(255, 255, 255, 0.3);
     box-shadow: 0 0.9rem 1.8rem rgba(0, 0, 0, 0.3);
   }
 
-  .genre-art-button:focus-visible {
+  .genre-play-button,
+  .genre-info-button {
+    position: absolute;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.72);
+    background: rgba(5, 20, 20, 0.82);
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  .genre-play-button {
+    top: 50%;
+    left: 50%;
+    width: 3.25rem;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  .genre-play-button svg {
+    width: 1.35rem;
+    height: 1.35rem;
+    fill: currentColor;
+  }
+
+  .genre-info-button {
+    right: 0.55rem;
+    bottom: 0.55rem;
+    width: 2.35rem;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    font: inherit;
+    font-weight: 700;
+  }
+
+  .genre-play-button:hover,
+  .genre-info-button:hover {
+    background: rgba(5, 20, 20, 0.98);
+    border-color: #fff;
+  }
+
+  .genre-play-button:focus-visible,
+  .genre-info-button:focus-visible {
     outline: 2px solid rgba(255, 255, 255, 0.8);
     outline-offset: 3px;
-    border-radius: 0.85rem;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -1193,6 +1231,21 @@ body::after {
   position: relative;
 }
 
+.on-demand-player-mount {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  background: #000;
+  pointer-events: auto;
+}
+
+.on-demand-player-frame,
+.on-demand-player-mount iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
 [class~="album-art-card"] img {
   width: 100%;
   height: 100%;
@@ -1384,6 +1437,22 @@ body::after {
   text-shadow:
     0 0.125rem 0.625rem
     rgba(0, 0, 0, 0.45);
+}
+
+.return-to-live-button {
+  padding: 0.35rem 0.65rem;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font: inherit;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+
+.return-to-live-button:hover,
+.return-to-live-button:focus-visible {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .track-time .stream-quality,

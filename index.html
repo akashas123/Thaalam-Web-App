@@ -11,7 +11,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=113">
+  <link rel="stylesheet" href="style.css?v=114">
   <link rel="icon" type="image/png" href="icon-512.png?v=3">
   <link rel="apple-touch-icon" href="icon-192.png?v=3">
 
@@ -134,7 +134,7 @@
 
   <link rel="manifest" href="manifest.json">
 
-  <meta name="theme-color" content="#111318">
+  <meta name="theme-color" content="#07373b">
 </head>
 
 <body class="view-now-playing">
@@ -298,6 +298,9 @@
 
     <div class="album-art-card">
       <img id="albumArtImg" src="album-placeholder.svg?v=2" alt="Album artwork placeholder">
+      <div class="on-demand-player-mount" id="onDemandPlayerMount" hidden>
+        <div class="on-demand-player-frame" id="onDemandPlayerFrame"></div>
+      </div>
     </div>
 
     <div class="station" id="stationName">
@@ -314,6 +317,9 @@
       <div class="live-text">
         LIVE
       </div>
+      <button class="return-to-live-button" id="returnToLiveButton" type="button" hidden>
+        Back to Live
+      </button>
 
       <div class="live-line"></div>
     </div>
@@ -597,10 +603,11 @@
   </aside>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
-  <script src="script.js?v=33"></script>
+  <script src="script.js?v=34"></script>
+  <script src="youtube-player.js?v=5"></script>
   <script src="audio-recovery.js?v=1"></script>
   <script src="marquee.js?v=2"></script>
-  <script src="media-metadata.js?v=5"></script>
+  <script src="media-metadata.js?v=6"></script>
   <script src="player-controls.js?v=29"></script>
   <script src="lyrics.js?v=29"></script>
   <script>
@@ -968,11 +975,26 @@
         const card = document.createElement('article');
         card.className = 'genre-card';
 
-        const artworkButton = document.createElement('button');
-        artworkButton.className = 'genre-art-button';
-        artworkButton.type = 'button';
-        artworkButton.setAttribute('aria-label', `Song information for ${song.trackName || 'song'}`);
-        artworkButton.addEventListener('click', () => openCatalogSongInfo(song));
+        const media = document.createElement('div');
+        media.className = 'genre-card-media';
+
+        const playButton = document.createElement('button');
+        playButton.className = 'genre-play-button';
+        playButton.type = 'button';
+        playButton.setAttribute('aria-label', `Play ${song.trackName || 'song'} on YouTube Music`);
+        playButton.title = 'Play on YouTube Music';
+        playButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+        playButton.addEventListener('click', () => {
+          window.startOnDemandSong?.(song);
+        });
+
+        const infoButton = document.createElement('button');
+        infoButton.className = 'genre-info-button';
+        infoButton.type = 'button';
+        infoButton.setAttribute('aria-label', `Song information for ${song.trackName || 'song'}`);
+        infoButton.title = 'Song information';
+        infoButton.textContent = 'i';
+        infoButton.addEventListener('click', () => openCatalogSongInfo(song));
 
         const artworkFrame = document.createElement('span');
         artworkFrame.className = 'genre-card-art-frame';
@@ -992,7 +1014,7 @@
               .replace(/\d+x\d+bb\./, '600x600bb.')
           : '';
         artworkFrame.appendChild(artwork);
-        artworkButton.appendChild(artworkFrame);
+        media.append(artworkFrame, playButton, infoButton);
 
         const details = document.createElement('div');
         details.className = 'genre-card-details';
@@ -1012,9 +1034,9 @@
           link.rel = 'noopener noreferrer';
           link.setAttribute('aria-label', `Open ${song.trackName || 'song'} in the iTunes Store`);
           link.append(details);
-          card.append(artworkButton, link);
+          card.append(media, link);
         } else {
-          card.append(artworkButton, details);
+          card.append(media, details);
         }
 
         genreResults.appendChild(card);
@@ -1342,33 +1364,38 @@
     }
 
     function showView(view) {
-      if (!desktopNavigation.matches) return;
+      if (!desktopNavigation.matches) return Promise.resolve();
 
       window.clearTimeout(viewChangeTimeout);
       pageLoading.hidden = false;
 
-      viewChangeTimeout = window.setTimeout(() => {
-        applyView(view);
-        storeActiveView(view);
-        requestAnimationFrame(() => window.updateMiniPlayerMarquees?.());
+      return new Promise((resolve) => {
+        viewChangeTimeout = window.setTimeout(() => {
+          applyView(view);
+          storeActiveView(view);
+          requestAnimationFrame(() => window.updateMiniPlayerMarquees?.());
 
-        pageLoading.hidden = true;
-        if (view === 'about') loadAboutArtistPortraits();
-        if (view === 'home') {
-          if (activeGenre.startsWith('search:')) loadCatalog(activeGenre, activeSearchTerm);
-          else loadGenre(activeGenre);
-        }
-        document.getElementById(
-          view === 'home'
-            ? 'homePage'
-            : view === 'about'
-              ? 'aboutPage'
-              : 'playerView'
-        )
-          ?.querySelector('h1')
-          ?.focus({ preventScroll: true });
-      }, 350);
+          pageLoading.hidden = true;
+          if (view === 'about') loadAboutArtistPortraits();
+          if (view === 'home') {
+            if (activeGenre.startsWith('search:')) loadCatalog(activeGenre, activeSearchTerm);
+            else loadGenre(activeGenre);
+          }
+          document.getElementById(
+            view === 'home'
+              ? 'homePage'
+              : view === 'about'
+                ? 'aboutPage'
+                : 'playerView'
+          )
+            ?.querySelector('h1')
+            ?.focus({ preventScroll: true });
+          resolve();
+        }, 350);
+      });
     }
+
+    window.showView = showView;
 
     viewButtons.forEach((button) => {
       button.addEventListener('click', () => {

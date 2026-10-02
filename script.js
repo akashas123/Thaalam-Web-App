@@ -227,6 +227,14 @@ function formatMiniTime(seconds) {
 
 function updateMiniPlayerTime() {
   if (!miniPlayerElapsed || !miniPlayerDuration) return;
+  const onDemandClock = window.onDemandPlaybackActive
+    ? window.getOnDemandTrackClock?.()
+    : null;
+  if (onDemandClock) {
+    miniPlayerElapsed.textContent = formatMiniTime(onDemandClock.elapsed);
+    miniPlayerDuration.textContent = formatMiniTime(onDemandClock.duration);
+    return;
+  }
   const clock = window.getAudibleTrackClock?.();
   if (clock) {
     miniPlayerElapsed.textContent = formatMiniTime(clock.elapsed);
@@ -299,7 +307,7 @@ function updateStreamQuality(levelIndex, levels = []) {
   streamQuality.textContent = label;
 }
 async function startLiveStream() {
-  if (isConnecting || !radio) return;
+  if (isConnecting || !radio || window.onDemandPlaybackActive) return;
   isConnecting = true;
   shouldResumePlayback = true;
   setStreamLoading(true);
@@ -326,6 +334,10 @@ async function startLiveStream() {
         });
         player.once(window.Hls.Events.MANIFEST_PARSED, () => {
           updateStreamQuality(player.currentLevel, player.levels);
+          if (window.onDemandPlaybackActive) {
+            resolve();
+            return;
+          }
           radio.play().then(resolve, reject);
         });
         player.on(window.Hls.Events.ERROR, (_event, data) => {
@@ -487,6 +499,10 @@ function captureAudibleNowPlayingSnapshot() {
 }
 
 function togglePlay() {
+  if (window.onDemandPlaybackActive) {
+    window.toggleOnDemandPlayback?.();
+    return;
+  }
   if (!radio) return;
   if (radio.paused) {
     shouldResumePlayback = true;
@@ -499,6 +515,19 @@ function togglePlay() {
     radio.pause();
   }
 }
+
+window.pauseLiveStreamForOnDemand = () => {
+  shouldResumePlayback = false;
+  window.clearTimeout(streamStallTimer);
+  setStreamLoading(false);
+  setStreamOffline(false);
+  radio?.pause();
+};
+
+window.setPlayerVisualState = setVisualState;
+window.showPlayerPlayIcon = showPlayIcon;
+window.showPlayerPauseIcon = showPauseIcon;
+window.togglePlay = togglePlay;
 
 if (radio) {
   const markStreamStalled = () => {
@@ -524,6 +553,10 @@ if (radio) {
     setStreamOffline(true);
   });
   radio.addEventListener('playing', () => {
+    if (window.onDemandPlaybackActive) {
+      radio.pause();
+      return;
+    }
     const wasAdvancing = audioIsAdvancing;
     audioIsAdvancing = true;
     window.clearTimeout(streamStallTimer);
@@ -546,6 +579,7 @@ if (radio) {
       setStreamLoading(false);
       setStreamOffline(false);
     }
+    if (window.onDemandPlaybackActive) return;
     setVisualState(false);
     showPlayIcon();
   });
@@ -569,6 +603,8 @@ window.addEventListener('online', () => {
 });
 
 async function updateStationNameFromSchedule() {
+  if (window.onDemandPlaybackActive) return;
+
   try {
     const response = await fetch(SCHEDULE_API, { cache: 'no-store' });
     const schedule = await response.json();
@@ -640,6 +676,7 @@ async function updateNowPlaying() {
     if (!response.ok) return;
     const rawData = await response.json();
     if (requestId !== nowPlayingRequestId) return;
+    if (window.onDemandPlaybackActive) return;
 
     window.rawNowPlayingData = rawData;
     window.rawNowPlayingReceivedAt = performance.now() / 1000;
