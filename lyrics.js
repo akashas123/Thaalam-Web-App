@@ -291,7 +291,7 @@ function updateActiveLyric() {
   ) {
     if (
       window.matchMedia(
-        '(max-width: 56.1875rem)'
+        '(max-width: 56.1875rem), (pointer: coarse)'
       ).matches &&
       mobilePlayerViewChosen
     ) {
@@ -406,7 +406,7 @@ function handleSongLyricsView(
 ) {
   if (
     !window.matchMedia(
-      '(max-width: 56.1875rem)'
+      '(max-width: 56.1875rem), (pointer: coarse)'
     ).matches
   ) {
     return;
@@ -541,7 +541,7 @@ function updateLyrics(
     'aria-hidden',
     String(
       !hasLyrics &&
-      !window.matchMedia('(min-width: 56.25rem)').matches
+      !window.matchMedia('(min-width: 56.25rem) and (pointer: fine)').matches
     )
   );
 
@@ -738,7 +738,7 @@ async function fetchLyrics(nowPlayingData = null) {
 function updateMobileLyricsVisibility() {
   const isMobile =
     window.matchMedia(
-      '(max-width: 56.1875rem)'
+      '(max-width: 56.1875rem), (pointer: coarse)'
     ).matches;
 
   const isExpanded =
@@ -756,7 +756,7 @@ function updateMobileLyricsVisibility() {
 function collapseMobileLyrics() {
   if (
     !window.matchMedia(
-      '(max-width: 56.1875rem)'
+      '(max-width: 56.1875rem), (pointer: coarse)'
     ).matches
   ) {
     return;
@@ -813,7 +813,7 @@ function expandLyricsAfterPlaybackStarts() {
 function handleMobileWheel(event) {
   if (
     window.matchMedia(
-      '(max-width: 56.1875rem)'
+      '(max-width: 56.1875rem), (pointer: coarse)'
     ).matches &&
     !event.target.closest?.('#lyricsContent') &&
     event.deltaY < 0
@@ -831,7 +831,7 @@ function handleMobileWheel(event) {
 function handleMobileTouchStart(event) {
   if (
     window.matchMedia(
-      '(max-width: 56.1875rem)'
+      '(max-width: 56.1875rem), (pointer: coarse)'
     ).matches
   ) {
     mobileTouchStartY =
@@ -853,7 +853,7 @@ function handleMobileTouchEnd(event) {
 
   if (
     window.matchMedia(
-      '(max-width: 56.1875rem)'
+      '(max-width: 56.1875rem), (pointer: coarse)'
     ).matches &&
     !mobileTouchStartedInLyrics &&
     movedDown &&
@@ -874,7 +874,7 @@ function handleMobileTouchEnd(event) {
 function resetMobilePlayerPosition() {
   if (
     !window.matchMedia(
-      '(max-width: 56.1875rem)'
+      '(max-width: 56.1875rem), (pointer: coarse)'
     ).matches
   ) {
     return;
@@ -923,7 +923,7 @@ function setStreamPlaybackState(
       trackElapsedSyncTime = performance.now() / 1000;
       playbackStartedOnMobile =
         window.matchMedia(
-          '(max-width: 56.1875rem)'
+          '(max-width: 56.1875rem), (pointer: coarse)'
         ).matches;
     }
 
@@ -951,7 +951,7 @@ function setStreamPlaybackState(
 
 if (
   window.matchMedia(
-    '(max-width: 56.1875rem)'
+    '(max-width: 56.1875rem), (pointer: coarse)'
   ).matches
 ) {
   if (

@@ -1,15 +1,17 @@
-const CACHE_NAME = 'thaalam-24x7-v90';
+const CACHE_NAME = 'thaalam-24x7-v91';
+const ALBUM_ART_CACHE_NAME = 'thaalam-album-art-v1';
+const ALBUM_ART_CACHE_LIMIT = 240;
 
 const APP_FILES = [
   './',
   './index.html',
-  './style.css?v=112',
-  './script.js?v=31',
+  './style.css?v=113',
+  './script.js?v=32',
   './audio-recovery.js?v=1',
   './marquee.js?v=2',
   './media-metadata.js?v=5',
-  './player-controls.js?v=28',
-  './lyrics.js?v=28',
+  './player-controls.js?v=29',
+  './lyrics.js?v=29',
   './manifest.json',
   './album-placeholder.svg?v=2',
   './icon-192.png',
@@ -30,7 +32,9 @@ self.addEventListener('activate', (event) => {
     caches.keys()
       .then((cacheNames) => Promise.all(
         cacheNames
-          .filter((cacheName) => cacheName !== CACHE_NAME)
+          .filter((cacheName) =>
+            cacheName !== CACHE_NAME && cacheName !== ALBUM_ART_CACHE_NAME
+          )
           .map((cacheName) => caches.delete(cacheName))
       ))
       .then(() => self.clients.claim())
@@ -41,14 +45,19 @@ self.addEventListener('fetch', (event) => {
   const request = event.request;
   const url = new URL(request.url);
 
-  if (
-    request.method !== 'GET' ||
-    url.origin !== self.location.origin ||
-    url.pathname.includes('/api/') ||
-    url.pathname.includes('/hls/')
-  ) {
+  if (request.method !== 'GET') return;
+
+  if (url.origin !== self.location.origin) {
+    if (
+      !url.hostname.endsWith('.mzstatic.com') ||
+      !url.pathname.includes('/image/thumb/')
+    ) return;
+
+    event.respondWith(fetchAndCacheAlbumArt(request));
     return;
   }
+
+  if (url.pathname.includes('/api/') || url.pathname.includes('/hls/')) return;
 
   if (request.mode === 'navigate') {
     event.respondWith(
@@ -84,3 +93,29 @@ self.addEventListener('fetch', (event) => {
         }))
   );
 });
+
+async function fetchAndCacheAlbumArt(request) {
+  let cache;
+  try {
+    cache = await caches.open(ALBUM_ART_CACHE_NAME);
+    const cachedResponse = await cache.match(request);
+    if (cachedResponse) return cachedResponse;
+  } catch {
+    return fetch(request);
+  }
+
+  const response = await fetch(request);
+  if (response.ok || response.type === 'opaque') {
+    try {
+      const cachedRequests = await cache.keys();
+      const expiredRequests = cachedRequests.slice(
+        0,
+        Math.max(0, cachedRequests.length - ALBUM_ART_CACHE_LIMIT + 1)
+      );
+      await Promise.all(expiredRequests.map((cachedRequest) => cache.delete(cachedRequest)));
+      await cache.put(request, response.clone());
+    } catch {
+    }
+  }
+  return response;
+}

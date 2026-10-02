@@ -54,7 +54,13 @@ let isConnecting = false;
 let isStreamOffline = false;
 let shouldResumePlayback = false;
 let audioIsAdvancing = false;
-let hasStartedPlayback = false;
+let hasStartedPlayback = (() => {
+  try {
+    return localStorage.getItem(PLAYBACK_STARTED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+})();
 let streamStallTimer = 0;
 let hlsPlayer = null;
 const streamQuality = document.getElementById('streamQuality');
@@ -157,7 +163,13 @@ function updateAlbumColors(imageUrl, requestId) {
 
 function setVisualState(isPlaying) {
   const tagline = document.querySelector('.tagline');
-  if (isPlaying) hasStartedPlayback = true;
+  if (isPlaying && !hasStartedPlayback) {
+    hasStartedPlayback = true;
+    try {
+      localStorage.setItem(PLAYBACK_STARTED_KEY, 'true');
+    } catch {
+    }
+  }
 
   document.body.classList.toggle('mini-player-visible', hasStartedPlayback);
   miniPlayer?.classList.toggle('is-playing', isPlaying);
@@ -685,7 +697,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const tagline = document.querySelector('.tagline');
   if (tagline && nowPlayingEl) {
     window.updateMarquee = () => {
-      if (window.matchMedia('(min-width: 56.25rem)').matches) {
+      if (window.matchMedia('(min-width: 56.25rem) and (pointer: fine)').matches) {
         const availableWidth = tagline.clientWidth;
         const measureText = (text, pseudo) => {
           const styles = getComputedStyle(nowPlayingEl, pseudo);
