@@ -12,6 +12,8 @@
   <title>Thaalam 24x7</title>
 
   <link rel="stylesheet" href="style.css?v=113">
+  <link rel="icon" type="image/png" href="logo.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
 
   <style>
     .tagline[class~="marquee"] span {
@@ -132,7 +134,7 @@
 
   <link rel="manifest" href="manifest.json">
 
-  <meta name="theme-color" content="#05070d">
+  <meta name="theme-color" content="#a9afba">
 </head>
 
 <body class="view-now-playing">
@@ -265,6 +267,24 @@
       </svg>
     </button>
   </aside>
+
+  <dialog class="control-dialog install-app-dialog" id="installAppDialog" aria-labelledby="installAppTitle">
+    <form method="dialog">
+      <button class="dialog-close" aria-label="Close install prompt">&times;</button>
+    </form>
+    <img class="install-app-mark" src="logo.png" alt="">
+    <p class="site-page-eyebrow">TAKE THE MUSIC WITH YOU</p>
+    <h2 id="installAppTitle">Install Thaalam 24x7</h2>
+    <p class="install-app-description" id="installAppDescription"></p>
+    <ol class="install-app-steps" id="installAppSteps" hidden>
+      <li>Open this page in Safari.</li>
+      <li>Tap Share, then choose Add to Home Screen.</li>
+    </ol>
+    <div class="install-app-actions">
+      <button class="install-app-primary" id="installAppAction" type="button">Install app</button>
+      <button class="install-app-secondary" id="installAppDismiss" type="button">Not now</button>
+    </div>
+  </dialog>
 
   <div class="page-loading" id="pageLoading" role="status" aria-label="Loading page" hidden>
     <span class="loading-spinner" aria-hidden="true"></span>
@@ -1358,6 +1378,107 @@
 
     restoreActiveView();
     if (document.body.classList.contains('view-about')) loadAboutArtistPortraits();
+  </script>
+
+  <script>
+    (() => {
+      const installDialog = document.getElementById('installAppDialog');
+      const installDescription = document.getElementById('installAppDescription');
+      const installSteps = document.getElementById('installAppSteps');
+      const installAction = document.getElementById('installAppAction');
+      const installDismiss = document.getElementById('installAppDismiss');
+      const installDismissedKey = 'thaalam-install-dismissed-v1';
+      const installShownKey = 'thaalam-install-shown-v1';
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      const isAndroid = /Android/i.test(navigator.userAgent);
+      const isCoarsePointer = window.matchMedia('(pointer: coarse)').matches;
+      const installPlatform = isIOS ? 'ios' : isAndroid ? 'android' : isCoarsePointer ? 'mobile' : '';
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+        navigator.standalone === true;
+      let deferredInstallPrompt = null;
+
+      if (!installPlatform || isStandalone) return;
+
+      function hasSeenPrompt() {
+        try {
+          return localStorage.getItem(installDismissedKey) === 'true' ||
+            localStorage.getItem(installShownKey) === 'true';
+        } catch {
+          return false;
+        }
+      }
+
+      function markPromptSeen(key = installShownKey) {
+        try {
+          localStorage.setItem(key, 'true');
+        } catch {
+        }
+      }
+
+      function configureInstallDialog() {
+        installSteps.hidden = true;
+        installAction.hidden = false;
+        installDismiss.textContent = 'Not now';
+
+        if (installPlatform === 'ios') {
+          installDescription.textContent = 'Add Thaalam to your Home Screen for quick access to the music.';
+          installSteps.hidden = false;
+          installAction.textContent = 'Got it';
+          installDismiss.hidden = true;
+        } else if (deferredInstallPrompt) {
+          installDescription.textContent = 'Keep Thaalam close and open it like any other app.';
+          installAction.textContent = 'Install app';
+          installDismiss.hidden = false;
+        } else {
+          installDescription.textContent = 'Use your browser menu and choose Install app or Add to Home Screen.';
+          installAction.textContent = 'Got it';
+          installDismiss.hidden = false;
+        }
+      }
+
+      window.addEventListener('beforeinstallprompt', (event) => {
+        if (installPlatform !== 'android') return;
+        event.preventDefault();
+        deferredInstallPrompt = event;
+        if (installDialog.open) configureInstallDialog();
+      });
+
+      window.addEventListener('appinstalled', () => {
+        markPromptSeen(installDismissedKey);
+        if (installDialog.open) installDialog.close();
+      });
+
+      function dismissInstallDialog() {
+        markPromptSeen(installDismissedKey);
+        if (installDialog.open) installDialog.close();
+      }
+
+      installDismiss.addEventListener('click', dismissInstallDialog);
+      installDialog.addEventListener('close', () => markPromptSeen(installDismissedKey));
+      installAction.addEventListener('click', async () => {
+        if (installPlatform !== 'android' || !deferredInstallPrompt) {
+          dismissInstallDialog();
+          return;
+        }
+
+        const promptEvent = deferredInstallPrompt;
+        deferredInstallPrompt = null;
+        await promptEvent.prompt();
+        const choice = await promptEvent.userChoice;
+        if (choice?.outcome === 'accepted') markPromptSeen(installDismissedKey);
+        dismissInstallDialog();
+      });
+
+      if (!hasSeenPrompt()) {
+        window.setTimeout(() => {
+          if (document.visibilityState !== 'visible' || hasSeenPrompt()) return;
+          configureInstallDialog();
+          markPromptSeen();
+          installDialog.showModal();
+        }, 3000);
+      }
+    })();
   </script>
 
 </body>

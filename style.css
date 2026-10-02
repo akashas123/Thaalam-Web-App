@@ -1811,6 +1811,91 @@ body::after {
     rgba(0, 0, 0, 0.4);
 }
 
+.install-app-dialog {
+  width: min(26rem, calc(100vw - 2rem));
+  padding: 1.75rem;
+  border-color: rgba(255, 255, 255, 0.2);
+  border-radius: 1.1rem;
+  background: linear-gradient(145deg, rgba(34, 32, 31, 0.98), rgba(15, 17, 20, 0.98));
+}
+
+.install-app-mark {
+  display: block;
+  width: 3.6rem;
+  height: 3.6rem;
+  margin-bottom: 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 0.8rem;
+  box-shadow: 0 0.6rem 1.4rem rgba(0, 0, 0, 0.28);
+}
+
+.install-app-dialog .site-page-eyebrow {
+  margin: 0 2rem 0.55rem 0;
+  font-size: 0.65rem;
+}
+
+.install-app-dialog h2 {
+  margin: 0 2rem 0.7rem 0;
+  font-size: 1.25rem;
+}
+
+.install-app-description,
+.install-app-steps {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.9rem;
+  line-height: 1.65;
+}
+
+.install-app-description {
+  margin: 0;
+}
+
+.install-app-steps {
+  margin: 0.9rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.install-app-steps li + li {
+  margin-top: 0.3rem;
+}
+
+.install-app-actions {
+  display: flex;
+  gap: 0.65rem;
+  margin-top: 1.4rem;
+}
+
+.install-app-actions button {
+  min-height: 2.7rem;
+  padding: 0 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.17);
+  border-radius: 0.7rem;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.install-app-primary {
+  flex: 1;
+  background: #f0e5d8;
+  color: #211914;
+}
+
+.install-app-secondary {
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+}
+
+.install-app-actions button:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.82);
+  outline-offset: 3px;
+}
+
+.install-app-actions button[hidden] {
+  display: none;
+}
+
 .song-info-dialog {
   height:
     min(30rem, calc(100dvh - 2rem));
