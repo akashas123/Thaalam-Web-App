@@ -11,7 +11,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=112">
+  <link rel="stylesheet" href="style.css?v=113">
 
   <style>
     .tagline[class~="marquee"] span {
@@ -46,7 +46,7 @@
       }
     }
 
-    @media (min-width: 56.25rem) {
+    @media (min-width: 56.25rem) and (pointer: fine) {
 
       .desktop-nav-links {
         position: static;
@@ -89,7 +89,7 @@
       }
     }
   
-    @media (min-width: 56.25rem) {
+    @media (min-width: 56.25rem) and (pointer: fine) {
       body.view-now-playing #nowPlayingHeading {
         display: block !important;
         position: fixed !important;
@@ -144,7 +144,7 @@
       try {
         const storedView = window.localStorage.getItem('thaalam-active-view-v1');
         if (storedView !== 'home' && storedView !== 'about') return;
-        if (!window.matchMedia('(min-width: 56.25rem)').matches) return;
+        if (!window.matchMedia('(min-width: 56.25rem) and (pointer: fine)').matches) return;
         document.body.classList.remove('view-now-playing');
         document.body.classList.add(`view-${storedView}`);
       } catch {
@@ -181,10 +181,9 @@
       </header>
       <div class="genre-tabs" role="tablist" aria-label="Music genres">
         <button class="genre-tab is-selected" type="button" role="tab" aria-selected="true" aria-controls="genreResults" tabindex="0" data-genre="pop">Pop</button>
-        <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="malayalam">Malayalam</button>
-        <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="tamil">Tamil</button>
+        <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="rock">Rock</button>
+        <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="hip-hop">Hip-Hop</button>
       </div>
-      <p class="genre-attribution">Search results from Apple iTunes Store - up to 200 matches</p>
       <div class="genre-results" id="genreResults" role="tabpanel" aria-live="polite">
         <p class="genre-empty">Choose a genre to browse songs.</p>
       </div>
@@ -193,55 +192,53 @@
 
   <main class="site-page about-page" id="aboutPage" aria-labelledby="aboutTitle">
     <div class="site-page-content">
-      <p class="site-page-eyebrow">ABOUT THE PROJECT</p>
+      <p class="site-page-eyebrow">MUSIC WITHOUT BORDERS</p>
       <div class="about-story">
-        <p class="site-page-copy">India's musical heritage stretches back thousands of years, and much of it survived not on paper but in memory. Ragas, the melodic moods that shape a performance, and thaalam, the repeating cycles of time that hold it together, were handed down from teacher to student, from voice to instrument, from temple to courtyard. Over the centuries the tradition grew into two great classical systems, Hindustani in the north and Carnatic in the south, while folk songs, devotional hymns and film music carried the same spirit into every home and every street. Today that music is heard on every continent, kept alive by the artists, students and listeners who love it.</p>
-        <p class="site-page-copy">Carnatic music is the classical tradition of South India, and it rests on three pillars: raga, tala and the compositions left behind by its composers. Purandara Dasa, honoured as the father of Carnatic music, wrote the earliest lessons that beginners still learn today, and the nineteenth-century trio known as the Trinity, Tyagaraja, Muthuswami Dikshitar and Syama Sastri, left a treasury of kritis that singers return to generation after generation. A concert, or kutcheri, unfolds slowly and then opens out into improvisation and brisk, joyful pieces, and the same songs travel through the year, from small neighbourhood music schools to the grand Tyagaraja Aradhana festival.</p>
-        <p class="site-page-copy">The instruments of Carnatic music were chosen for their ability to sing. The Saraswati veena, a long-necked lute with a deep resonant body, and the bamboo flute, or venu, can glide and bend between notes the way a human voice does, which is exactly what a raga asks for. The violin, adopted from the West in the early nineteenth century and reshaped into a fully Carnatic voice, shares the stage with the singer in almost every concert, while the nadaswaram, a large double-reed horn played at temples and weddings, carries the same melodies at a volume that fills a whole street. Behind them all, the tambura keeps a steady, shimmering drone that holds the raga in place.</p>
-        <p class="site-page-copy">Rhythm in this tradition is not accompaniment but conversation. The mridangam, a double-headed drum tuned to the pitch of the singer, leads the percussion, and it is joined by the ghatam, a clay pot whose open mouth can ring with a clear tone or snap with a dry one, the kanjira, a small frame drum with a single taut head, and the morsing, a metal jaw harp that buzzes along with the cycle. Together they build the tani avartanam, the part of a concert where rhythm takes the spotlight and explores the tala in ever-changing patterns. That conversation between melody and mathematics is the pulse of Indian music, and it is the reason a familiar song can still surprise you on the hundredth listen.</p>
-        <p class="site-page-copy">Thaalam 24x7 is a fan-made, open-source project. It is not a label, a broadcaster or a business: it is a small web radio built by listeners who grew up with this music and wanted it to keep playing. The name comes from thaalam, the rhythmic cycle that gives Indian music its pulse, because this station keeps that pulse going around the clock. The intention is simple and ambitious at the same time: to bring Indian music, to a global level, so that a listener anywhere in the world can tune in without hunting for an old file or a rare recording. The stream is free, the code is open, and everyone who loves this music is welcome to help it grow.</p>
+        <p class="site-page-copy">Pop has no single hometown. Its songs travel from Seoul to São Paulo, Kingston to London, crossing languages and drawing from R&amp;B, dance, rock, hip-hop and sounds that refuse to fit one genre.</p>
+        <p class="site-page-copy">Thaalam 24x7 celebrates that exchange: the artists who shape a global sound, and the listeners who make a song feel at home anywhere. From stadium anthems to late-night discoveries, every voice adds something new to the mix.</p>
+        <p class="site-page-copy">Independent, fan-made and open source, this project is built around one simple idea: the right song can make the world feel a little closer. Find a familiar voice, discover a new one, and stay with the music.</p>
       </div>
-      <section class="about-voices" aria-label="Malayalam playback voices">
-        <p class="site-page-eyebrow">MALAYALAM LEGENDS</p>
+      <section class="about-voices" aria-label="Featured international pop artists">
+        <div class="about-voices-heading">
+          <p class="site-page-eyebrow">GLOBAL VOICES</p>
+          <p class="about-voices-intro">Artists carrying pop across borders and generations.</p>
+        </div>
         <ul class="about-voices-grid">
-          <li class="about-voice">
+          <li class="about-voice" data-about-artist="Taylor Swift">
             <span class="about-voice-media">
-              <span class="about-voice-monogram" aria-hidden="true">KJY</span>
-              <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/49/K.J_Yesudas.JPG/500px-K.J_Yesudas.JPG" alt="" decoding="async">
+              <span class="about-voice-monogram" aria-hidden="true">TS</span>
             </span>
-            <span class="about-voice-name">K. J. Yesudas</span>
-            <span class="about-voice-role">Gaanagandharvan &middot; six decades of playback</span>
+            <span class="about-voice-name">Taylor Swift</span>
+            <span class="about-voice-role">Story-led pop with a global reach</span>
           </li>
-          <li class="about-voice">
+          <li class="about-voice" data-about-artist="Beyoncé">
             <span class="about-voice-media">
-              <span class="about-voice-monogram" aria-hidden="true">KSC</span>
-              <img src="https://upload.wikimedia.org/wikipedia/commons/f/f0/Melody_Queen_of_Indian_Cinema_Dr._K_S_Chithra_%28cropped%29.jpg" alt="" decoding="async">
+              <span class="about-voice-monogram" aria-hidden="true">B</span>
             </span>
-            <span class="about-voice-name">K. S. Chithra</span>
-            <span class="about-voice-role">Melody queen &middot; 25,000+ songs</span>
+            <span class="about-voice-name">Beyoncé</span>
+            <span class="about-voice-role">Boundary-pushing pop and R&amp;B</span>
           </li>
-          <li class="about-voice">
+          <li class="about-voice" data-about-artist="The Weeknd">
             <span class="about-voice-media">
-              <span class="about-voice-monogram" aria-hidden="true">PJ</span>
-              <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/P_jayachandranDSC_0207.jpg/500px-P_jayachandranDSC_0207.jpg" alt="" decoding="async">
+              <span class="about-voice-monogram" aria-hidden="true">XO</span>
             </span>
-            <span class="about-voice-name">P. Jayachandran</span>
-            <span class="about-voice-role">Bhaava gayakan &middot; 16,000+ songs</span>
+            <span class="about-voice-name">The Weeknd</span>
+            <span class="about-voice-role">After-hours pop with an R&amp;B edge</span>
           </li>
-          <li class="about-voice">
+          <li class="about-voice" data-about-artist="BTS">
             <span class="about-voice-media">
-              <span class="about-voice-monogram" aria-hidden="true">MGS</span>
-              <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/MG_Sreekumar_%28Cropped%29.jpg/500px-MG_Sreekumar_%28Cropped%29.jpg" alt="" decoding="async">
+              <span class="about-voice-monogram" aria-hidden="true">BTS</span>
             </span>
-            <span class="about-voice-name">M. G. Sreekumar</span>
-            <span class="about-voice-role">Singer and composer &middot; 2,500+ songs</span>
+            <span class="about-voice-name">BTS</span>
+            <span class="about-voice-role">K-pop made for a worldwide audience</span>
           </li>
         </ul>
-        <p class="about-voices-credit">Portraits from Wikimedia Commons: K. J. Yesudas by E P Sajeevan, K. S. Chithra by VARDHANSIMHA, P. Jayachandran by Kannanshanmugam and Shanmugam Studio, Kollam, M. G. Sreekumar by Lijesh K.</p>
+        <p class="about-voices-credit">Artist portraits and biographical details from Wikipedia.</p>
       </section>
 
       <div class="about-signoff">
         <h1 id="aboutTitle" tabindex="-1">Thaalam 24x7</h1>
+        <p class="about-signoff-note">Non-Stop 24x7</p>
       </div>
       <button class="site-page-action" type="button" data-view="home">
         Back to Home
@@ -255,7 +252,7 @@
     </button>
     <button class="mini-player-track" type="button" data-view="now-playing" aria-label="Open Now Playing">
       <span class="mini-player-title" id="miniPlayerTitle">Thaalam 24x7</span>
-      <span class="mini-player-artist" id="miniPlayerArtist">Live radio</span>
+      <span class="mini-player-artist" id="miniPlayerArtist">Non-stop 24x7</span>
     </button>
     <div class="mini-player-time" aria-label="Track time">
       <span id="miniPlayerElapsed">0:00</span>
@@ -437,20 +434,32 @@
       Loading track details...
     </p>
 
-    <p
-      class="song-info-background"
-      id="songInfoBackground"
-      hidden
-    ></p>
+  </dialog>
 
-    <a
-      class="song-info-wiki-link"
-      id="songInfoWikiLink"
-      target="_blank"
-      rel="noopener noreferrer"
-      hidden
-    ></a>
-
+  <dialog
+    class="control-dialog song-info-dialog catalog-song-dialog"
+    id="catalogSongInfoDialog"
+    aria-labelledby="catalogSongInfoTitle"
+  >
+    <form method="dialog">
+      <button class="dialog-close" aria-label="Close">&times;</button>
+    </form>
+    <p class="catalog-song-notice">On-demand streaming is not available right now</p>
+    <h2 id="catalogSongInfoTitle">Song information</h2>
+    <div class="catalog-song-layout">
+      <img class="song-info-art" id="catalogSongInfoArt" src="album-placeholder.svg?v=2" alt="Album artwork">
+      <div class="catalog-song-copy">
+        <p class="song-info-track" id="catalogSongInfoTrack"></p>
+        <p class="song-info-details" id="catalogSongInfoDetails"></p>
+        <div class="catalog-artist-identity">
+          <img class="catalog-artist-art" id="catalogArtistPortrait" alt="" hidden>
+          <p class="song-info-artist" id="catalogSongInfoArtist"></p>
+        </div>
+      </div>
+    </div>
+    <div class="catalog-artist-summary">
+      <p class="song-info-background" id="catalogArtistBackground" aria-live="polite">Loading artist information...</p>
+    </div>
   </dialog>
 
   <dialog
@@ -568,15 +577,15 @@
   </aside>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
-  <script src="script.js?v=31"></script>
+  <script src="script.js?v=32"></script>
   <script src="audio-recovery.js?v=1"></script>
   <script src="marquee.js?v=2"></script>
   <script src="media-metadata.js?v=5"></script>
-  <script src="player-controls.js?v=28"></script>
-  <script src="lyrics.js?v=28"></script>
+  <script src="player-controls.js?v=29"></script>
+  <script src="lyrics.js?v=29"></script>
   <script>
     const desktopNavigation =
-      window.matchMedia('(min-width: 56.25rem)');
+      window.matchMedia('(min-width: 56.25rem) and (pointer: fine)');
     const playerView = document.getElementById('playerView');
     const nowPlayingHeading = document.getElementById('nowPlayingHeading');
     const stationName = document.getElementById('stationName');
@@ -616,20 +625,42 @@
     const genreTabList = document.querySelector('.genre-tabs');
     const genreResults =
       document.getElementById('genreResults');
-    const genreAttribution = document.querySelector('.genre-attribution');
     const homeSubtitle = document.querySelector('.home-page .site-page-copy');
     const catalogSearchForm = document.getElementById('catalogSearchForm');
     const catalogSearchInput = document.getElementById('catalogSearchInput');
     const catalogSuggestions = document.getElementById('catalogSuggestions');
     const catalogClearButton = document.getElementById('catalogClearButton');
+    const catalogSongInfoDialog = document.getElementById('catalogSongInfoDialog');
+    const catalogSongInfoArt = document.getElementById('catalogSongInfoArt');
+    const catalogSongInfoTrack = document.getElementById('catalogSongInfoTrack');
+    const catalogSongInfoArtist = document.getElementById('catalogSongInfoArtist');
+    const catalogSongInfoDetails = document.getElementById('catalogSongInfoDetails');
+    const catalogArtistPortrait = document.getElementById('catalogArtistPortrait');
+    const catalogArtistBackground = document.getElementById('catalogArtistBackground');
     const genreSearchTerms = {
       pop: 'pop music',
-      malayalam: 'malayalam songs',
-      tamil: 'tamil songs'
+      rock: 'rock music',
+      'hip-hop': 'hip hop music'
     };
     const genreResultCache = new Map();
+    const artistInfoCache = new Map();
+    const artistInfoRequests = new Map();
     const GENRE_CACHE_KEY = 'thaalam-itunes-genre-cache-v1';
     const GENRE_CACHE_TTL = 12 * 60 * 60 * 1000;
+    const ARTIST_INFO_STORAGE_KEY = 'thaalam-catalog-artist-info-v4';
+    const ARTIST_INFO_CACHE_LIMIT = 600;
+    const ARTIST_INFO_PREFETCH_CONCURRENCY = 3;
+    let storedArtistInfoRecords;
+    let catalogSongInfoRequestId = 0;
+    const catalogArtworkObserver = 'IntersectionObserver' in window
+      ? new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
+            if (!entry.isIntersecting) return;
+            catalogArtworkObserver.unobserve(entry.target);
+            loadCatalogArtwork(entry.target);
+          });
+        }, { rootMargin: '1200px 0px' })
+      : null;
     const ACTIVE_VIEW_KEY = 'thaalam-active-view-v1';
     let activeGenre = 'pop';
     let activeSearchTerm = '';
@@ -649,8 +680,261 @@
       }
     }
 
+    function getStoredArtistInfo(key) {
+      if (!storedArtistInfoRecords) {
+        try {
+          const parsed = JSON.parse(
+            localStorage.getItem(ARTIST_INFO_STORAGE_KEY) || '{}'
+          );
+          storedArtistInfoRecords = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+            ? parsed
+            : {};
+        } catch {
+          storedArtistInfoRecords = {};
+        }
+      }
+
+      try {
+        const entry = storedArtistInfoRecords[key];
+        return entry && Object.prototype.hasOwnProperty.call(entry, 'info')
+          ? entry.info
+          : undefined;
+      } catch {
+        return undefined;
+      }
+    }
+
+    function saveStoredArtistInfo(key, info) {
+      try {
+        getStoredArtistInfo(key);
+        const cache = storedArtistInfoRecords;
+        cache[key] = { info, savedAt: Date.now() };
+        const oldestKeys = Object.keys(cache)
+          .sort((first, second) =>
+            (cache[first]?.savedAt || 0) - (cache[second]?.savedAt || 0)
+          );
+        while (oldestKeys.length > ARTIST_INFO_CACHE_LIMIT) {
+          delete cache[oldestKeys.shift()];
+        }
+        localStorage.setItem(ARTIST_INFO_STORAGE_KEY, JSON.stringify(cache));
+      } catch {
+      }
+    }
+
+    async function getWikipediaArtistInfo(artistName) {
+      const cacheKey = artistName.trim().toLowerCase();
+      if (artistInfoCache.has(cacheKey)) return artistInfoCache.get(cacheKey);
+      const storedInfo = getStoredArtistInfo(cacheKey);
+      if (storedInfo !== undefined) {
+        artistInfoCache.set(cacheKey, storedInfo);
+        return storedInfo;
+      }
+      if (artistInfoRequests.has(cacheKey)) return artistInfoRequests.get(cacheKey);
+
+      const request = fetchWikipediaArtistInfo(artistName, cacheKey);
+      artistInfoRequests.set(cacheKey, request);
+      try {
+        return await request;
+      } finally {
+        artistInfoRequests.delete(cacheKey);
+      }
+    }
+
+    async function fetchWikipediaArtistInfo(artistName, cacheKey) {
+      const search = new URLSearchParams({
+        action: 'query',
+        list: 'search',
+        srsearch: artistName,
+        srlimit: '5',
+        format: 'json',
+        origin: '*'
+      });
+      const searchResponse = await fetch(`https://en.wikipedia.org/w/api.php?${search}`);
+      if (!searchResponse.ok) throw new Error('Wikipedia artist search failed.');
+      const searchData = await searchResponse.json();
+      const normalize = (value) => String(value || '')
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '');
+      const results = searchData.query?.search || [];
+      const article = results.find((result) =>
+        normalize(result.title) === normalize(artistName)
+      ) || results[0];
+      if (!article) {
+        artistInfoCache.set(cacheKey, null);
+        saveStoredArtistInfo(cacheKey, null);
+        return null;
+      }
+
+      const summaryQuery = new URLSearchParams({
+        action: 'query',
+        prop: 'extracts|pageimages',
+        piprop: 'thumbnail',
+        exintro: '1',
+        exsentences: '3',
+        explaintext: '1',
+        pithumbsize: '640',
+        titles: article.title,
+        redirects: '1',
+        format: 'json',
+        origin: '*'
+      });
+      const summaryResponse = await fetch(`https://en.wikipedia.org/w/api.php?${summaryQuery}`);
+      if (!summaryResponse.ok) throw new Error('Wikipedia artist details failed.');
+      const summaryData = await summaryResponse.json();
+      const page = Object.values(summaryData.query?.pages || {})[0];
+      const info = page?.pageid ? {
+        title: page.title,
+        summary: (page.extract || '')
+          .replace(/\s*\(transl\.\s*[^)]*\)/gi, '')
+          .trim(),
+        image: page.thumbnail?.source || '',
+        url: `https://en.wikipedia.org/?curid=${page.pageid}`
+      } : null;
+      artistInfoCache.set(cacheKey, info);
+      saveStoredArtistInfo(cacheKey, info);
+      return info;
+    }
+
+    async function fetchWikipediaArtistPortrait(artistName) {
+      const title = artistName.trim().replace(/\s+/g, '_');
+      const response = await fetch(
+        `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`
+      );
+      if (!response.ok) return '';
+      const page = await response.json();
+      return page.thumbnail?.source || page.originalimage?.source || '';
+    }
+
+    function loadAboutArtistPortraits() {
+      document.querySelectorAll('[data-about-artist]').forEach(async (profile) => {
+        const artistName = profile.dataset.aboutArtist;
+        const media = profile.querySelector('.about-voice-media');
+        if (!media || media.querySelector('img') || profile.dataset.portraitLoading) return;
+
+        profile.dataset.portraitLoading = 'true';
+        try {
+          let info = null;
+          try {
+            info = await getWikipediaArtistInfo(artistName);
+          } catch {
+          }
+
+          let portraitUrl = info?.image || '';
+          if (!portraitUrl) {
+            try {
+              portraitUrl = await fetchWikipediaArtistPortrait(artistName);
+            } catch {
+            }
+          }
+          if (!portraitUrl) return;
+
+          const cacheKey = artistName.trim().toLowerCase();
+          const updatedInfo = { ...(info || { title: artistName, summary: '', url: '' }), image: portraitUrl };
+          artistInfoCache.set(cacheKey, updatedInfo);
+          saveStoredArtistInfo(cacheKey, updatedInfo);
+
+          const portrait = document.createElement('img');
+          portrait.src = portraitUrl;
+          portrait.alt = '';
+          portrait.loading = 'lazy';
+          portrait.decoding = 'async';
+          portrait.addEventListener('error', () => portrait.remove(), { once: true });
+          media.appendChild(portrait);
+        } finally {
+          delete profile.dataset.portraitLoading;
+        }
+      });
+    }
+
+    async function prefetchCatalogArtistInfo(songs) {
+      const artists = [...new Set(songs
+        .map((song) => (song.artistName || '').split(',')[0].trim())
+        .filter((artist) => artist && artist !== 'Unknown artist'))];
+      let nextArtistIndex = 0;
+
+      async function prefetchWorker() {
+        while (nextArtistIndex < artists.length) {
+          const artist = artists[nextArtistIndex];
+          nextArtistIndex += 1;
+          try {
+            await getWikipediaArtistInfo(artist);
+          } catch {
+          }
+        }
+      }
+
+      const workerCount = Math.min(
+        ARTIST_INFO_PREFETCH_CONCURRENCY,
+        artists.length
+      );
+      await Promise.all(Array.from({ length: workerCount }, prefetchWorker));
+    }
+
+    async function openCatalogSongInfo(song) {
+      const requestId = ++catalogSongInfoRequestId;
+      const artistName = song.artistName || 'Unknown artist';
+      const artworkUrl = song.artworkUrl100
+        ? song.artworkUrl100
+            .replace(/^http:/, 'https:')
+            .replace(/\d+x\d+bb\./, '600x600bb.')
+        : 'album-placeholder.svg?v=2';
+      const releaseDate = song.releaseDate
+        ? new Date(song.releaseDate).toLocaleDateString()
+        : 'N/A';
+      const duration = song.trackTimeMillis
+        ? `${Math.floor(song.trackTimeMillis / 60000)}:${String(
+            Math.floor(song.trackTimeMillis / 1000) % 60
+          ).padStart(2, '0')}`
+        : 'N/A';
+
+      catalogSongInfoArt.src = artworkUrl;
+      catalogSongInfoArt.alt = `${song.trackName || 'Song'} album artwork`;
+      catalogSongInfoArt.onerror = () => {
+        catalogSongInfoArt.src = 'album-placeholder.svg?v=2';
+      };
+      catalogSongInfoTrack.textContent = song.trackName || 'Unknown song';
+      catalogSongInfoArtist.textContent = artistName;
+      catalogSongInfoDetails.textContent = [
+        `Album: ${song.collectionName || 'N/A'}`,
+        `Release date: ${releaseDate}`,
+        `Genre: ${song.primaryGenreName || 'N/A'}`,
+        `Duration: ${duration}`
+      ].join('\n');
+      catalogArtistPortrait.hidden = true;
+      catalogArtistPortrait.removeAttribute('src');
+      catalogArtistBackground.hidden = false;
+      catalogArtistBackground.textContent = 'Loading artist information...';
+      if (!catalogSongInfoDialog.open) catalogSongInfoDialog.showModal();
+
+      try {
+        const info = await getWikipediaArtistInfo(artistName.split(',')[0].trim());
+        if (requestId !== catalogSongInfoRequestId) return;
+        catalogArtistBackground.textContent = info?.summary || 'No artist details were found.';
+        if (info?.image) {
+          catalogArtistPortrait.src = info.image;
+          catalogArtistPortrait.alt = `${artistName} portrait`;
+          catalogArtistPortrait.hidden = false;
+          catalogArtistPortrait.onerror = () => {
+            catalogArtistPortrait.hidden = true;
+          };
+        }
+      } catch {
+        if (requestId !== catalogSongInfoRequestId) return;
+        catalogArtistBackground.textContent = 'Wikipedia artist details are unavailable right now.';
+      }
+    }
+
+    function loadCatalogArtwork(artwork) {
+      const artworkUrl = artwork.dataset.artworkUrl;
+      if (artwork.isConnected && artworkUrl) artwork.src = artworkUrl;
+    }
+
     function renderGenreResults(songs) {
+      catalogArtworkObserver?.disconnect();
       genreResults.replaceChildren();
+      genreResults.setAttribute('aria-busy', 'false');
 
       if (!songs.length) {
         const empty = document.createElement('p');
@@ -664,18 +948,31 @@
         const card = document.createElement('article');
         card.className = 'genre-card';
 
+        const artworkButton = document.createElement('button');
+        artworkButton.className = 'genre-art-button';
+        artworkButton.type = 'button';
+        artworkButton.setAttribute('aria-label', `Song information for ${song.trackName || 'song'}`);
+        artworkButton.addEventListener('click', () => openCatalogSongInfo(song));
+
+        const artworkFrame = document.createElement('span');
+        artworkFrame.className = 'genre-card-art-frame';
         const artwork = document.createElement('img');
         artwork.className = 'genre-card-art';
         artwork.alt = `${song.trackName || 'Song'} album artwork`;
-        artwork.loading = 'lazy';
-        artwork.src = song.artworkUrl100
-          ? song.artworkUrl100
-              .replace(/^http:/, 'https:')
-              .replace(/\d+x\d+bb\./, '600x600bb.')
-          : 'album-placeholder.svg?v=2';
+        artwork.loading = catalogArtworkObserver ? 'eager' : 'lazy';
+        artwork.addEventListener('load', () => {
+          artwork.classList.add('is-loaded');
+        }, { once: true });
         artwork.addEventListener('error', () => {
           artwork.src = 'album-placeholder.svg?v=2';
         }, { once: true });
+        const artworkUrl = song.artworkUrl100
+          ? song.artworkUrl100
+              .replace(/^http:/, 'https:')
+              .replace(/\d+x\d+bb\./, '600x600bb.')
+          : '';
+        artworkFrame.appendChild(artwork);
+        artworkButton.appendChild(artworkFrame);
 
         const details = document.createElement('div');
         details.className = 'genre-card-details';
@@ -694,22 +991,45 @@
           link.target = '_blank';
           link.rel = 'noopener noreferrer';
           link.setAttribute('aria-label', `Open ${song.trackName || 'song'} in the iTunes Store`);
-          link.append(artwork, details);
-          card.appendChild(link);
+          link.append(details);
+          card.append(artworkButton, link);
         } else {
-          card.append(artwork, details);
+          card.append(artworkButton, details);
         }
 
         genreResults.appendChild(card);
+        if (artworkUrl) {
+          artwork.dataset.artworkUrl = artworkUrl;
+          if (catalogArtworkObserver) catalogArtworkObserver.observe(artwork);
+          else loadCatalogArtwork(artwork);
+        } else {
+          artwork.src = 'album-placeholder.svg?v=2';
+        }
       });
     }
 
     function showGenreLoading() {
       genreResults.replaceChildren();
-      const loading = document.createElement('p');
-      loading.className = 'genre-loading';
-      loading.textContent = 'Loading songs…';
-      genreResults.appendChild(loading);
+      genreResults.setAttribute('aria-busy', 'true');
+      const placeholders = document.createDocumentFragment();
+      for (let index = 0; index < 14; index += 1) {
+        const card = document.createElement('article');
+        card.className = 'genre-card genre-card-skeleton';
+        card.setAttribute('aria-hidden', 'true');
+
+        const artwork = document.createElement('span');
+        artwork.className = 'genre-card-art-frame';
+        const details = document.createElement('div');
+        details.className = 'genre-skeleton-details';
+        const title = document.createElement('span');
+        title.className = 'genre-skeleton-line genre-skeleton-title';
+        const artist = document.createElement('span');
+        artist.className = 'genre-skeleton-line genre-skeleton-artist';
+        details.append(title, artist);
+        card.append(artwork, details);
+        placeholders.appendChild(card);
+      }
+      genreResults.appendChild(placeholders);
     }
 
     function searchGenre(term, requestId, limit = 200, callbackPrefix = 'thaalamGenreCallback') {
@@ -751,6 +1071,7 @@
       const requestId = ++genreRequestId;
       const cached = genreResultCache.get(cacheKey);
       if (cached) {
+        void prefetchCatalogArtistInfo(cached);
         renderGenreResults(cached);
         return;
       }
@@ -763,6 +1084,7 @@
         Array.isArray(storedEntry.songs)
       ) {
         genreResultCache.set(cacheKey, storedEntry.songs);
+        void prefetchCatalogArtistInfo(storedEntry.songs);
         renderGenreResults(storedEntry.songs);
         return;
       }
@@ -778,11 +1100,13 @@
           // Keep the in-memory results if storage is full or unavailable.
         }
         if (requestId === genreRequestId && activeGenre === cacheKey) {
+          void prefetchCatalogArtistInfo(songs);
           renderGenreResults(songs);
         }
       } catch {
         if (requestId !== genreRequestId || activeGenre !== cacheKey) return;
         genreResults.replaceChildren();
+        genreResults.setAttribute('aria-busy', 'false');
         const error = document.createElement('p');
         error.className = 'genre-empty';
         error.textContent = 'Could not load songs. Check your connection and try again.';
@@ -872,14 +1196,13 @@
     }
     function loadGenre(genre) {
       genreTabList.hidden = false;
-      homeSubtitle.textContent = 'Explore songs by genre.';
+      homeSubtitle.textContent = 'Explore songs by genre';
       genreTabs.forEach((tab) => {
         const selected = tab.dataset.genre === genre;
         tab.classList.toggle('is-selected', selected);
         tab.setAttribute('aria-selected', String(selected));
         tab.tabIndex = selected ? 0 : -1;
       });
-      genreAttribution.textContent = 'Search results from Apple iTunes Store - up to 200 matches';
       return loadCatalog(genre, genreSearchTerms[genre]);
     }
 
@@ -894,7 +1217,6 @@
         tab.tabIndex = -1;
       });
       activeSearchTerm = normalizedTerm;
-      genreAttribution.textContent = `Search results for "${normalizedTerm}" - Apple iTunes Store`;
       return loadCatalog(`search:${normalizedTerm.toLowerCase()}`, normalizedTerm);
     }
 
@@ -1011,6 +1333,7 @@
         requestAnimationFrame(() => window.updateMiniPlayerMarquees?.());
 
         pageLoading.hidden = true;
+        if (view === 'about') loadAboutArtistPortraits();
         if (view === 'home') {
           if (activeGenre.startsWith('search:')) loadCatalog(activeGenre, activeSearchTerm);
           else loadGenre(activeGenre);
@@ -1034,21 +1357,8 @@
     });
 
     restoreActiveView();
+    if (document.body.classList.contains('view-about')) loadAboutArtistPortraits();
   </script>
-
-  <script>
-    // Remote portraits: if one fails to load (offline), drop it so the monogram tile shows.
-    document.querySelectorAll('.about-voice-media img').forEach((image) => {
-      const revealMonogram = () => {
-        image.remove();
-      };
-
-      image.addEventListener('error', revealMonogram);
-
-      if (image.complete && image.naturalWidth === 0) revealMonogram();
-    });
-  </script>
-
 
 </body>
 </html>

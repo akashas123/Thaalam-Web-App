@@ -19,12 +19,6 @@ const songInfoArtist =
 const songInfoDetails =
   document.getElementById('songInfoDetails');
 
-const songInfoBackground =
-  document.getElementById('songInfoBackground');
-
-const songInfoWikiLink =
-  document.getElementById('songInfoWikiLink');
-
 const sleepTimerButton =
   document.getElementById('sleepTimerButton');
 
@@ -180,21 +174,6 @@ function saveStoredSongInfo(key, entry) {
   } catch {
     // Song information still works if storage is unavailable or full.
   }
-}
-
-function showSongInfoBackground(background) {
-  if (!background?.url) {
-    songInfoBackground.textContent = '';
-    songInfoBackground.hidden = true;
-    songInfoWikiLink.hidden = true;
-    return;
-  }
-
-  songInfoBackground.textContent = background.summary || '';
-  songInfoBackground.hidden = !background.summary;
-  songInfoWikiLink.href = background.url;
-  songInfoWikiLink.textContent = `Source: Wikipedia - ${background.title}`;
-  songInfoWikiLink.hidden = false;
 }
 
 function getStoredRatings() {
@@ -482,15 +461,6 @@ function updateSongInfo() {
     ''
   );
 
-  songInfoBackground.textContent =
-    '';
-
-  songInfoBackground.hidden =
-    true;
-
-  songInfoWikiLink.hidden =
-    true;
-
   const song = window.currentNowPlayingSong;
   if (!song?.title || !song?.artist) {
     showSongInfo('', '', 'Track details are unavailable.');
@@ -511,7 +481,6 @@ function updateSongInfo() {
     cached?.artist || song.artist,
     cached?.details || fallbackDetails
   );
-  showSongInfoBackground(cached?.background);
 }
 
 async function prefetchSongInfo(song) {
@@ -531,10 +500,6 @@ async function prefetchSongInfo(song) {
     'Genre: N/A',
     'Duration: N/A'
   ].join('\n');
-
-  const wikipediaRequest = cached?.wikiChecked
-    ? Promise.resolve(cached.background || null)
-    : fetchWikipediaSongBackground(song).catch(() => null);
 
   try {
     const musicData = await searchItunes(`${song.artist} ${song.title}`);
@@ -590,128 +555,12 @@ async function prefetchSongInfo(song) {
     });
   }
 
-  const background = await wikipediaRequest;
-  saveStoredSongInfo(cacheKey, {
-    background,
-    wikiChecked: true
-  });
   prefetchingSongInfo.delete(cacheKey);
 
   const currentSongKey = getTrackRatingKey(window.currentNowPlayingSong);
   if (songInfoDialog?.open && currentSongKey === cacheKey) {
     updateSongInfo();
   }
-}
-
-async function fetchWikipediaSongBackground(
-  song
-) {
-  const artist =
-    song.artist
-      .split(',')[0]
-      .trim();
-
-  const search =
-    new URLSearchParams({
-      action: 'query',
-      list: 'search',
-      srsearch:
-        `"${song.title}" ${artist} song`,
-      srlimit: '5',
-      format: 'json',
-      origin: '*'
-    });
-
-  const searchResponse =
-    await fetch(
-      `https://en.wikipedia.org/w/api.php?${search}`
-    );
-
-  if (!searchResponse.ok) {
-    throw new Error(
-      'Wikipedia search failed.'
-    );
-  }
-
-  const searchData =
-    await searchResponse.json();
-
-  const normalize =
-    (value) =>
-      value
-        ?.normalize('NFKD')
-        .replace(
-          /[\u0300-\u036f]/g,
-          ''
-        )
-        .toLowerCase()
-        .replace(
-          /[^a-z0-9]/g,
-          ''
-        ) || '';
-
-  const normalizedTitle =
-    normalize(
-      song.title
-    );
-
-  const article =
-    searchData.query
-      ?.search
-      ?.find(
-        (result) =>
-          normalize(
-            result.title
-          ).startsWith(
-            normalizedTitle
-          )
-      );
-
-  if (!article) {
-    return null;
-  }
-
-  const summaryQuery =
-    new URLSearchParams({
-      action: 'query',
-      prop: 'extracts',
-      exintro: '1',
-      explaintext: '1',
-      pageids: String(
-        article.pageid
-      ),
-      format: 'json',
-      origin: '*'
-    });
-
-  const summaryResponse =
-    await fetch(
-      `https://en.wikipedia.org/w/api.php?${summaryQuery}`
-    );
-
-  if (!summaryResponse.ok) {
-    throw new Error(
-      'Wikipedia summary failed.'
-    );
-  }
-
-  const summaryData =
-    await summaryResponse.json();
-
-  const page =
-    summaryData.query
-      ?.pages?.[
-        article.pageid
-      ];
-
-  return page?.extract
-    ? {
-        title: page.title,
-        summary: page.extract,
-        url:
-          `https://en.wikipedia.org/?curid=${article.pageid}`
-      }
-    : null;
 }
 
 window.addEventListener('thaalam:nowplaying', (event) => {
