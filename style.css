@@ -1268,6 +1268,10 @@ body::after {
   -webkit-user-select: none;
 }
 
+[class~="album-art-card"] img.is-youtube-thumbnail {
+  transform: scale(1.35);
+}
+
 [class~="album-art-card"] img:focus-visible {
   outline: 3px solid currentColor;
   outline-offset: -3px;

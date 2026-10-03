@@ -27,6 +27,8 @@ let selectedDuration = 0;
 let songRequestId = 0;
 let videoCandidates = [];
 let videoCandidateIndex = 0;
+let onDemandArtworkRequestId = 0;
+const albumArtworkCache = new Map();
 
 /* Every on-demand song played this session, in order. The previous/next
    buttons walk this list; the live feed is not part of it. */
@@ -35,8 +37,8 @@ let onDemandQueueIndex = -1;
 let isScrubbing = false;
 let scrubTargetSeconds = 0;
 
-/* Similar-songs list for the track that is currently playing, fetched as soon
-   as a track starts so the next one is ready the moment this one ends. */
+/* YouTube Music's generated next queue, fetched as soon as a track starts so
+   the next eligible Topic audio track is ready when playback ends. */
 let relatedTrackCache = [];
 let relatedTrackCursor = 0;
 let isFetchingRelated = false;
@@ -51,10 +53,10 @@ const playedVideoIds = new Set();
    closing the tab, so the current track is written to storage as it plays and
    replayed on the next load. Only the "Back to Live" button clears it. */
 const ON_DEMAND_STORAGE_KEY = 'thaalam-on-demand-session-v1';
-const YOUTUBE_SEARCH_CACHE_PREFIX = 'thaalam-youtube-search-v9:';
+const YOUTUBE_SEARCH_CACHE_PREFIX = 'thaalam-youtube-search-v16:';
 const YOUTUBE_SEARCH_CACHE_TTL = 6 * 60 * 60 * 1000;
 const NON_YOUTUBE_MUSIC_TITLE = /\b(?:official\s+)?music\s+video\b|\b(?:official\s+)?video\b|\bvisuali[sz]er\b|\blyrics?\b|\blive\b|\bkaraoke\b|\bcover\b|\bperformance\b|\breaction\b/i;
-const UNOFFICIAL_MIX_TITLE = /\b(?:unofficial|remix(?:es)?|mix(?:es)?|mash[ -]?up|medley|compilation|playlist|slowed(?:\s+\+?\s+reverb)?|sped\s*up|nightcore|bootleg|fan[ -]?made|edit|1\s*hour|extended)\b/i;
+const UNOFFICIAL_MIX_TITLE = /\b(?:unofficial|remix(?:es)?|mix(?:es)?|mash[ -]?up|medley|compilation|playlist|slowed(?:\s+\+?\s+reverb)?|sped\s*up|nightcore|bootleg|fan[ -]?made|edit|1\s*hour|extended|instrumental|8d(?:\s+audio)?|bass\s+boosted|reverb)\b/i;
 
 /* TEMPORARY DIAGNOSTIC: set to false to silence. Reports what is written, what
    is read back, and which branch the restore actually takes. */
@@ -120,6 +122,19 @@ async function searchYouTubeVideos(query, maxResults = 10) {
   return items;
 }
 
+async function fetchYouTubeAutoplayQueue(videoId, playlistId = '') {
+  const url = new URL('/api/youtube-autoplay', window.location.origin);
+  url.searchParams.set('videoId', videoId);
+  if (playlistId) url.searchParams.set('playlistId', playlistId);
+  const response = await fetch(url, { cache: 'no-store' });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(payload?.error || `YouTube autoplay failed (${response.status}).`);
+  return {
+    playlistId: payload?.playlistId || playlistId,
+    tracks: Array.isArray(payload?.results) ? payload.results : []
+  };
+}
+
 function normalizeYouTubeText(value) {
   return String(value || '')
     .normalize('NFKD')
@@ -134,6 +149,38 @@ function normalizeYouTubeSongTitle(value) {
     .replace(/\s+(?:with|feat(?:uring)?|ft\.?)\s+.+$/i, '')
     .replace(/\s*\[(?:official\s+)?audio\]/gi, ''));
 }
+
+function lookupAlbumArtwork(title, artist) {
+  const query = `${title || ''} ${artist || ''}`.trim();
+  if (!query) return Promise.resolve('');
+  const key = query.toLowerCase();
+  if (albumArtworkCache.has(key)) return albumArtworkCache.get(key);
+  const promise = new Promise((resolve) => {
+    const callbackName = `thaalamArtwork${Date.now()}${Math.random().toString(36).slice(2)}`;
+    const request = document.createElement('script');
+    const timeout = window.setTimeout(() => finish(''), 10000);
+    let settled = false;
+    function finish(url) {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      delete window[callbackName];
+      request.remove();
+      resolve(url || '');
+    }
+    window[callbackName] = (data) => {
+      const result = (data?.results || []).find((item) => item.artworkUrl100);
+      finish(result?.artworkUrl100?.replace(/^http:/, 'https:').replace(/\d+x\d+bb\./, '600x600bb.') || '');
+    };
+    request.onerror = () => finish('');
+    const params = new URLSearchParams({ term: query, entity: 'song', media: 'music', limit: '8', callback: callbackName });
+    request.src = `https://itunes.apple.com/search?${params}`;
+    document.head.appendChild(request);
+  });
+  albumArtworkCache.set(key, promise);
+  return promise;
+}
+window.lookupAlbumArtwork = lookupAlbumArtwork;
 
 async function findYouTubeSong(song) {
   const title = song.trackName || '';
@@ -158,15 +205,20 @@ async function findYouTubeSong(song) {
         name !== normalizeYouTubeText(artist) && candidateTitle.includes(name));
       const albumMatch = Boolean(normalizedAlbum && candidateAlbum &&
         (candidateAlbum.includes(normalizedAlbum) || normalizedAlbum.includes(candidateAlbum)));
-      const lowQualityMatch = NON_YOUTUBE_MUSIC_TITLE.test(item.title);
+      const rejectedTitle = NON_YOUTUBE_MUSIC_TITLE.test(item.title) ||
+        UNOFFICIAL_MIX_TITLE.test(item.title);
+      const officialAudio = /\b(?:official\s+)?(?:original\s+)?audio\b/i.test(item.title);
       return {
         ...item,
         score: (exactTitle ? 100 : titleMatch ? 65 : 0) +
           (artistMatch ? 30 : 0) + (featuredArtistMatch ? 8 : 0) +
           (albumFirst && albumMatch ? 24 : albumMatch ? 12 : 0) +
-          Math.max(0, 20 - index) - (lowQualityMatch ? 40 : 0)
+          (officialAudio ? 15 : 0) + Math.max(0, 20 - index) -
+          (rejectedTitle ? 1000 : 0)
       };
-    }).filter((item) => item.videoId)
+    }).filter((item) => item.videoId && item.topicAudio === true &&
+      !NON_YOUTUBE_MUSIC_TITLE.test(item.title) &&
+      !UNOFFICIAL_MIX_TITLE.test(item.title))
       .sort((a, b) => b.score - a.score);
 
   // Search the named album first, then retry with exact-title variants. Keep
@@ -548,9 +600,11 @@ function updateOnDemandMetadata(song, video) {
     .replace(/\s-\sTopic$/i, '')
     .trim();
   const album = song.collectionName || '';
-  const artwork = song.artworkUrl100
+  const catalogArtwork = song.artworkUrl100
     ?.replace(/^http:/, 'https:')
     .replace(/\d+x\d+bb\./, '600x600bb.') || '';
+  const youtubeArtwork = String(video.thumbnail || '').replace(/^http:/, 'https:');
+  const artwork = catalogArtwork || youtubeArtwork;
   const nowPlaying = {
     title,
     artist,
@@ -576,13 +630,60 @@ function updateOnDemandMetadata(song, video) {
   onDemandTrack.textContent = `${title} – ${artist}`;
   onDemandMiniTitle.textContent = title;
   onDemandMiniArtist.textContent = artist;
-  if (artwork) {
-    onDemandArtwork.src = artwork;
-    onDemandMiniArtwork.src = artwork;
-    // Match the live-radio UX: tint the page gradient from the album art.
-    const colorRequestId = window.bumpArtworkRequestId?.() ?? 0;
-    window.updateAlbumColors?.(artwork, colorRequestId);
-  }
+  // Invalidate any live-radio image load as soon as on-demand metadata changes.
+  // Preload before swapping so a failed/slow thumbnail cannot leave the prior
+  // track's artwork visible (a common case when the YouTube thumbnail is stale).
+  const colorRequestId = window.bumpArtworkRequestId?.() ?? 0;
+  const artworkRequestId = ++onDemandArtworkRequestId;
+  onDemandArtwork.src = 'album-placeholder.svg?v=2';
+  onDemandMiniArtwork.src = 'album-placeholder.svg?v=2';
+
+  // Prefer iTunes album art; use the Topic upload artwork if iTunes has none.
+  const videoIdArtwork = video.videoId
+    ? `https://i.ytimg.com/vi/${encodeURIComponent(video.videoId)}/hqdefault.jpg`
+    : '';
+  const candidates = [...new Set([catalogArtwork, youtubeArtwork, videoIdArtwork]
+    .filter(Boolean)
+    .map((url) => String(url).replace(/^http:/, 'https:')))];
+  const tryArtwork = (index) => {
+    if (artworkRequestId !== onDemandArtworkRequestId) return;
+    if (index >= candidates.length) {
+      if (song._didArtworkLookup) return;
+      song._didArtworkLookup = true;
+      Promise.resolve(window.lookupAlbumArtwork?.(title, artist) || '')
+        .then((url) => {
+          if (!url || artworkRequestId !== onDemandArtworkRequestId) return;
+          candidates.push(url);
+          tryArtwork(index);
+        })
+        .catch(() => {});
+      return;
+    }
+    const image = new Image();
+    image.onload = () => {
+      if (artworkRequestId !== onDemandArtworkRequestId) return;
+      onDemandArtwork.src = candidates[index];
+      onDemandArtwork.classList.toggle(
+        'is-youtube-thumbnail',
+        image.naturalWidth / image.naturalHeight > 1.1
+      );
+      onDemandMiniArtwork.src = candidates[index];
+      window.updateAlbumColors?.(candidates[index], colorRequestId);
+      if (candidates[index] !== artwork) {
+        song.artworkUrl100 = candidates[index];
+        if (currentOnDemandSong === song) persistCurrentOnDemandSession();
+        if (navigator.mediaSession && 'MediaMetadata' in window) {
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title, artist, album,
+            artwork: [{ src: candidates[index], sizes: '512x512' }]
+          });
+        }
+      }
+    };
+    image.onerror = () => tryArtwork(index + 1);
+    image.src = candidates[index];
+  };
+  tryArtwork(0);
   window.updateMarquee?.();
   window.updateMiniPlayerMarquees?.();
   window.dispatchEvent(new CustomEvent('thaalam:nowplaying', { detail: data }));
@@ -652,32 +753,28 @@ function skipOnDemandSong(offset) {
 onDemandPrevButton?.addEventListener('click', () => skipOnDemandSong(-1));
 onDemandNextButton?.addEventListener('click', () => skipOnDemandSong(1));
 
-/* Fetches embeddable tracks from YouTube search. Returns [] rather than
-   throwing so an unavailable search simply leaves the player stopped. */
+/* Fetches YouTube Music's own next queue, retaining only Topic-style audio. */
 async function fetchRelatedTracks(videoId, song) {
   if (!videoId && !song?.artistName) return [];
   try {
-    const artist = String(song?.artistName || '').replace(/\s-\sTopic$/i, '');
-    // iTunes labels many unrelated South Asian languages simply as "Indian".
-    // Seed with this exact song and artist so YouTube Music can find closer
-    // language/style matches without broadening autoplay to the whole region.
-    const relatedQuery = [song?.trackName, artist, 'similar songs official audio']
-      .filter(Boolean).join(' ');
-    const tracks = await searchYouTubeVideos(relatedQuery, 25);
+    // The first request starts a YouTube Music radio mix; later requests keep
+    // using the returned mix playlist so recommendations can span artists.
+    const queue = await fetchYouTubeAutoplayQueue(videoId, song?.youtubePlaylistId || '');
+    const tracks = queue.tracks;
     return tracks
-      .filter((track) =>
-        track.videoId !== videoId &&
+      .filter((track) => track.topicAudio === true &&
         !playedVideoIds.has(track.videoId) &&
         !NON_YOUTUBE_MUSIC_TITLE.test(track.title) &&
-        !UNOFFICIAL_MIX_TITLE.test(track.title)
-      )
+        !UNOFFICIAL_MIX_TITLE.test(track.title))
       .map((track) => ({
         videoId: track.videoId,
         title: track.title,
         artist: track.artist,
         thumbnail: track.thumbnail,
+        topicAudio: track.topicAudio,
         primaryGenreName: song?.primaryGenreName || '',
-        duration: ''
+        duration: track.duration || '',
+        playlistId: queue.playlistId || song?.youtubePlaylistId || ''
       }));
   } catch (error) {
     console.warn('Autoplay: YouTube related search failed.', error);
@@ -685,8 +782,7 @@ async function fetchRelatedTracks(videoId, song) {
   }
 }
 
-/* Kicks off a background lookup for the track that just started, so the queue
-   of similar songs is already populated by the time it finishes playing. */
+/* Kicks off a background queue lookup as soon as the current track starts. */
 function prefetchRelatedTracks(videoId, song) {
   if (!videoId && !song?.artistName) return;
 
@@ -716,7 +812,7 @@ function relatedTrackToSong(track) {
     artistName: (track.artist || '').replace(/\s-\sTopic$/i, '').trim(),
     collectionName: '',
     primaryGenreName: track.primaryGenreName || '',
-    artworkUrl100: track.artworkUrl100 || track.thumbnail || '',
+    artworkUrl100: track.artworkUrl100 || '',
     trackTimeMillis: (parseVideoDuration(track.duration) || 0) * 1000
   };
 }
@@ -745,8 +841,7 @@ function prefetchUpcomingTrackArtwork() {
     .forEach((track) => { void prefetchTrackArtwork(track); });
 }
 
-/* Called when a track ends. Plays the next prefetched similar song straight
-   away, with no waiting on the network. */
+/* Called when a track ends. Plays the next prefetched YouTube Music queue item. */
 function advanceToSimilarSong() {
   if (!window.onDemandPlaybackActive) return;
 
@@ -757,7 +852,7 @@ function advanceToSimilarSong() {
     return;
   }
 
-  // The prefetch has not landed yet (or returned nothing). Retry briefly rather
+  // The prefetch has not landed yet (or returned no eligible audio). Retry briefly rather
   // than leaving the listener at a silent dead end, then say so on screen.
   let attempts = 0;
   window.clearInterval(autoplayRetryTimer);
@@ -776,12 +871,12 @@ function advanceToSimilarSong() {
     }
 
     attempts += 1;
-    if (attempts > 20 || (!isFetchingRelated && attempts > 4)) {
+    if (attempts > 100 || (!isFetchingRelated && attempts > 12)) {
       window.clearInterval(autoplayRetryTimer);
       onDemandModeLabel.textContent = 'ON DEMAND';
       // Surface the reason in the station slot: the mode label is hidden while
       // on-demand is active, so without this the player just stops silently.
-      onDemandStation.textContent = 'No more similar songs';
+      onDemandStation.textContent = 'No more official audio in YouTube autoplay';
     }
   }, 250);
 }
@@ -808,6 +903,7 @@ async function playRelatedTrack(track) {
   videoCandidateIndex = 0;
 
   // Record the track before it loads, so a refresh mid-load still restores.
+  song.youtubePlaylistId = track.playlistId || '';
   setCurrentOnDemandTrack(song, track.videoId);
   persistCurrentOnDemandSession();
 
@@ -823,14 +919,24 @@ async function playRelatedTrack(track) {
   await loadVideo(track.videoId, requestId);
   if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
   updatePlaybackProgress();
-  // Chain: start pulling similar songs for this track straight away, so the
-  // list is ready long before this one finishes.
+  // Chain: fetch the generated next queue for this track immediately.
   playedVideoIds.add(track.videoId);
   prefetchRelatedTracks(track.videoId, song);
 }
 
 async function startOnDemandSong(song) {
   if (!song?.trackName) return;
+  const artworkPromise = song.artworkUrl100
+    ? Promise.resolve(song.artworkUrl100)
+    : lookupAlbumArtwork(song.trackName, song.artistName);
+  void artworkPromise.then((artworkUrl) => {
+    if (!artworkUrl) return;
+    song.artworkUrl100 = artworkUrl;
+    if (currentOnDemandSong === song) {
+      persistCurrentOnDemandSession();
+      updateOnDemandMetadata(song, { videoId: currentOnDemandVideoId });
+    }
+  });
   const requestId = ++songRequestId;
   selectedDuration = Number(song.trackTimeMillis) / 1000 || 0;
   enqueueOnDemandSong(song);
@@ -839,6 +945,7 @@ async function startOnDemandSong(song) {
   scrubTargetSeconds = 0;
   playbackProgressBar?.classList.remove('is-scrubbing');
   window.onDemandPlaybackActive = true;
+  window.setOnDemandAudioQuality?.(true);
   document.body.classList.add('on-demand-active');
   window.pauseLiveStreamForOnDemand?.();
   returnToLiveButton.hidden = false;
@@ -858,6 +965,8 @@ async function startOnDemandSong(song) {
     videoCandidates = [...new Set([video.videoId, ...(video.alternatives || [])])];
     videoCandidateIndex = 0;
     selectedDuration = parseVideoDuration(video.duration) || selectedDuration;
+    // Begin a radio mix for this selected track, not the source album playlist.
+    song.youtubePlaylistId = '';
     setCurrentOnDemandTrack(song, video.videoId);
     persistCurrentOnDemandSession();
     updateOnDemandMetadata(song, video);
@@ -913,6 +1022,7 @@ async function restoreOnDemandSession() {
   // Enter the same on-demand state a fresh selection would, before any live
   // data arrives, so the radio cannot paint over the restored song.
   window.onDemandPlaybackActive = true;
+  window.setOnDemandAudioQuality?.(true);
   document.body.classList.add('on-demand-active');
   window.pauseLiveStreamForOnDemand?.();
   returnToLiveButton.hidden = false;
@@ -993,9 +1103,11 @@ function returnToLive() {
   setCurrentOnDemandTrack(null, '');
   window.onDemandPlaying = false;
   window.onDemandPlaybackActive = false;
+  window.setOnDemandAudioQuality?.(false);
   document.body.classList.remove('on-demand-active');
   onDemandMount.hidden = true;
   onDemandArtwork.hidden = false;
+  onDemandArtwork.classList.remove('is-youtube-thumbnail');
   returnToLiveButton.hidden = true;
   onDemandModeLabel.textContent = 'LIVE';
   onDemandStation.textContent = 'Thaalam 24x7';

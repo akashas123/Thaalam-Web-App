@@ -311,6 +311,23 @@ function updateStreamQuality(levelIndex, levels = []) {
   streamQuality.setAttribute('aria-label', `Current stream quality: ${label.toLowerCase()}`);
   streamQuality.textContent = label;
 }
+
+window.setOnDemandAudioQuality = (isOnDemand) => {
+  if (!streamQuality) return;
+
+  if (isOnDemand) {
+    streamQuality.classList.remove('is-offline');
+    streamQuality.textContent = 'AUTO';
+    streamQuality.setAttribute(
+      'aria-label',
+      'On-demand audio quality: automatic (selected by YouTube)'
+    );
+    return;
+  }
+
+  setStreamOffline(isStreamOffline);
+};
+
 async function startLiveStream() {
   if (isConnecting || !radio || window.onDemandPlaybackActive) return;
   isConnecting = true;
