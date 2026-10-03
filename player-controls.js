@@ -690,6 +690,38 @@ function searchItunes(
   );
 }
 
+window.lookupAlbumArtwork = async function (title, artist) {
+  const cleanArtist = String(artist || '').replace(/\s-\sTopic$/i, '').trim();
+  if (!title || !cleanArtist) return '';
+
+  try {
+    const response = await searchItunes(`${cleanArtist} ${title}`);
+    const normalize = (value) => String(value || '')
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
+    const requestedTitle = normalize(title);
+    const requestedArtist = normalize(cleanArtist.split(',')[0]);
+    const ranked = (response.results || []).map((track) => {
+      const candidateTitle = normalize(track.trackName);
+      const candidateArtist = normalize(track.artistName);
+      const titleMatches = candidateTitle === requestedTitle ||
+        candidateTitle.includes(requestedTitle) || requestedTitle.includes(candidateTitle);
+      const artistMatches = candidateArtist.includes(requestedArtist) ||
+        requestedArtist.includes(candidateArtist);
+      return { track, score: (titleMatches ? 4 : 0) + (artistMatches ? 2 : 0) };
+    }).filter((candidate) => candidate.score >= 4)
+      .sort((first, second) => second.score - first.score);
+
+    return ranked[0]?.track?.artworkUrl100
+      ?.replace(/^http:/, 'https:')
+      .replace(/\d+x\d+bb\./, '600x600bb.') || '';
+  } catch {
+    return '';
+  }
+};
+
 function getStoredSleepTimer() {
   try {
     const stored =

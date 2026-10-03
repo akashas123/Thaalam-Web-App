@@ -55,8 +55,14 @@ if (window.latestNowPlayingData) {
 
 if (navigator.mediaSession) {
   try {
-    navigator.mediaSession.setActionHandler('play', () => metadataRadio.play().catch(() => {}));
-    navigator.mediaSession.setActionHandler('pause', () => metadataRadio.pause());
+    navigator.mediaSession.setActionHandler('play', () => {
+      if (window.onDemandPlaybackActive) window.toggleOnDemandPlayback?.();
+      else metadataRadio.play().catch(() => {});
+    });
+    navigator.mediaSession.setActionHandler('pause', () => {
+      if (window.onDemandPlaybackActive) window.toggleOnDemandPlayback?.(false);
+      else metadataRadio.pause();
+    });
   } catch (error) {
     console.log('Media controls are not supported:', error);
   }

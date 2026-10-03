@@ -236,6 +236,11 @@ function updateTrackTime() {
     return;
   }
 
+  // On-demand playback owns the elapsed/duration readout (see youtube-player.js).
+  if (window.onDemandPlaybackActive) {
+    return;
+  }
+
   let elapsed = getAudibleTrackElapsed();
 
   if (
@@ -256,15 +261,19 @@ function updateTrackTime() {
 }
 
 function updateActiveLyric() {
+  const onDemand = Boolean(window.onDemandPlaybackActive);
+
   if (
-    !streamIsActive ||
+    (!streamIsActive && !onDemand) ||
     !syncedLines.length ||
     !currentSongId
   ) {
     return;
   }
 
-  const elapsed = getAudibleTrackElapsed();
+  const elapsed = onDemand
+    ? Math.max(0, Number(window.getOnDemandTrackClock?.()?.elapsed) || 0)
+    : getAudibleTrackElapsed();
 
   let activeIndex = -1;
 
@@ -293,7 +302,8 @@ function updateActiveLyric() {
       window.matchMedia(
         '(max-width: 56.1875rem), (pointer: coarse)'
       ).matches &&
-      mobilePlayerViewChosen
+      mobilePlayerViewChosen &&
+      !onDemand
     ) {
       mobilePlayerViewChosen = false;
 
@@ -356,7 +366,7 @@ function smoothlyRevealLyric(lineElement) {
     );
 
   function animateScroll(now) {
-    if (!streamIsActive) {
+    if (!streamIsActive && !window.onDemandPlaybackActive) {
       lyricScrollFrame = 0;
       return;
     }
@@ -594,6 +604,8 @@ function updateLyrics(
     if (songChanged) {
       currentSongId =
         songId;
+      activeLyricIndex = -1;
+      lyricsContent.scrollTop = 0;
     }
 
     renderLyrics(lyrics);
@@ -634,7 +646,8 @@ async function fetchLyrics(nowPlayingData = null) {
   if (
     (!streamIsActive ||
       lyricsRadio.paused) &&
-    hasFetchedLyrics
+    hasFetchedLyrics &&
+    !window.onDemandPlaybackActive
   ) {
     return;
   }
@@ -974,7 +987,7 @@ window.addEventListener('thaalam:nowplaying', (event) => {
 });
 
 setInterval(() => {
-  if (!lyricsRadio.paused) {
+  if (!lyricsRadio.paused || window.onDemandPlaybackActive) {
     updateActiveLyric();
     updateTrackTime();
   }

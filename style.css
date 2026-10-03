@@ -39,7 +39,7 @@ body {
   position: fixed;
   inset: -35%;
   z-index: 0;
-  pointer-events: none;
+  cursor: pointer;
 
   background:
     radial-gradient(
@@ -902,16 +902,9 @@ body::after {
     display: block;
   }
 
-  .genre-art-button {
-    display: block;
+  .genre-card-media {
+    position: relative;
     width: 100%;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
   }
 
   .genre-card-art-frame {
@@ -939,16 +932,71 @@ body::after {
     opacity: 1;
   }
 
-  .genre-art-button:hover .genre-card-art-frame,
-  .genre-art-button:focus-visible .genre-card-art-frame {
+  .genre-card-media:hover .genre-card-art-frame {
     border-color: rgba(255, 255, 255, 0.3);
     box-shadow: 0 0.9rem 1.8rem rgba(0, 0, 0, 0.3);
   }
 
-  .genre-art-button:focus-visible {
+  .genre-play-button,
+  .genre-info-button {
+    position: absolute;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.72);
+    background: rgba(16, 18, 20, 0.68);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+  }
+
+  .genre-play-button {
+    top: 50%;
+    left: 50%;
+    width: 3rem;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  .genre-play-button svg {
+    width: 1.35rem;
+    height: 1.35rem;
+    fill: currentColor;
+  }
+
+  .genre-info-button {
+    right: 0.65rem;
+    bottom: 0.65rem;
+    width: 1.55rem;
+    height: 1.55rem;
+    border-radius: 50%;
+    font: 700 0.78rem/1 system-ui, sans-serif;
+    text-shadow: none;
+  }
+
+  .genre-play-button:hover {
+    background: rgba(16, 18, 20, 0.88);
+    border-color: #fff;
+    transform: translate(-50%, -50%) scale(1.08);
+  }
+
+  .genre-info-button:hover {
+    background: rgba(16, 18, 20, 0.88);
+    border-color: #fff;
+    transform: scale(1.08);
+  }
+
+  .genre-play-button:focus-visible,
+  .genre-info-button:focus-visible {
     outline: 2px solid rgba(255, 255, 255, 0.8);
     outline-offset: 3px;
-    border-radius: 0.85rem;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -1193,9 +1241,30 @@ body::after {
   position: relative;
 }
 
+.on-demand-player-mount {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  background: #000;
+  /* The album artwork masks the player, so its controls must not be clickable. */
+  pointer-events: none;
+}
+
+.on-demand-player-frame,
+.on-demand-player-mount iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
 [class~="album-art-card"] img {
   width: 100%;
   height: 100%;
+
+  /* Sit above the on-demand YouTube iframe so the album art masks the video
+     player while the audio stream keeps playing underneath. */
+  position: relative;
+  z-index: 5;
 
   object-fit: cover;
 
@@ -1207,6 +1276,15 @@ body::after {
 
   user-select: none;
   -webkit-user-select: none;
+}
+
+[class~="album-art-card"] img.is-youtube-thumbnail {
+  transform: scale(1.35);
+}
+
+[class~="album-art-card"] img:focus-visible {
+  outline: 3px solid currentColor;
+  outline-offset: -3px;
 }
 
 .song-feedback {
@@ -1282,6 +1360,15 @@ body::after {
   text-shadow:
     0 0.125rem 0.625rem
     rgba(0, 0, 0, 0.45);
+}
+
+/* Keeps the station label and the "Back to Live" button on one line, above the
+   live/progress bar. */
+.station-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 0.25rem;
 }
 
 [class~="tagline"] {
@@ -1384,6 +1471,137 @@ body::after {
   text-shadow:
     0 0.125rem 0.625rem
     rgba(0, 0, 0, 0.45);
+}
+
+.progress-bar {
+  display: none;
+
+  position: relative;
+
+  flex: 1 1 auto;
+  width: 100%;
+  height: 0.25rem;
+
+  border-radius: 999px;
+
+  background: rgba(255, 255, 255, 0.16);
+
+  overflow: hidden;
+
+  pointer-events: none;
+
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.progress-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+
+  width: 0%;
+
+  border-radius: inherit;
+
+  background:
+    linear-gradient(
+      to right,
+      rgba(255, 255, 255, 0.55),
+      rgba(255, 255, 255, 0.95)
+    );
+
+  box-shadow:
+    0 0 0.75rem
+    rgba(255, 255, 255, 0.25);
+
+  transition: width 0.25s linear;
+}
+
+/* The live radio bar (lines + "LIVE") is the default. When a song is playing
+   on demand, swap it for the real track progress bar. */
+body.on-demand-active .live-row .progress-bar {
+  display: block;
+}
+
+/* Scrubbing is an on-demand affordance only: the live radio bar is a read-only
+   indicator of the song currently on air. The visual bar stays 0.25rem tall
+   while a transparent hit area widens it to a comfortable touch target. */
+body.on-demand-active .live-row .progress-bar {
+  pointer-events: auto;
+  cursor: pointer;
+  /* Let the drag thumb overflow the bar instead of clipping it. */
+  overflow: visible;
+  touch-action: none;
+}
+
+body.on-demand-active .live-row .progress-bar::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: 1.5rem;
+  transform: translateY(-50%);
+}
+
+.progress-thumb {
+  position: absolute;
+  top: 50%;
+  left: 0;
+
+  width: 0.75rem;
+  height: 0.75rem;
+
+  border-radius: 50%;
+
+  background: #fff;
+
+  box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.45);
+
+  /* Positioned from JS; never animate or it lags behind the pointer. */
+  transform: translate(-50%, -50%);
+
+  opacity: 0;
+
+  transition: opacity 0.2s ease;
+
+  pointer-events: none;
+}
+
+body.on-demand-active .progress-thumb {
+  opacity: 1;
+}
+
+/* While dragging, freeze the 500ms progress tick so the fill cannot fight the
+   pointer for control of the bar. */
+body.on-demand-active .progress-bar.is-scrubbing .progress-fill {
+  transition: none;
+}
+
+body.on-demand-active .live-row .live-line,
+body.on-demand-active .live-row .live-text {
+  display: none;
+}
+
+.return-to-live-button {
+  padding: 0.35rem 0.65rem;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font: inherit;
+  font-size: 0.7rem;
+  cursor: pointer;
+  /* The station row can sit inside #nowPlayingHeading, which disables pointer
+     events; re-enable them so the button stays clickable. */
+  pointer-events: auto;
+}
+
+.return-to-live-button:hover,
+.return-to-live-button:focus-visible {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .track-time .stream-quality,
@@ -1648,6 +1866,85 @@ body::after {
 #thumbsUpButton {
   grid-column: 5;
   justify-self: center;
+}
+
+/* On-demand previous/next reuse the grid slots the thumbs up/down occupy, so
+   swapping between them never shifts the rest of the control row. */
+#onDemandPrevButton {
+  grid-column: 1;
+  justify-self: center;
+}
+
+#onDemandNextButton {
+  grid-column: 5;
+  justify-self: center;
+}
+
+.transport-btn {
+  display: none;
+
+  align-items: center;
+  justify-content: center;
+
+  width: 3rem;
+  height: 3rem;
+
+  padding: 0;
+
+  border: 0;
+
+  border-radius: 50%;
+
+  background: transparent;
+
+  color: #fff;
+
+  cursor: pointer;
+
+  opacity: 0.9;
+
+  transition:
+    background 0.2s ease,
+    opacity 0.2s ease,
+    transform 0.2s ease;
+
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Ratings are a live-radio concept: hide them while an on-demand song plays and
+   reveal the transport buttons in their place. */
+body.on-demand-active .rating-btn {
+  display: none;
+}
+
+body.on-demand-active .transport-btn {
+  display: flex;
+}
+
+body.on-demand-active .transport-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.transport-btn svg {
+  display: block;
+
+  width: 1.45rem;
+  height: 1.45rem;
+
+  fill: #fff;
+
+  color: #fff;
+}
+
+.transport-btn:hover:not(:disabled) {
+  background: transparent;
+
+  opacity: 1;
+}
+
+.transport-btn:active:not(:disabled) {
+  transform: scale(0.92);
 }
 
 .rating-btn svg {
@@ -2614,6 +2911,22 @@ body.has-lyrics .lyrics-panel {
 
     max-height: 8.5rem;
   }
+
+  /* Adding the "Back to Live" button turned the schedule label into a flex
+     item, so it no longer inherits the centred text of .app and sat flush
+     against the left edge of the column. Re-centre the row, and let a long
+     label wrap instead of stretching the layout past the viewport. */
+  .station-row {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .station {
+    min-width: 0;
+    max-width: 100%;
+    text-align: center;
+    overflow-wrap: anywhere;
+  }
 }
 
 /* Desktop listening layout: artwork beside the complete player controls. */
@@ -2656,11 +2969,15 @@ body.has-lyrics .lyrics-panel {
     display: none;
   }
 
+  body.view-now-playing .station-row {
+    margin: 3rem 0 0;
+  }
+
   body.view-now-playing .station {
     position: static;
     width: auto;
     max-width: none;
-    margin: 3rem 0 0;
+    margin: 0;
     padding: 0;
     transform: none;
     text-align: left;

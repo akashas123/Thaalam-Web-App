@@ -11,7 +11,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=113">
+  <link rel="stylesheet" href="style.css?v=123">
   <link rel="icon" type="image/png" href="icon-512.png?v=3">
   <link rel="apple-touch-icon" href="icon-192.png?v=3">
 
@@ -134,7 +134,7 @@
 
   <link rel="manifest" href="manifest.json">
 
-  <meta name="theme-color" content="#111318">
+  <meta name="theme-color" content="#07373b">
 </head>
 
 <body class="view-now-playing">
@@ -298,10 +298,18 @@
 
     <div class="album-art-card">
       <img id="albumArtImg" src="album-placeholder.svg?v=2" alt="Album artwork placeholder">
+      <div class="on-demand-player-mount" id="onDemandPlayerMount" hidden>
+        <div class="on-demand-player-frame" id="onDemandPlayerFrame"></div>
+      </div>
     </div>
 
-    <div class="station" id="stationName">
-      Thaalam 24x7
+    <div class="station-row" id="stationRow">
+      <div class="station" id="stationName">
+        Thaalam 24x7
+      </div>
+      <button class="return-to-live-button" id="returnToLiveButton" type="button" hidden>
+        Back to Live
+      </button>
     </div>
 
     <div class="tagline now-playing-track">
@@ -316,6 +324,19 @@
       </div>
 
       <div class="live-line"></div>
+
+      <div
+        class="progress-bar"
+        id="progressBar"
+        role="progressbar"
+        aria-label="Track progress"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        aria-valuenow="0"
+      >
+        <div class="progress-fill" id="progressFill"></div>
+        <span class="progress-thumb" id="progressThumb" aria-hidden="true"></span>
+      </div>
     </div>
 
     <div
@@ -331,6 +352,21 @@
     <audio id="radio"></audio>
 
     <div class="player-controls">
+
+      <button
+        class="transport-btn"
+        id="onDemandPrevButton"
+        type="button"
+        aria-label="Previous song"
+        title="Previous song"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <path d="M6 6h2v12H6zm12 0-8.5 6L18 18z"/>
+        </svg>
+      </button>
 
       <button
         class="rating-btn"
@@ -387,6 +423,21 @@
           aria-hidden="true"
         >
           <path d="M20.2 15.1A8.5 8.5 0 0 1 8.9 3.8 8.6 8.6 0 1 0 20.2 15.1Z"/>
+        </svg>
+      </button>
+
+      <button
+        class="transport-btn"
+        id="onDemandNextButton"
+        type="button"
+        aria-label="Next song"
+        title="Next song"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <path d="M16 6h2v12h-2zM6 6l8.5 6L6 18z"/>
         </svg>
       </button>
 
@@ -597,28 +648,33 @@
   </aside>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
-  <script src="script.js?v=33"></script>
-  <script src="audio-recovery.js?v=1"></script>
-  <script src="marquee.js?v=2"></script>
-  <script src="media-metadata.js?v=5"></script>
-  <script src="player-controls.js?v=29"></script>
-  <script src="lyrics.js?v=29"></script>
+  <script src="script.js?v=38"></script>
+  <script src="youtube-player.js?v=47"></script>
+  <script src="audio-recovery.js?v=2"></script>
+  <script src="marquee.js?v=3"></script>
+  <script src="media-metadata.js?v=7"></script>
+  <script src="player-controls.js?v=31"></script>
+  <script src="lyrics.js?v=32"></script>
   <script>
     const desktopNavigation =
       window.matchMedia('(min-width: 56.25rem) and (pointer: fine)');
+    const mobilePlayerLayout =
+      window.matchMedia('(max-width: 56.1875rem), (pointer: coarse)');
     const playerView = document.getElementById('playerView');
     const nowPlayingHeading = document.getElementById('nowPlayingHeading');
     const stationName = document.getElementById('stationName');
+    const stationRow = document.getElementById('stationRow');
     const playerTagline = playerView?.querySelector('.tagline');
     const streamQualityBadge = document.getElementById('streamQuality');
     const playerTrackTime = document.getElementById('trackTime');
     const playerTrackDuration = document.getElementById('trackDuration');
     const placeStationForViewport = () => {
-      if (!stationName || !playerView || !nowPlayingHeading) return;
+      const stationTarget = stationRow || stationName;
+      if (!stationTarget || !playerView || !nowPlayingHeading) return;
       if (desktopNavigation.matches) {
-        nowPlayingHeading.appendChild(stationName);
+        nowPlayingHeading.appendChild(stationTarget);
       } else if (playerTagline) {
-        playerView.insertBefore(stationName, playerTagline);
+        playerView.insertBefore(stationTarget, playerTagline);
       }
     };
     const placeStreamQualityForViewport = () => {
@@ -631,7 +687,17 @@
     };
     placeStationForViewport();
     placeStreamQualityForViewport();
+    const returnToLiveOnMobile = () => {
+      if (mobilePlayerLayout.matches && window.onDemandPlaybackActive) {
+        window.returnToLive?.();
+      }
+    };
+    mobilePlayerLayout.addEventListener('change', returnToLiveOnMobile);
+    window.addEventListener('resize', returnToLiveOnMobile, { passive: true });
     desktopNavigation.addEventListener('change', () => {
+      // On-demand controls are desktop-only. Returning to the mobile layout
+      // resumes live radio automatically.
+      returnToLiveOnMobile();
       placeStationForViewport();
       placeStreamQualityForViewport();
       restoreActiveView();
@@ -657,15 +723,17 @@
     const catalogSongInfoDetails = document.getElementById('catalogSongInfoDetails');
     const catalogArtistPortrait = document.getElementById('catalogArtistPortrait');
     const catalogArtistBackground = document.getElementById('catalogArtistBackground');
-    const genreSearchTerms = {
-      pop: 'pop music',
-      rock: 'rock music',
-      'hip-hop': 'hip hop music'
+    const genreFeedIds = {
+      pop: 14,
+      rock: 21,
+      'hip-hop': 18
     };
     const genreResultCache = new Map();
     const artistInfoCache = new Map();
     const artistInfoRequests = new Map();
-    const GENRE_CACHE_KEY = 'thaalam-itunes-genre-cache-v1';
+    // Genre tabs use Apple's genre charts. Versioned separately from the old
+    // text-search and filtered result caches.
+    const GENRE_CACHE_KEY = 'thaalam-itunes-genre-cache-v8';
     const GENRE_CACHE_TTL = 12 * 60 * 60 * 1000;
     const ARTIST_INFO_STORAGE_KEY = 'thaalam-catalog-artist-info-v4';
     const ARTIST_INFO_CACHE_LIMIT = 600;
@@ -951,6 +1019,38 @@
       if (artwork.isConnected && artworkUrl) artwork.src = artworkUrl;
     }
 
+    function diversifyGenreSongs(songs) {
+      const remaining = [...songs];
+      const ordered = [];
+      const recentAlbums = [];
+      const recentArtists = [];
+      const keyFor = (value) => (value || '').trim().toLocaleLowerCase();
+
+      while (remaining.length) {
+        // Keep the chart's ranking as much as possible while spacing tracks
+        // from the same album and avoiding a run of one artist.
+        let index = remaining.findIndex((song) => {
+          const album = keyFor(song.collectionName);
+          const artist = keyFor(song.artistName);
+          return (!album || !recentAlbums.slice(-5).includes(album)) &&
+            (!artist || !recentArtists.slice(-2).includes(artist));
+        });
+        if (index < 0) {
+          index = remaining.findIndex((song) => {
+            const album = keyFor(song.collectionName);
+            return !album || !recentAlbums.slice(-5).includes(album);
+          });
+        }
+        if (index < 0) index = 0;
+
+        const [song] = remaining.splice(index, 1);
+        ordered.push(song);
+        recentAlbums.push(keyFor(song.collectionName));
+        recentArtists.push(keyFor(song.artistName));
+      }
+      return ordered;
+    }
+
     function renderGenreResults(songs) {
       catalogArtworkObserver?.disconnect();
       genreResults.replaceChildren();
@@ -964,15 +1064,30 @@
         return;
       }
 
-      songs.forEach((song) => {
+      diversifyGenreSongs(songs).forEach((song) => {
         const card = document.createElement('article');
         card.className = 'genre-card';
 
-        const artworkButton = document.createElement('button');
-        artworkButton.className = 'genre-art-button';
-        artworkButton.type = 'button';
-        artworkButton.setAttribute('aria-label', `Song information for ${song.trackName || 'song'}`);
-        artworkButton.addEventListener('click', () => openCatalogSongInfo(song));
+        const media = document.createElement('div');
+        media.className = 'genre-card-media';
+
+        const playButton = document.createElement('button');
+        playButton.className = 'genre-play-button';
+        playButton.type = 'button';
+        playButton.setAttribute('aria-label', `Play ${song.trackName || 'song'} on demand`);
+        playButton.title = 'Play on demand';
+        playButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+        playButton.addEventListener('click', () => {
+          window.startOnDemandSong?.(song);
+        });
+
+        const infoButton = document.createElement('button');
+        infoButton.className = 'genre-info-button';
+        infoButton.type = 'button';
+        infoButton.setAttribute('aria-label', `Song information for ${song.trackName || 'song'}`);
+        infoButton.title = 'Song information';
+        infoButton.textContent = 'i';
+        infoButton.addEventListener('click', () => openCatalogSongInfo(song));
 
         const artworkFrame = document.createElement('span');
         artworkFrame.className = 'genre-card-art-frame';
@@ -992,7 +1107,7 @@
               .replace(/\d+x\d+bb\./, '600x600bb.')
           : '';
         artworkFrame.appendChild(artwork);
-        artworkButton.appendChild(artworkFrame);
+        media.append(artworkFrame, playButton, infoButton);
 
         const details = document.createElement('div');
         details.className = 'genre-card-details';
@@ -1012,9 +1127,9 @@
           link.rel = 'noopener noreferrer';
           link.setAttribute('aria-label', `Open ${song.trackName || 'song'} in the iTunes Store`);
           link.append(details);
-          card.append(artworkButton, link);
+          card.append(media, link);
         } else {
-          card.append(artworkButton, details);
+          card.append(media, details);
         }
 
         genreResults.appendChild(card);
@@ -1057,7 +1172,6 @@
         const callbackName = `${callbackPrefix}${requestId}`;
         const query = new URLSearchParams({
           term,
-          country: 'in',
           entity: 'song',
           media: 'music',
           limit: String(limit),
@@ -1086,7 +1200,45 @@
       });
     }
 
-    async function loadCatalog(cacheKey, term) {
+    function searchGenreChart(genreId, requestId, limit = 100) {
+      return new Promise((resolve, reject) => {
+        const callbackName = `thaalamGenreChartCallback${requestId}`;
+        const request = document.createElement('script');
+        let settled = false;
+        const timeout = window.setTimeout(() => {
+          finish(new Error('The song chart timed out.'));
+        }, 12000);
+
+        function finish(error, data) {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(timeout);
+          delete window[callbackName];
+          request.remove();
+          if (error) {
+            reject(error);
+            return;
+          }
+          const entries = data?.feed?.entry || [];
+          resolve(entries.map((entry) => ({
+            trackName: entry.title?.label || '',
+            artistName: entry['im:artist']?.label || '',
+            collectionName: entry['im:collection']?.['im:name']?.label || '',
+            artworkUrl100: entry['im:image']?.at(-1)?.label || '',
+            trackViewUrl: entry.link?.attributes?.href || '',
+            trackId: entry.id?.attributes?.['im:id'] || '',
+            primaryGenreName: entry.category?.attributes?.term || ''
+          })));
+        }
+
+        window[callbackName] = (data) => finish(null, data);
+        request.onerror = () => finish(new Error('The song chart is unavailable.'));
+        request.src = `https://itunes.apple.com/us/rss/topsongs/limit=${limit}/genre=${genreId}/callback=${callbackName}/json`;
+        document.head.appendChild(request);
+      });
+    }
+
+    async function loadCatalog(cacheKey, term, genreId = null) {
       activeGenre = cacheKey;
       const requestId = ++genreRequestId;
       const cached = genreResultCache.get(cacheKey);
@@ -1111,7 +1263,9 @@
 
       showGenreLoading();
       try {
-        const songs = await searchGenre(term, requestId);
+        const songs = genreId
+          ? await searchGenreChart(genreId, requestId)
+          : await searchGenre(term, requestId);
         genreResultCache.set(cacheKey, songs);
         storedCache[cacheKey] = { savedAt: Date.now(), songs };
         try {
@@ -1223,7 +1377,7 @@
         tab.setAttribute('aria-selected', String(selected));
         tab.tabIndex = selected ? 0 : -1;
       });
-      return loadCatalog(genre, genreSearchTerms[genre]);
+      return loadCatalog(genre, '', genreFeedIds[genre]);
     }
 
     function searchCatalog(term) {
@@ -1342,33 +1496,38 @@
     }
 
     function showView(view) {
-      if (!desktopNavigation.matches) return;
+      if (!desktopNavigation.matches) return Promise.resolve();
 
       window.clearTimeout(viewChangeTimeout);
       pageLoading.hidden = false;
 
-      viewChangeTimeout = window.setTimeout(() => {
-        applyView(view);
-        storeActiveView(view);
-        requestAnimationFrame(() => window.updateMiniPlayerMarquees?.());
+      return new Promise((resolve) => {
+        viewChangeTimeout = window.setTimeout(() => {
+          applyView(view);
+          storeActiveView(view);
+          requestAnimationFrame(() => window.updateMiniPlayerMarquees?.());
 
-        pageLoading.hidden = true;
-        if (view === 'about') loadAboutArtistPortraits();
-        if (view === 'home') {
-          if (activeGenre.startsWith('search:')) loadCatalog(activeGenre, activeSearchTerm);
-          else loadGenre(activeGenre);
-        }
-        document.getElementById(
-          view === 'home'
-            ? 'homePage'
-            : view === 'about'
-              ? 'aboutPage'
-              : 'playerView'
-        )
-          ?.querySelector('h1')
-          ?.focus({ preventScroll: true });
-      }, 350);
+          pageLoading.hidden = true;
+          if (view === 'about') loadAboutArtistPortraits();
+          if (view === 'home') {
+            if (activeGenre.startsWith('search:')) loadCatalog(activeGenre, activeSearchTerm);
+            else loadGenre(activeGenre);
+          }
+          document.getElementById(
+            view === 'home'
+              ? 'homePage'
+              : view === 'about'
+                ? 'aboutPage'
+                : 'playerView'
+          )
+            ?.querySelector('h1')
+            ?.focus({ preventScroll: true });
+          resolve();
+        }, 350);
+      });
     }
+
+    window.showView = showView;
 
     viewButtons.forEach((button) => {
       button.addEventListener('click', () => {
