@@ -302,7 +302,8 @@ function updateActiveLyric() {
       window.matchMedia(
         '(max-width: 56.1875rem), (pointer: coarse)'
       ).matches &&
-      mobilePlayerViewChosen
+      mobilePlayerViewChosen &&
+      !onDemand
     ) {
       mobilePlayerViewChosen = false;
 
@@ -365,7 +366,7 @@ function smoothlyRevealLyric(lineElement) {
     );
 
   function animateScroll(now) {
-    if (!streamIsActive) {
+    if (!streamIsActive && !window.onDemandPlaybackActive) {
       lyricScrollFrame = 0;
       return;
     }
@@ -603,6 +604,8 @@ function updateLyrics(
     if (songChanged) {
       currentSongId =
         songId;
+      activeLyricIndex = -1;
+      lyricsContent.scrollTop = 0;
     }
 
     renderLyrics(lyrics);

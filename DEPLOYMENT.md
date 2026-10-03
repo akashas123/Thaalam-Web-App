@@ -1,23 +1,16 @@
-# Deploying the site and API separately
+# Frontend-only on-demand playback
 
-The frontend stays at the repository root for Cloudflare Pages. The Flask API lives in `backend/` and can be deployed as a separate Python web service.
+On-demand search calls the YouTube Data API directly from the browser. No separate backend or API proxy is required. Playback uses YouTube's embedded IFrame player.
 
-## Deploy the API on Render
+## Configure the YouTube API key
 
-Create a Render Web Service connected to this repository and configure:
+1. In Google Cloud Console, create/select a project and enable **YouTube Data API v3**.
+2. Create an API key. Restrict it to **YouTube Data API v3** and to the HTTP referrers for this site, including the production domain and any Cloudflare Pages preview domain you use.
+3. Put the key in `youtube-api-config.js` as the value of `window.THAALAM_YOUTUBE_API_KEY`.
+4. Deploy the static site to Cloudflare Pages.
 
-- Root Directory: `backend`
-- Build Command: `pip install -r requirements.txt`
-- Start Command: `gunicorn server:app --bind 0.0.0.0:$PORT`
-
-After deployment, confirm that `https://YOUR-API-HOST/health` returns `{"status":"ok"}`. The `backend/Procfile` contains the same start command for hosts that use Procfiles.
-
-## Connect Cloudflare Pages
-
-The Pages Function at `functions/api/youtube/[[path]].js` forwards `/api/youtube/*` requests to the separate API service. In the Pages project, add the `API_ORIGIN` environment variable with the API origin, for example `https://YOUR-API-HOST` (no path suffix), then redeploy.
-
-Cloudflare Pages Functions require a Git connected Pages project or a Wrangler deployment. Dashboard drag-and-drop uploads do not deploy the `functions/` directory. Keep the Pages project root at the repository root so Cloudflare can find `functions/`.
+The browser key is visible to site visitors by design, so the Google Cloud restrictions are important. YouTube's default quota allows 100 `search.list` requests per day. Search results are cached in the browser for six hours to reduce repeat requests.
 
 ## Local development
 
-Run `npm run dev`. It starts Vite and the Flask API together; Vite forwards `/api` requests to `http://localhost:8000`.
+Run `npm run dev`. Vite serves the frontend at its local development URL. On-demand YouTube search requires a configured API key.

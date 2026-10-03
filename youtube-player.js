@@ -51,6 +51,9 @@ const playedVideoIds = new Set();
    closing the tab, so the current track is written to storage as it plays and
    replayed on the next load. Only the "Back to Live" button clears it. */
 const ON_DEMAND_STORAGE_KEY = 'thaalam-on-demand-session-v1';
+const YOUTUBE_SEARCH_CACHE_PREFIX = 'thaalam-youtube-search-v2:';
+const YOUTUBE_SEARCH_CACHE_TTL = 6 * 60 * 60 * 1000;
+const NON_YOUTUBE_MUSIC_TITLE = /\bofficial\s+audio\b|\b(?:official\s+)?music\s+video\b|\bofficial\s+video\b|\blyrics?\b|\blive\b|\bkaraoke\b|\bcover\b|\bperformance\b|\breaction\b/i;
 
 /* TEMPORARY DIAGNOSTIC: set to false to silence. Reports what is written, what
    is read back, and which branch the restore actually takes. */
@@ -58,6 +61,110 @@ const ON_DEMAND_DEBUG = true;
 const logOnDemand = (...parts) => {
   if (ON_DEMAND_DEBUG) console.log('[on-demand]', ...parts);
 };
+
+function getYouTubeSearchCache(query) {
+  try {
+    const cached = JSON.parse(localStorage.getItem(
+      `${YOUTUBE_SEARCH_CACHE_PREFIX}${query}`
+    ) || 'null');
+    if (cached?.expiresAt > Date.now() && Array.isArray(cached.items)) {
+      return cached.items;
+    }
+  } catch {
+  }
+  return null;
+}
+
+function setYouTubeSearchCache(query, items) {
+  try {
+    localStorage.setItem(`${YOUTUBE_SEARCH_CACHE_PREFIX}${query}`, JSON.stringify({
+      expiresAt: Date.now() + YOUTUBE_SEARCH_CACHE_TTL,
+      items
+    }));
+  } catch {
+  }
+}
+
+async function searchYouTubeVideos(query, maxResults = 10) {
+  const apiKey = window.THAALAM_YOUTUBE_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error('Add your YouTube Data API key to youtube-api-config.js.');
+  }
+
+  const normalizedQuery = query.trim().replace(/\s+/g, ' ');
+  if (!normalizedQuery) return [];
+  const cacheKey = `${normalizedQuery.toLowerCase()}|${maxResults}`;
+  const cached = getYouTubeSearchCache(cacheKey);
+  if (cached) return cached;
+
+  const url = new URL('https://www.googleapis.com/youtube/v3/search');
+  url.search = new URLSearchParams({
+    key: apiKey,
+    part: 'snippet',
+    type: 'video',
+    videoEmbeddable: 'true',
+    videoCategoryId: '10',
+    q: normalizedQuery,
+    maxResults: String(Math.max(1, Math.min(50, maxResults)))
+  });
+
+  const response = await fetch(url, { cache: 'no-store' });
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new Error('YouTube returned an unreadable response. Check the API key and quota.');
+  }
+  if (!response.ok) {
+    throw new Error(payload?.error?.message || `YouTube search failed (${response.status}).`);
+  }
+
+  const items = (payload.items || []).map((item) => {
+    const thumbnails = item.snippet?.thumbnails || {};
+    return {
+      videoId: item.id?.videoId,
+      title: item.snippet?.title || '',
+      artist: item.snippet?.channelTitle || '',
+      topicChannel: /\s-\sTopic$/i.test(item.snippet?.channelTitle || ''),
+      thumbnail: thumbnails.high?.url || thumbnails.medium?.url ||
+        thumbnails.default?.url || ''
+    };
+  }).filter((item) => item.videoId);
+
+  setYouTubeSearchCache(cacheKey, items);
+  return items;
+}
+
+function normalizeYouTubeText(value) {
+  return String(value || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
+async function findYouTubeSong(title, artist) {
+  const items = await searchYouTubeVideos(`${title} ${artist} Topic`, 25);
+  const normalizedTitle = normalizeYouTubeText(title);
+  const normalizedArtist = normalizeYouTubeText(artist);
+  const ranked = items.filter((item) =>
+    !NON_YOUTUBE_MUSIC_TITLE.test(item.title) && item.topicChannel
+  ).map((item) => {
+    const candidateTitle = normalizeYouTubeText(item.title);
+    const candidateArtist = normalizeYouTubeText(item.artist);
+    const score = 6 +
+      (candidateTitle.includes(normalizedTitle) ? 4 : 0) +
+      (normalizedArtist && candidateArtist.includes(normalizedArtist) ? 2 : 0);
+    return { ...item, score };
+  }).sort((a, b) => b.score - a.score);
+
+  const best = ranked[0];
+  if (!best) throw new Error('No YouTube Music Topic result was found for this song.');
+  return {
+    ...best,
+    alternatives: ranked.slice(1).map((item) => item.videoId)
+  };
+}
 
 function saveOnDemandSession(song, videoId) {
   try {
@@ -411,7 +518,9 @@ async function loadVideo(videoId, requestId) {
 
 function updateOnDemandMetadata(song, video) {
   const title = song.trackName || video.title || 'Unknown song';
-  const artist = song.artistName || video.artist || 'Unknown artist';
+  const artist = (song.artistName || video.artist || 'Unknown artist')
+    .replace(/\s-\sTopic$/i, '')
+    .trim();
   const album = song.collectionName || '';
   const artwork = song.artworkUrl100
     ?.replace(/^http:/, 'https:')
@@ -517,39 +626,31 @@ function skipOnDemandSong(offset) {
 onDemandPrevButton?.addEventListener('click', () => skipOnDemandSong(-1));
 onDemandNextButton?.addEventListener('click', () => skipOnDemandSong(1));
 
-/* Fetches a similar-songs list for a video. Returns [] rather than throwing so
-   a failed lookup simply leaves the player stopped at the end of the track. */
+/* Fetches embeddable tracks from YouTube search. Returns [] rather than
+   throwing so an unavailable search simply leaves the player stopped. */
 async function fetchRelatedTracks(videoId, song) {
   if (!videoId && !song?.artistName) return [];
-
-  // title/artist travel with the request so the server can fall back to an
-  // artist search when the radio playlist is unavailable.
-  const query = new URLSearchParams({
-    videoId: videoId || '',
-    title: song?.trackName || '',
-    artist: song?.artistName || '',
-    limit: '25'
-  });
-
   try {
-    const response = await fetch(`/api/youtube/related?${query}`, { cache: 'no-store' });
-    const payload = await response.json();
-    if (!response.ok) {
-      // A 404 almost always means the Flask server is running an older build:
-      // it only picks up new routes after a restart (app.run has no reloader).
-      console.warn(
-        `Autoplay: /api/youtube/related returned ${response.status}.` +
-        (response.status === 404
-          ? ' Restart the Flask server to load the related-tracks route.'
-          : ''),
-        payload?.errors || payload
-      );
-      return [];
-    }
-    console.info('Autoplay: related tracks via', payload.source);
-    return Array.isArray(payload.tracks) ? payload.tracks : [];
+    const relatedQuery = song?.artistName
+      ? `${song.artistName.replace(/\s-\sTopic$/i, '')} Topic`
+      : `${song.trackName} similar songs Topic`;
+    const tracks = await searchYouTubeVideos(relatedQuery, 25);
+    return tracks
+      .filter((track) =>
+        track.videoId !== videoId &&
+        !playedVideoIds.has(track.videoId) &&
+        !NON_YOUTUBE_MUSIC_TITLE.test(track.title) &&
+        track.topicChannel
+      )
+      .map((track) => ({
+        videoId: track.videoId,
+        title: track.title,
+        artist: track.artist,
+        thumbnail: track.thumbnail,
+        duration: ''
+      }));
   } catch (error) {
-    console.warn('Autoplay: related-tracks request failed.', error);
+    console.warn('Autoplay: YouTube related search failed.', error);
     return [];
   }
 }
@@ -568,6 +669,7 @@ function prefetchRelatedTracks(videoId, song) {
       if (token !== prefetchToken) return;
       relatedTrackCache = tracks.filter((track) => !playedVideoIds.has(track.videoId));
       relatedTrackCursor = 0;
+      prefetchUpcomingTrackArtwork();
       updateTransportButtonState();
     })
     .finally(() => {
@@ -581,11 +683,35 @@ function prefetchRelatedTracks(videoId, song) {
 function relatedTrackToSong(track) {
   return {
     trackName: track.title || 'Unknown song',
-    artistName: track.artist || '',
+    artistName: (track.artist || '').replace(/\s-\sTopic$/i, '').trim(),
     collectionName: '',
-    artworkUrl100: track.thumbnail || '',
+    artworkUrl100: track.artworkUrl100 || track.thumbnail || '',
     trackTimeMillis: (parseVideoDuration(track.duration) || 0) * 1000
   };
+}
+
+function prefetchTrackArtwork(track) {
+  if (track.artworkUrl100 || track.artworkPromise) {
+    return track.artworkPromise || Promise.resolve(track.artworkUrl100);
+  }
+
+  track.artworkPromise = Promise.resolve(
+    window.lookupAlbumArtwork?.(track.title, track.artist) || ''
+  ).then((artworkUrl) => {
+    if (!artworkUrl) return '';
+    track.artworkUrl100 = artworkUrl;
+    const image = new Image();
+    image.src = artworkUrl;
+    return artworkUrl;
+  }).catch(() => '');
+
+  return track.artworkPromise;
+}
+
+function prefetchUpcomingTrackArtwork() {
+  relatedTrackCache
+    .slice(relatedTrackCursor, relatedTrackCursor + 4)
+    .forEach((track) => { void prefetchTrackArtwork(track); });
 }
 
 /* Called when a track ends. Plays the next prefetched similar song straight
@@ -632,6 +758,7 @@ function advanceToSimilarSong() {
 /* Starts a track that came from the related list. It already has a resolved
    videoId, so it skips the search round-trip that startOnDemandSong performs. */
 async function playRelatedTrack(track) {
+  const artworkPromise = prefetchTrackArtwork(track);
   const song = relatedTrackToSong(track);
   const requestId = ++songRequestId;
 
@@ -654,6 +781,14 @@ async function playRelatedTrack(track) {
   persistCurrentOnDemandSession();
 
   updateOnDemandMetadata(song, { videoId: track.videoId });
+  void artworkPromise.then((artworkUrl) => {
+    if (!artworkUrl || currentOnDemandVideoId !== track.videoId) return;
+    song.artworkUrl100 = artworkUrl;
+    setCurrentOnDemandTrack(song, track.videoId);
+    persistCurrentOnDemandSession();
+    updateOnDemandMetadata(song, { videoId: track.videoId });
+  });
+  prefetchUpcomingTrackArtwork();
   await loadVideo(track.videoId, requestId);
   if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
   updatePlaybackProgress();
@@ -686,13 +821,7 @@ async function startOnDemandSong(song) {
     await window.showView?.('now-playing');
     if (requestId !== songRequestId) return;
 
-    const query = new URLSearchParams({
-      title: song.trackName,
-      artist: song.artistName || ''
-    });
-    const response = await fetch(`/api/youtube/search?${query}`, { cache: 'no-store' });
-    const video = await response.json();
-    if (!response.ok) throw new Error(video.error || 'No matching YouTube video was found.');
+    const video = await findYouTubeSong(song.trackName, song.artistName || '');
     if (requestId !== songRequestId) return;
 
     videoCandidates = [...new Set([video.videoId, ...(video.alternatives || [])])];
@@ -714,7 +843,7 @@ async function startOnDemandSong(song) {
     console.error('Unable to start on-demand playback:', error);
     onDemandModeLabel.textContent = 'UNAVAILABLE';
     const message = error instanceof TypeError && error.message === 'Failed to fetch'
-      ? 'On-demand server offline. Open localhost:8000.'
+      ? 'YouTube search could not be reached. Check your connection and API key restrictions.'
       : error.message || 'Playback unavailable';
     onDemandStation.textContent = message;
     setOnDemandPlaying(false);
