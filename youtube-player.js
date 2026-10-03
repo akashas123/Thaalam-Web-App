@@ -23,6 +23,7 @@ let youtubePlayerPromise = null;
 let youtubePlayer = null;
 let youtubePlayerReady = false;
 let requestedVideoId = '';
+let requestedStartSeconds = 0;
 let selectedDuration = 0;
 let songRequestId = 0;
 let videoCandidates = [];
@@ -244,11 +245,12 @@ async function findYouTubeSong(song) {
   return { ...best, alternatives: ranked.slice(1).map((item) => item.videoId) };
 }
 
-function saveOnDemandSession(song, videoId) {
+function saveOnDemandSession(song, videoId, position = 0) {
   try {
     const payload = JSON.stringify({
       song,
       videoId,
+      position: Math.max(0, Number(position) || 0),
       // Paused state is part of the session: reopening should not start making
       // noise on its own if the listener had deliberately stopped the song.
       playing: window.onDemandPlaying === true
@@ -304,15 +306,20 @@ function clearOnDemandSession() {
    pause/play changes can rewrite the stored session without re-running a search. */
 let currentOnDemandSong = null;
 let currentOnDemandVideoId = '';
+let currentOnDemandPosition = 0;
 
-function setCurrentOnDemandTrack(song, videoId) {
+function setCurrentOnDemandTrack(song, videoId, position = 0) {
   currentOnDemandSong = song;
   currentOnDemandVideoId = videoId || '';
+  currentOnDemandPosition = Math.max(0, Number(position) || 0);
 }
 
 function persistCurrentOnDemandSession() {
   if (!currentOnDemandSong?.trackName || !currentOnDemandVideoId) return;
-  saveOnDemandSession(currentOnDemandSong, currentOnDemandVideoId);
+  if (youtubePlayerReady && window.onDemandPlaybackActive) {
+    currentOnDemandPosition = youtubePlayer.getCurrentTime() || currentOnDemandPosition;
+  }
+  saveOnDemandSession(currentOnDemandSong, currentOnDemandVideoId, currentOnDemandPosition);
 }
 
 function formatOnDemandTime(seconds) {
@@ -535,8 +542,9 @@ function handleYouTubeError(event) {
   returnToLiveButton.hidden = false;
 }
 
-async function loadVideo(videoId, requestId) {
+async function loadVideo(videoId, requestId, startSeconds = 0) {
   requestedVideoId = videoId;
+  requestedStartSeconds = Math.max(0, Number(startSeconds) || 0);
   await loadYouTubeApi();
   if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
   onDemandMount.hidden = false;
@@ -546,7 +554,7 @@ async function loadVideo(videoId, requestId) {
   onDemandArtwork.style.opacity = '1';
 
   if (youtubePlayerReady) {
-    youtubePlayer.loadVideoById(videoId);
+    youtubePlayer.loadVideoById({ videoId, startSeconds: requestedStartSeconds });
     return;
   }
 
@@ -564,7 +572,8 @@ async function loadVideo(videoId, requestId) {
             enablejsapi: 1,
             origin: window.location.origin,
             playsinline: 1,
-            rel: 0
+            rel: 0,
+            start: Math.floor(requestedStartSeconds)
           },
           events: {
             onReady(event) {
@@ -575,7 +584,10 @@ async function loadVideo(videoId, requestId) {
                 return;
               }
               if (requestedVideoId !== initialVideoId) {
-                event.target.loadVideoById(requestedVideoId);
+                event.target.loadVideoById({
+                  videoId: requestedVideoId,
+                  startSeconds: requestedStartSeconds
+                });
               } else {
                 event.target.playVideo();
               }
@@ -1035,7 +1047,7 @@ async function restoreOnDemandSession() {
   selectedDuration = Number(song.trackTimeMillis) / 1000 || 0;
   enqueueOnDemandSong(song);
   updateTransportButtonState();
-  setCurrentOnDemandTrack(song, stored.videoId);
+  setCurrentOnDemandTrack(song, stored.videoId, stored.position || 0);
 
   try {
     // Deliberately no showView() call here. The listener's view (Home, About or
@@ -1049,7 +1061,7 @@ async function restoreOnDemandSession() {
     videoCandidates = [stored.videoId];
     videoCandidateIndex = 0;
     updateOnDemandMetadata(song, { videoId: stored.videoId });
-    await loadVideo(stored.videoId, requestId);
+    await loadVideo(stored.videoId, requestId, stored.position || 0);
     logOnDemand('loadVideo() resolved; playerReady =', youtubePlayerReady,
       'state =', youtubePlayerReady ? youtubePlayer.getPlayerState() : 'n/a');
     if (requestId !== songRequestId || !window.onDemandPlaybackActive) {
@@ -1157,7 +1169,15 @@ window.getOnDemandTrackClock = () => {
 };
 
 returnToLiveButton.addEventListener('click', returnToLive);
-window.setInterval(updatePlaybackProgress, 500);
+let lastPositionSaveAt = 0;
+window.setInterval(() => {
+  updatePlaybackProgress();
+  if (window.onDemandPlaybackActive && Date.now() - lastPositionSaveAt >= 3000) {
+    lastPositionSaveAt = Date.now();
+    persistCurrentOnDemandSession();
+  }
+}, 500);
+window.addEventListener('pagehide', persistCurrentOnDemandSession);
 
 /* On-demand survives a refresh, so it is restored on load. This runs on
    DOMContentLoaded (rather than inline) so the live-radio startup in script.js
