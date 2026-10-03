@@ -51,9 +51,10 @@ const playedVideoIds = new Set();
    closing the tab, so the current track is written to storage as it plays and
    replayed on the next load. Only the "Back to Live" button clears it. */
 const ON_DEMAND_STORAGE_KEY = 'thaalam-on-demand-session-v1';
-const YOUTUBE_SEARCH_CACHE_PREFIX = 'thaalam-youtube-search-v2:';
+const YOUTUBE_SEARCH_CACHE_PREFIX = 'thaalam-youtube-search-v9:';
 const YOUTUBE_SEARCH_CACHE_TTL = 6 * 60 * 60 * 1000;
-const NON_YOUTUBE_MUSIC_TITLE = /\bofficial\s+audio\b|\b(?:official\s+)?music\s+video\b|\bofficial\s+video\b|\blyrics?\b|\blive\b|\bkaraoke\b|\bcover\b|\bperformance\b|\breaction\b/i;
+const NON_YOUTUBE_MUSIC_TITLE = /\b(?:official\s+)?music\s+video\b|\b(?:official\s+)?video\b|\bvisuali[sz]er\b|\blyrics?\b|\blive\b|\bkaraoke\b|\bcover\b|\bperformance\b|\breaction\b/i;
+const UNOFFICIAL_MIX_TITLE = /\b(?:unofficial|remix(?:es)?|mix(?:es)?|mash[ -]?up|medley|compilation|playlist|slowed(?:\s+\+?\s+reverb)?|sped\s*up|nightcore|bootleg|fan[ -]?made|edit|1\s*hour|extended)\b/i;
 
 /* TEMPORARY DIAGNOSTIC: set to false to silence. Reports what is written, what
    is read back, and which branch the restore actually takes. */
@@ -86,50 +87,34 @@ function setYouTubeSearchCache(query, items) {
 }
 
 async function searchYouTubeVideos(query, maxResults = 10) {
-  const apiKey = window.THAALAM_YOUTUBE_API_KEY?.trim();
-  if (!apiKey) {
-    throw new Error('Add your YouTube Data API key to youtube-api-config.js.');
-  }
-
   const normalizedQuery = query.trim().replace(/\s+/g, ' ');
   if (!normalizedQuery) return [];
   const cacheKey = `${normalizedQuery.toLowerCase()}|${maxResults}`;
   const cached = getYouTubeSearchCache(cacheKey);
   if (cached) return cached;
 
-  const url = new URL('https://www.googleapis.com/youtube/v3/search');
-  url.search = new URLSearchParams({
-    key: apiKey,
-    part: 'snippet',
-    type: 'video',
-    videoEmbeddable: 'true',
-    videoCategoryId: '10',
-    q: normalizedQuery,
-    maxResults: String(Math.max(1, Math.min(50, maxResults)))
-  });
-
+  const url = new URL('/api/youtube-search', window.location.origin);
+  url.searchParams.set('q', normalizedQuery);
+  url.searchParams.set('limit', String(Math.max(1, Math.min(25, maxResults))));
   const response = await fetch(url, { cache: 'no-store' });
-  let payload;
+  const responseText = await response.text();
+  let payload = null;
   try {
-    payload = await response.json();
+    payload = JSON.parse(responseText);
   } catch {
-    throw new Error('YouTube returned an unreadable response. Check the API key and quota.');
+    if (/^\s*</.test(responseText)) {
+      throw new Error('YouTube search backend is missing. Include _worker.js in the Cloudflare Pages upload, or deploy the Pages Function through Git integration or Wrangler.');
+    }
+    throw new Error(`YouTube search returned an unreadable response (${response.status}).`);
   }
   if (!response.ok) {
-    throw new Error(payload?.error?.message || `YouTube search failed (${response.status}).`);
+    const apiError = typeof payload?.error === 'string'
+      ? payload.error
+      : payload?.error?.message;
+    throw new Error(apiError || `YouTube search failed (${response.status}).`);
   }
 
-  const items = (payload.items || []).map((item) => {
-    const thumbnails = item.snippet?.thumbnails || {};
-    return {
-      videoId: item.id?.videoId,
-      title: item.snippet?.title || '',
-      artist: item.snippet?.channelTitle || '',
-      topicChannel: /\s-\sTopic$/i.test(item.snippet?.channelTitle || ''),
-      thumbnail: thumbnails.high?.url || thumbnails.medium?.url ||
-        thumbnails.default?.url || ''
-    };
-  }).filter((item) => item.videoId);
+  const items = payload.results || [];
 
   setYouTubeSearchCache(cacheKey, items);
   return items;
@@ -143,27 +128,68 @@ function normalizeYouTubeText(value) {
     .replace(/[^a-z0-9]/g, '');
 }
 
-async function findYouTubeSong(title, artist) {
-  const items = await searchYouTubeVideos(`${title} ${artist} Topic`, 25);
-  const normalizedTitle = normalizeYouTubeText(title);
-  const normalizedArtist = normalizeYouTubeText(artist);
-  const ranked = items.filter((item) =>
-    !NON_YOUTUBE_MUSIC_TITLE.test(item.title) && item.topicChannel
-  ).map((item) => {
-    const candidateTitle = normalizeYouTubeText(item.title);
-    const candidateArtist = normalizeYouTubeText(item.artist);
-    const score = 6 +
-      (candidateTitle.includes(normalizedTitle) ? 4 : 0) +
-      (normalizedArtist && candidateArtist.includes(normalizedArtist) ? 2 : 0);
-    return { ...item, score };
-  }).sort((a, b) => b.score - a.score);
+function normalizeYouTubeSongTitle(value) {
+  return normalizeYouTubeText(String(value || '')
+    .replace(/\s*\((?:with|feat(?:uring)?|ft\.?)\s+[^)]*\)/gi, '')
+    .replace(/\s+(?:with|feat(?:uring)?|ft\.?)\s+.+$/i, '')
+    .replace(/\s*\[(?:official\s+)?audio\]/gi, ''));
+}
 
+async function findYouTubeSong(song) {
+  const title = song.trackName || '';
+  const artist = song.artistName || '';
+  const album = song.collectionName || '';
+  const normalizedTitle = normalizeYouTubeSongTitle(title);
+  const sourceArtists = artist.split(/,|&|\bfeat(?:uring)?\b|\bwith\b/i)
+    .map(normalizeYouTubeText).filter(Boolean);
+  const normalizedAlbum = normalizeYouTubeText(album);
+
+  const rankResults = (items, albumFirst) => items
+    .map((item, index) => {
+      const candidateTitle = normalizeYouTubeSongTitle(item.title);
+      const candidateArtist = normalizeYouTubeText(item.artist);
+      const candidateAlbum = normalizeYouTubeText(item.album);
+      const exactTitle = candidateTitle === normalizedTitle;
+      const titleMatch = exactTitle ||
+        (normalizedTitle.length > 3 && candidateTitle.includes(normalizedTitle)) ||
+        (candidateTitle.length > 3 && normalizedTitle.includes(candidateTitle));
+      const artistMatch = sourceArtists.some((name) => candidateArtist.includes(name));
+      const featuredArtistMatch = sourceArtists.some((name) =>
+        name !== normalizeYouTubeText(artist) && candidateTitle.includes(name));
+      const albumMatch = Boolean(normalizedAlbum && candidateAlbum &&
+        (candidateAlbum.includes(normalizedAlbum) || normalizedAlbum.includes(candidateAlbum)));
+      const lowQualityMatch = NON_YOUTUBE_MUSIC_TITLE.test(item.title);
+      return {
+        ...item,
+        score: (exactTitle ? 100 : titleMatch ? 65 : 0) +
+          (artistMatch ? 30 : 0) + (featuredArtistMatch ? 8 : 0) +
+          (albumFirst && albumMatch ? 24 : albumMatch ? 12 : 0) +
+          Math.max(0, 20 - index) - (lowQualityMatch ? 40 : 0)
+      };
+    }).filter((item) => item.videoId)
+      .sort((a, b) => b.score - a.score);
+
+  // Search the named album first, then retry with exact-title variants. Keep
+  // the best Songs-filtered result across all queries instead of failing just
+  // because YouTube formats a title or featured-artist credit differently.
+  const queries = [
+    album && { query: `${title} ${artist} ${album}`, albumFirst: true },
+    { query: `${title} ${artist}`, albumFirst: false },
+    { query: `${normalizeYouTubeSongTitle(title)} ${artist}`, albumFirst: false }
+  ].filter((entry) => entry?.query.trim());
+  const candidates = new Map();
+  for (const { query, albumFirst } of queries) {
+    const items = await searchYouTubeVideos(query, 25);
+    rankResults(items, albumFirst).forEach((item) => {
+      const current = candidates.get(item.videoId);
+      if (!current || item.score > current.score) candidates.set(item.videoId, item);
+    });
+  }
+
+  const ranked = [...candidates.values()].sort((a, b) => b.score - a.score);
   const best = ranked[0];
-  if (!best) throw new Error('No YouTube Music Topic result was found for this song.');
-  return {
-    ...best,
-    alternatives: ranked.slice(1).map((item) => item.videoId)
-  };
+  if (!best) throw new Error('YouTube Music found no playable song for this search.');
+  return { ...best, alternatives: ranked.slice(1).map((item) => item.videoId) };
 }
 
 function saveOnDemandSession(song, videoId) {
@@ -631,22 +657,26 @@ onDemandNextButton?.addEventListener('click', () => skipOnDemandSong(1));
 async function fetchRelatedTracks(videoId, song) {
   if (!videoId && !song?.artistName) return [];
   try {
-    const relatedQuery = song?.artistName
-      ? `${song.artistName.replace(/\s-\sTopic$/i, '')} Topic`
-      : `${song.trackName} similar songs Topic`;
+    const artist = String(song?.artistName || '').replace(/\s-\sTopic$/i, '');
+    // iTunes labels many unrelated South Asian languages simply as "Indian".
+    // Seed with this exact song and artist so YouTube Music can find closer
+    // language/style matches without broadening autoplay to the whole region.
+    const relatedQuery = [song?.trackName, artist, 'similar songs official audio']
+      .filter(Boolean).join(' ');
     const tracks = await searchYouTubeVideos(relatedQuery, 25);
     return tracks
       .filter((track) =>
         track.videoId !== videoId &&
         !playedVideoIds.has(track.videoId) &&
         !NON_YOUTUBE_MUSIC_TITLE.test(track.title) &&
-        track.topicChannel
+        !UNOFFICIAL_MIX_TITLE.test(track.title)
       )
       .map((track) => ({
         videoId: track.videoId,
         title: track.title,
         artist: track.artist,
         thumbnail: track.thumbnail,
+        primaryGenreName: song?.primaryGenreName || '',
         duration: ''
       }));
   } catch (error) {
@@ -685,6 +715,7 @@ function relatedTrackToSong(track) {
     trackName: track.title || 'Unknown song',
     artistName: (track.artist || '').replace(/\s-\sTopic$/i, '').trim(),
     collectionName: '',
+    primaryGenreName: track.primaryGenreName || '',
     artworkUrl100: track.artworkUrl100 || track.thumbnail || '',
     trackTimeMillis: (parseVideoDuration(track.duration) || 0) * 1000
   };
@@ -821,21 +852,18 @@ async function startOnDemandSong(song) {
     await window.showView?.('now-playing');
     if (requestId !== songRequestId) return;
 
-    const video = await findYouTubeSong(song.trackName, song.artistName || '');
+    const video = await findYouTubeSong(song);
     if (requestId !== songRequestId) return;
 
     videoCandidates = [...new Set([video.videoId, ...(video.alternatives || [])])];
     videoCandidateIndex = 0;
     selectedDuration = parseVideoDuration(video.duration) || selectedDuration;
-    // The videoId is known now, so the session becomes restorable immediately.
     setCurrentOnDemandTrack(song, video.videoId);
     persistCurrentOnDemandSession();
     updateOnDemandMetadata(song, video);
     await loadVideo(video.videoId, requestId);
     if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
     updatePlaybackProgress();
-    // Warm the similar-songs list for this track so the next one is ready
-    // before the current song ends.
     playedVideoIds.add(video.videoId);
     prefetchRelatedTracks(video.videoId, song);
   } catch (error) {
@@ -843,7 +871,7 @@ async function startOnDemandSong(song) {
     console.error('Unable to start on-demand playback:', error);
     onDemandModeLabel.textContent = 'UNAVAILABLE';
     const message = error instanceof TypeError && error.message === 'Failed to fetch'
-      ? 'YouTube search could not be reached. Check your connection and API key restrictions.'
+      ? 'YouTube Music search could not be reached. Check your connection.'
       : error.message || 'Playback unavailable';
     onDemandStation.textContent = message;
     setOnDemandPlaying(false);
@@ -871,6 +899,13 @@ async function restoreOnDemandSession() {
   const stored = readOnDemandSession();
   if (!stored) {
     logOnDemand('ABORT: nothing to restore');
+    return;
+  }
+
+  if (window.matchMedia('(max-width: 56.1875rem), (pointer: coarse)').matches) {
+    logOnDemand('discarding restored on-demand session on mobile');
+    clearOnDemandSession();
+    window.togglePlay?.();
     return;
   }
 
@@ -932,11 +967,10 @@ async function restoreOnDemandSession() {
   }
 }
 
-/* The one and only exit from on-demand. Every other path (refresh, resize,
-   a failed video load) deliberately stays in on-demand mode, so this runs only
-   when the listener explicitly presses "Back to Live". */
+/* The one and only exit from on-demand. It runs when the listener presses
+   "Back to Live" or switches back to the mobile layout. */
 function returnToLive() {
-  logOnDemand('returnToLive() via explicit Back to Live');
+  logOnDemand('returnToLive()');
   if (!window.onDemandPlaybackActive) {
     logOnDemand('  -> no-op, on-demand was not active');
     return;
@@ -978,6 +1012,30 @@ function returnToLive() {
 
 window.startOnDemandSong = startOnDemandSong;
 window.toggleOnDemandPlayback = toggleOnDemandPlayback;
+window.returnToLive = returnToLive;
+if (onDemandArtwork) {
+  onDemandArtwork.setAttribute('role', 'button');
+  onDemandArtwork.tabIndex = 0;
+  onDemandArtwork.setAttribute('aria-label', 'Find and play this song on YouTube');
+  const searchCurrentSong = () => {
+    const liveSong = window.currentNowPlayingSong;
+    const song = window.onDemandPlaybackActive && currentOnDemandSong
+      ? currentOnDemandSong
+      : liveSong && {
+        trackName: liveSong.title,
+        artistName: liveSong.artist,
+        collectionName: liveSong.album || liveSong.album_name || '',
+        artworkUrl100: liveSong.art
+      };
+    if (song?.trackName) void startOnDemandSong(song);
+  };
+  onDemandArtwork.addEventListener('click', searchCurrentSong);
+  onDemandArtwork.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    searchCurrentSong();
+  });
+}
 window.getOnDemandTrackClock = () => {
   if (!window.onDemandPlaybackActive) return null;
   return {

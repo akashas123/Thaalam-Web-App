@@ -1,16 +1,13 @@
-# Frontend-only on-demand playback
+# On-demand playback
 
-On-demand search calls the YouTube Data API directly from the browser. No separate backend or API proxy is required. Playback uses YouTube's embedded IFrame player.
+On-demand search uses YouTube Music's undocumented web search endpoint through a same-origin route. Search returns public video IDs; playback uses YouTube's embedded IFrame player. This avoids a project-owned YouTube Data API key and its daily search quota. The search endpoint is unofficial and can change without notice.
 
-## Configure the YouTube API key
+## Cloudflare Pages
 
-1. In Google Cloud Console, create/select a project and enable **YouTube Data API v3**.
-2. Create an API key. Restrict it to **YouTube Data API v3** and to the HTTP referrers for this site, including the production domain and any Cloudflare Pages preview domain you use.
-3. Put the key in `youtube-api-config.js` as the value of `window.THAALAM_YOUTUBE_API_KEY`.
-4. Deploy the static site to Cloudflare Pages.
+For Git integration or a Wrangler deployment, Cloudflare Pages discovers `functions/api/youtube-search.js` and serves it at `/api/youtube-search`.
 
-The browser key is visible to site visitors by design, so the Google Cloud restrictions are important. YouTube's default quota allows 100 `search.list` requests per day. Search results are cached in the browser for six hours to reduce repeat requests.
+For dashboard drag-and-drop Direct Upload, include the root `_worker.js` file with the static assets. It handles `/api/youtube-search` and forwards all other requests to Pages static assets. Cloudflare supports `_worker.js` with Direct Upload; it does not compile a `/functions` directory in drag-and-drop uploads.
 
 ## Local development
 
-Run `npm run dev`. Vite serves the frontend at its local development URL. On-demand YouTube search requires a configured API key.
+Run `npm run dev`. The Vite middleware in `vite.config.mjs` exposes the same `/api/youtube-search` route on the local origin, so the browser uses the same player flow at `http://localhost:5173` and in production.

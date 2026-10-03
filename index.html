@@ -11,7 +11,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=121">
+  <link rel="stylesheet" href="style.css?v=122">
   <link rel="icon" type="image/png" href="icon-512.png?v=3">
   <link rel="apple-touch-icon" href="icon-192.png?v=3">
 
@@ -648,17 +648,18 @@
   </aside>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
-  <script src="script.js?v=37"></script>
-  <script src="youtube-api-config.js?v=1"></script>
-  <script src="youtube-player.js?v=25"></script>
-  <script src="audio-recovery.js?v=1"></script>
-  <script src="marquee.js?v=2"></script>
-  <script src="media-metadata.js?v=6"></script>
-  <script src="player-controls.js?v=30"></script>
-  <script src="lyrics.js?v=31"></script>
+  <script src="script.js?v=38"></script>
+  <script src="youtube-player.js?v=38"></script>
+  <script src="audio-recovery.js?v=2"></script>
+  <script src="marquee.js?v=3"></script>
+  <script src="media-metadata.js?v=7"></script>
+  <script src="player-controls.js?v=31"></script>
+  <script src="lyrics.js?v=32"></script>
   <script>
     const desktopNavigation =
       window.matchMedia('(min-width: 56.25rem) and (pointer: fine)');
+    const mobilePlayerLayout =
+      window.matchMedia('(max-width: 56.1875rem), (pointer: coarse)');
     const playerView = document.getElementById('playerView');
     const nowPlayingHeading = document.getElementById('nowPlayingHeading');
     const stationName = document.getElementById('stationName');
@@ -686,11 +687,17 @@
     };
     placeStationForViewport();
     placeStreamQualityForViewport();
+    const returnToLiveOnMobile = () => {
+      if (mobilePlayerLayout.matches && window.onDemandPlaybackActive) {
+        window.returnToLive?.();
+      }
+    };
+    mobilePlayerLayout.addEventListener('change', returnToLiveOnMobile);
+    window.addEventListener('resize', returnToLiveOnMobile, { passive: true });
     desktopNavigation.addEventListener('change', () => {
-      // On-demand is deliberately NOT torn down here. Crossing the breakpoint is
-      // not a listener decision, so the track keeps playing through it and the
-      // row is simply moved to its new home below. Live radio only returns when
-      // the listener explicitly presses "Back to Live".
+      // On-demand controls are desktop-only. Returning to the mobile layout
+      // resumes live radio automatically.
+      returnToLiveOnMobile();
       placeStationForViewport();
       placeStreamQualityForViewport();
       restoreActiveView();
@@ -716,18 +723,17 @@
     const catalogSongInfoDetails = document.getElementById('catalogSongInfoDetails');
     const catalogArtistPortrait = document.getElementById('catalogArtistPortrait');
     const catalogArtistBackground = document.getElementById('catalogArtistBackground');
-    const genreSearchTerms = {
-      pop: 'pop music',
-      rock: 'rock music',
-      'hip-hop': 'hip hop music'
+    const genreFeedIds = {
+      pop: 14,
+      rock: 21,
+      'hip-hop': 18
     };
     const genreResultCache = new Map();
     const artistInfoCache = new Map();
     const artistInfoRequests = new Map();
-    // v5: v1 was the India storefront; v2-v4 screened results with hardcoded
-    // lists of song titles and composer names. v5 screens on Apple's genre
-    // taxonomy instead, so every earlier cache entry is abandoned.
-    const GENRE_CACHE_KEY = 'thaalam-itunes-genre-cache-v5';
+    // Genre tabs use Apple's genre charts. Versioned separately from the old
+    // text-search and filtered result caches.
+    const GENRE_CACHE_KEY = 'thaalam-itunes-genre-cache-v8';
     const GENRE_CACHE_TTL = 12 * 60 * 60 * 1000;
     const ARTIST_INFO_STORAGE_KEY = 'thaalam-catalog-artist-info-v4';
     const ARTIST_INFO_CACHE_LIMIT = 600;
@@ -1013,6 +1019,38 @@
       if (artwork.isConnected && artworkUrl) artwork.src = artworkUrl;
     }
 
+    function diversifyGenreSongs(songs) {
+      const remaining = [...songs];
+      const ordered = [];
+      const recentAlbums = [];
+      const recentArtists = [];
+      const keyFor = (value) => (value || '').trim().toLocaleLowerCase();
+
+      while (remaining.length) {
+        // Keep the chart's ranking as much as possible while spacing tracks
+        // from the same album and avoiding a run of one artist.
+        let index = remaining.findIndex((song) => {
+          const album = keyFor(song.collectionName);
+          const artist = keyFor(song.artistName);
+          return (!album || !recentAlbums.slice(-5).includes(album)) &&
+            (!artist || !recentArtists.slice(-2).includes(artist));
+        });
+        if (index < 0) {
+          index = remaining.findIndex((song) => {
+            const album = keyFor(song.collectionName);
+            return !album || !recentAlbums.slice(-5).includes(album);
+          });
+        }
+        if (index < 0) index = 0;
+
+        const [song] = remaining.splice(index, 1);
+        ordered.push(song);
+        recentAlbums.push(keyFor(song.collectionName));
+        recentArtists.push(keyFor(song.artistName));
+      }
+      return ordered;
+    }
+
     function renderGenreResults(songs) {
       catalogArtworkObserver?.disconnect();
       genreResults.replaceChildren();
@@ -1026,7 +1064,7 @@
         return;
       }
 
-      songs.forEach((song) => {
+      diversifyGenreSongs(songs).forEach((song) => {
         const card = document.createElement('article');
         card.className = 'genre-card';
 
@@ -1129,109 +1167,11 @@
       genreResults.appendChild(placeholders);
     }
 
-    // iTunes has no language filter, so results are restricted to the US
-    // storefront and then screened out below if their text uses a non-Latin
-    // script. Latin accented characters (Bjork, Celine Dion) are kept.
-    const NON_LATIN_SCRIPT = new RegExp([
-      '[\\u0370-\\u03FF]',   // Greek
-      '[\\u1F00-\\u1FFF]',   // Greek Extended
-      '[\\u0400-\\u052F]',   // Cyrillic
-      '[\\u2DE0-\\u2DFF]',   // Cyrillic Extended
-      '[\\uA640-\\uA69F]',   // Cyrillic Extended-B
-      '[\\u0530-\\u058F]',   // Armenian
-      '[\\u0590-\\u05FF]',   // Hebrew
-      '[\\u0600-\\u06FF]',   // Arabic
-      '[\\u0700-\\u07BF]',   // Syriac, Thaana, NKo
-      '[\\u0780-\\u07BF]',   // Thaana
-      '[\\u07C0-\\u07FF]',   // NKo
-      '[\\u0900-\\u097F]',   // Devanagari
-      '[\\u0980-\\u09FF]',   // Bengali
-      '[\\u0A00-\\u0A7F]',   // Gurmukhi
-      '[\\u0A80-\\u0AFF]',   // Gujarati
-      '[\\u0B00-\\u0B7F]',   // Oriya
-      '[\\u0B80-\\u0BFF]',   // Tamil
-      '[\\u0C00-\\u0C7F]',   // Telugu
-      '[\\u0C80-\\u0CFF]',   // Kannada
-      '[\\u0D00-\\u0D7F]',   // Malayalam
-      '[\\u0D80-\\u0DFF]',   // Sinhala
-      '[\\u0E00-\\u0E7F]',   // Thai
-      '[\\u0E80-\\u0EFF]',   // Lao
-      '[\\u0F00-\\u0FFF]',   // Tibetan
-      '[\\u1000-\\u109F]',   // Myanmar
-      '[\\u10A0-\\u10FF]',   // Georgian
-      '[\\u1100-\\u11FF]',   // Hangul Jamo
-      '[\\u1200-\\u137F]',   // Ethiopic
-      '[\\u13A0-\\u13FF]',   // Cherokee
-      '[\\u1400-\\u167F]',   // Canadian Aboriginal
-      '[\\u1680-\\u169F]',   // Ogham
-      '[\\u16A0-\\u16FF]',   // Runic
-      '[\\u1780-\\u17FF]',   // Khmer
-      '[\\u1800-\\u18AF]',   // Mongolian
-      '[\\u2E80-\\u2FFF]',   // CJK radicals
-      '[\\u3000-\\u303F]',   // CJK symbols and punctuation
-      '[\\u3040-\\u309F]',   // Hiragana
-      '[\\u30A0-\\u30FF]',   // Katakana
-      '[\\u3100-\\u312F]',   // Bopomofo
-      '[\\u3130-\\u318F]',   // Hangul compatibility Jamo
-      '[\\u31F0-\\u31FF]',   // Katakana phonetic extensions
-      '[\\u3200-\\u33FF]',   // Enclosed CJK, CJK compatibility
-      '[\\u3400-\\u4DBF]',   // CJK extension A
-      '[\\u4E00-\\u9FFF]',   // CJK unified ideographs
-      '[\\uF900-\\uFAFF]',   // CJK compatibility ideographs
-      '[\\uAC00-\\uD7FF]',   // Hangul syllables
-      '[\\uFF00-\\uFFEF]',   // Fullwidth and halfwidth forms
-      '[\\U00020000-\\U0002A6DF]' // CJK extension B and beyond
-    ].join(''));
-
-    // iTunes exposes no language field, so English-only results are enforced
-    // from the two signals the API does return: the genre taxonomy on each
-    // record, and the writing system of its text. Nothing here lists a title,
-    // an artist or a word of a song.
-    //
-    // Apple files Indian and South-Asian language catalogues under their own
-    // genre labels, so the genre field is what identifies them. The list below
-    // is Apple's vocabulary rather than ours: languages and catalogues, not
-    // song titles or credit names. Matching is per word, so compound labels
-    // such as "Indian Pop", "Regional Indian" and "Tamil Folk" are all covered
-    // without having to enumerate every combination.
-    const NON_ENGLISH_GENRE_WORDS = new Set([
-      'indian', 'bollywood', 'filmi', 'bhangra', 'desi',
-      'hindi', 'malayalam', 'tamil', 'telugu', 'kannada', 'marathi', 'bengali',
-      'gujarati', 'punjabi', 'haryanvi', 'assamese', 'odia', 'oriya', 'bhojpuri',
-      'maithili', 'dogri', 'konkani', 'sindhi', 'kashmiri', 'manipuri', 'nepali',
-      'tibetan', 'sinhala', 'sanskrit', 'urdu', 'tulu', 'kodava', 'qawwali',
-      'ghazal', 'world', 'soundtrack', 'musical'
-    ]);
-
-    function isEnglishSong(song) {
-      const title = song?.trackName || '';
-      const artist = song?.artistName || '';
-      const album = song?.collectionName || '';
-      if (!`${title} ${artist}`.trim()) return false;
-
-      // Writing system. Latin with accents is kept, so Bjork and Celine Dion
-      // survive; anything in another script is not an English-language record.
-      if (NON_LATIN_SCRIPT.test(`${title} ${artist} ${album}`)) return false;
-
-      // Language catalogue, from the genre fields on the record.
-      const genreWords = [
-        song?.primaryGenreName,
-        song?.collectionGenreName,
-        song?.trackGenreName
-      ]
-        .filter(Boolean)
-        .flatMap((genre) => String(genre).toLowerCase().split(/[^a-z]+/));
-      if (genreWords.some((word) => NON_ENGLISH_GENRE_WORDS.has(word))) return false;
-
-      return true;
-    }
-
     function searchGenre(term, requestId, limit = 200, callbackPrefix = 'thaalamGenreCallback') {
       return new Promise((resolve, reject) => {
         const callbackName = `${callbackPrefix}${requestId}`;
         const query = new URLSearchParams({
           term,
-          country: 'us',
           entity: 'song',
           media: 'music',
           limit: String(limit),
@@ -1250,7 +1190,7 @@
           delete window[callbackName];
           request.remove();
           if (error) reject(error);
-          else resolve((data?.results || []).filter(isEnglishSong));
+          else resolve(data?.results || []);
         }
 
         window[callbackName] = (data) => finish(null, data);
@@ -1260,7 +1200,45 @@
       });
     }
 
-    async function loadCatalog(cacheKey, term) {
+    function searchGenreChart(genreId, requestId, limit = 100) {
+      return new Promise((resolve, reject) => {
+        const callbackName = `thaalamGenreChartCallback${requestId}`;
+        const request = document.createElement('script');
+        let settled = false;
+        const timeout = window.setTimeout(() => {
+          finish(new Error('The song chart timed out.'));
+        }, 12000);
+
+        function finish(error, data) {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(timeout);
+          delete window[callbackName];
+          request.remove();
+          if (error) {
+            reject(error);
+            return;
+          }
+          const entries = data?.feed?.entry || [];
+          resolve(entries.map((entry) => ({
+            trackName: entry.title?.label || '',
+            artistName: entry['im:artist']?.label || '',
+            collectionName: entry['im:collection']?.['im:name']?.label || '',
+            artworkUrl100: entry['im:image']?.at(-1)?.label || '',
+            trackViewUrl: entry.link?.attributes?.href || '',
+            trackId: entry.id?.attributes?.['im:id'] || '',
+            primaryGenreName: entry.category?.attributes?.term || ''
+          })));
+        }
+
+        window[callbackName] = (data) => finish(null, data);
+        request.onerror = () => finish(new Error('The song chart is unavailable.'));
+        request.src = `https://itunes.apple.com/us/rss/topsongs/limit=${limit}/genre=${genreId}/callback=${callbackName}/json`;
+        document.head.appendChild(request);
+      });
+    }
+
+    async function loadCatalog(cacheKey, term, genreId = null) {
       activeGenre = cacheKey;
       const requestId = ++genreRequestId;
       const cached = genreResultCache.get(cacheKey);
@@ -1285,7 +1263,9 @@
 
       showGenreLoading();
       try {
-        const songs = await searchGenre(term, requestId);
+        const songs = genreId
+          ? await searchGenreChart(genreId, requestId)
+          : await searchGenre(term, requestId);
         genreResultCache.set(cacheKey, songs);
         storedCache[cacheKey] = { savedAt: Date.now(), songs };
         try {
@@ -1397,7 +1377,7 @@
         tab.setAttribute('aria-selected', String(selected));
         tab.tabIndex = selected ? 0 : -1;
       });
-      return loadCatalog(genre, genreSearchTerms[genre]);
+      return loadCatalog(genre, '', genreFeedIds[genre]);
     }
 
     function searchCatalog(term) {

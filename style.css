@@ -39,7 +39,7 @@ body {
   position: fixed;
   inset: -35%;
   z-index: 0;
-  pointer-events: none;
+  cursor: pointer;
 
   background:
     radial-gradient(
@@ -1266,6 +1266,11 @@ body::after {
 
   user-select: none;
   -webkit-user-select: none;
+}
+
+[class~="album-art-card"] img:focus-visible {
+  outline: 3px solid currentColor;
+  outline-offset: -3px;
 }
 
 .song-feedback {
