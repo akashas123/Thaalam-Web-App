@@ -237,7 +237,7 @@ async function findYouTubeSong(song) {
     album && { query: `${title} ${artist} ${album}`, albumFirst: true },
     { query: `${title} ${artist}`, albumFirst: false },
     { query: `${normalizeYouTubeSongTitle(title)} ${artist}`, albumFirst: false }
-  ].filter((entry) => entry?.query.trim());
+  ].filter((entry) => String(entry?.query || '').trim());
   const candidates = new Map();
   for (const { query, albumFirst } of queries) {
     const items = await searchYouTubeVideos(query, 25);
@@ -623,12 +623,13 @@ async function loadVideo(videoId, requestId, startSeconds = 0, shouldPlay = true
 }
 
 function updateOnDemandMetadata(song, video) {
-  const title = song.trackName || video.title || 'Unknown song';
-  const artist = (song.artistName || video.artist || 'Unknown artist')
+  video = video || {};
+  const title = song?.trackName || video.title || 'Unknown song';
+  const artist = String(song?.artistName || video.artist || 'Unknown artist')
     .replace(/\s-\sTopic$/i, '')
     .trim();
-  const album = song.collectionName || '';
-  const catalogArtwork = song.artworkUrl100
+  const album = song?.collectionName || '';
+  const catalogArtwork = song?.artworkUrl100
     ?.replace(/^http:/, 'https:')
     .replace(/\d+x\d+bb\./, '600x600bb.') || '';
   const youtubeArtwork = String(video.thumbnail || '').replace(/^http:/, 'https:');
