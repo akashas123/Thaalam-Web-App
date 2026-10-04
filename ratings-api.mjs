@@ -28,9 +28,13 @@ export async function handleRatings(request, env) {
     const result = await env.DB.prepare(
       'SELECT track_key, rating, title, artist, video_id FROM user_ratings WHERE user_id = ? ORDER BY updated_at DESC'
     ).bind(user.sub).all();
-    return Response.json({ ratings: result.results || [] }, {
-      headers: { 'Cache-Control': 'no-store' }
-    });
+    const ratings = result.results || [];
+    const payload = JSON.stringify({ ratings });
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(payload));
+    const etag = `"${[...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')}"`;
+    const headers = { 'Cache-Control': 'no-store', ETag: etag };
+    if (request.headers.get('If-None-Match') === etag) return new Response(null, { status: 304, headers });
+    return new Response(payload, { headers: { ...headers, 'Content-Type': 'application/json; charset=utf-8' } });
   }
 
   let payload;

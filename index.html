@@ -180,6 +180,7 @@
       <p class="profile-account-name" id="profileAccountName"></p>
       <p class="profile-account-email" id="profileAccountEmail"></p>
       <p class="profile-sync-status" id="profileSyncStatus" role="status" hidden></p>
+      <button class="profile-dialog-action" id="googleReconnectButton" type="button" hidden>Reconnect Google</button>
       <button class="profile-logout-button" id="profileLogoutButton" type="button">Log out</button>
     </div>
   </dialog>
@@ -206,6 +207,7 @@
         <button class="genre-tab is-selected" type="button" role="tab" aria-selected="true" aria-controls="genreResults" tabindex="0" data-genre="pop">Pop</button>
         <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="rock">Rock</button>
         <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="hip-hop">Hip-Hop</button>
+        <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="you-like">Favourites</button>
       </div>
       <div class="genre-results" id="genreResults" role="tabpanel" aria-live="polite">
         <p class="genre-empty">Choose a genre to browse songs.</p>
@@ -1390,17 +1392,95 @@
         }
       }, 400);
     }
+    async function loadLikedSongs(requestId) {
+      genreResults.replaceChildren();
+      genreResults.setAttribute('aria-busy', 'true');
+      const token = window.getThaalamGoogleAccessToken?.();
+      if (!token) {
+        genreResults.setAttribute('aria-busy', 'false');
+        const empty = document.createElement('p');
+        empty.className = 'genre-empty';
+        empty.textContent = 'Sign in with Google to see the songs you liked.';
+        genreResults.appendChild(empty);
+        return;
+      }
+
+      try {
+        const userId = window.getThaalamGoogleUserId?.();
+        const cacheKey = userId ? `thaalam.favourites:${userId}` : '';
+        let cached = null;
+        if (cacheKey) {
+          try { cached = JSON.parse(localStorage.getItem(cacheKey) || 'null'); } catch { localStorage.removeItem(cacheKey); }
+        }
+        const headers = { Authorization: `Bearer ${token}` };
+        if (cached?.etag) headers['If-None-Match'] = cached.etag;
+        const response = await fetch('/api/ratings', {
+          headers,
+          cache: 'no-store'
+        });
+        let ratings;
+        let etag = cached?.etag || '';
+        if (response.status === 304 && Array.isArray(cached?.ratings)) {
+          ratings = cached.ratings;
+        } else {
+          if (!response.ok) throw new Error(`Could not load liked songs (${response.status}).`);
+          const data = await response.json();
+          ratings = data.ratings || [];
+          etag = response.headers.get('ETag') || '';
+          if (cacheKey) {
+            try { localStorage.setItem(cacheKey, JSON.stringify({ etag, ratings })); } catch { /* Use the fetched results for this visit. */ }
+          }
+        }
+        if (requestId !== genreRequestId || activeGenre !== 'you-like') return;
+        const songs = ratings
+          .filter((entry) => entry.rating === 'up')
+          .map((entry) => {
+            const candidateVideoId = entry.video_id || (entry.track_key || '').replace(/^youtube:/, '');
+            const videoId = /^[\w-]{11}$/.test(candidateVideoId) ? candidateVideoId : '';
+            return {
+              trackName: entry.title || 'Liked song',
+              artistName: entry.artist || 'Unknown artist',
+              ...(videoId ? { youtubeVideoId: videoId } : {})
+            };
+          });
+        renderGenreResults(songs);
+        if (!songs.length) {
+          const empty = genreResults.querySelector('.genre-empty');
+          if (empty) empty.textContent = 'Your favourite songs will appear here.';
+        }
+      } catch {
+        if (requestId !== genreRequestId || activeGenre !== 'you-like') return;
+        genreResults.replaceChildren();
+        genreResults.setAttribute('aria-busy', 'false');
+        const error = document.createElement('p');
+        error.className = 'genre-empty';
+        error.textContent = 'No songs liked';
+        genreResults.appendChild(error);
+      }
+    }
+
     function loadGenre(genre) {
       genreTabList.hidden = false;
-      homeSubtitle.textContent = 'Explore songs by genre';
+      homeSubtitle.textContent = genre === 'you-like'
+        ? 'Songs you favourited with this Google account'
+        : 'Explore songs by genre';
       genreTabs.forEach((tab) => {
         const selected = tab.dataset.genre === genre;
         tab.classList.toggle('is-selected', selected);
         tab.setAttribute('aria-selected', String(selected));
         tab.tabIndex = selected ? 0 : -1;
       });
+      if (genre === 'you-like') {
+        const requestId = ++genreRequestId;
+        activeGenre = genre;
+        return loadLikedSongs(requestId);
+      }
       return loadCatalog(genre, '', genreFeedIds[genre]);
     }
+
+    window.addEventListener('thaalam:authenticated', () => {
+      if (activeGenre === 'you-like') loadGenre('you-like');
+    });
 
     function searchCatalog(term) {
       const normalizedTerm = term.trim();
@@ -1702,6 +1782,7 @@
       const accountName = document.getElementById('profileAccountName');
       const accountEmail = document.getElementById('profileAccountEmail');
       const syncStatus = document.getElementById('profileSyncStatus');
+      const reconnectButton = document.getElementById('googleReconnectButton');
       const logoutButton = document.getElementById('profileLogoutButton');
       if (!profileButton || !profileDialog || !signInButton || !status || !guestView || !accountView) return;
 
@@ -1752,14 +1833,103 @@
         if (!clientId) status.textContent = 'Google sign-in needs a Google OAuth client ID before it can be used.';
       };
 
-      if (savedProfile && typeof savedProfile === 'object' && window.getThaalamGoogleAccessToken()) {
+      if (savedProfile && typeof savedProfile === 'object') showProfile(savedProfile);
+      else showGuest();
+
+      let tokenClient = null;
+      let silentTokenRequest = false;
+      const setReconnectRequired = () => {
+        if (!savedProfile) return;
         showProfile(savedProfile);
-      } else showGuest();
+        syncStatus.hidden = false;
+        syncStatus.textContent = 'Reconnect Google to sync your account likes.';
+        reconnectButton.hidden = false;
+      };
+
+      const finishGoogleSignIn = (response) => {
+        if (response.error || !response.access_token) {
+          if (silentTokenRequest) setReconnectRequired();
+          else {
+            status.hidden = false;
+            status.textContent = 'Google sign-in failed. Please try again.';
+          }
+          silentTokenRequest = false;
+          return;
+        }
+        silentTokenRequest = false;
+        fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: `Bearer ${response.access_token}` }
+        })
+          .then((result) => {
+            if (!result.ok) throw new Error('Could not load Google profile');
+            return result.json();
+          })
+          .then((user) => {
+            const profile = { sub: user.sub || '', name: user.name || '', email: user.email || '', picture: user.picture || '' };
+            localStorage.setItem(profileStorageKey, JSON.stringify(profile));
+            sessionStorage.setItem(accessTokenStorageKey, response.access_token);
+            savedProfile = profile;
+            showProfile(profile);
+            syncStatus.hidden = true;
+            reconnectButton.hidden = true;
+            window.dispatchEvent(new Event('thaalam:authenticated'));
+            if (profileDialog.open) profileDialog.close();
+          })
+          .catch(() => {
+            if (savedProfile) setReconnectRequired();
+            else {
+              status.hidden = false;
+              status.textContent = 'Signed in with Google, but the profile could not be loaded.';
+            }
+          });
+      };
+
+      const getTokenClient = () => {
+        if (!clientId || !window.google?.accounts?.oauth2) return null;
+        if (!tokenClient) {
+          tokenClient = window.google.accounts.oauth2.initTokenClient({
+            client_id: clientId,
+            scope: 'openid email profile',
+            callback: finishGoogleSignIn
+          });
+        }
+        return tokenClient;
+      };
+
+      const requestGoogleAccess = (silent = false) => {
+        const client = getTokenClient();
+        if (!client) {
+          if (silent) setReconnectRequired();
+          else {
+            status.hidden = false;
+            status.textContent = 'Google sign-in is not available. Check the OAuth client configuration and reload.';
+          }
+          return;
+        }
+        silentTokenRequest = silent;
+        client.requestAccessToken(silent
+          ? { prompt: 'none', login_hint: savedProfile?.email || '' }
+          : {});
+      };
+
+      if (savedProfile && !window.getThaalamGoogleAccessToken()) {
+        let attempts = 0;
+        const renewSilently = () => {
+          if (window.getThaalamGoogleAccessToken() || !savedProfile) return;
+          if (getTokenClient()) {
+            requestGoogleAccess(true);
+            return;
+          }
+          attempts += 1;
+          if (attempts < 40) window.setTimeout(renewSilently, 250);
+          else setReconnectRequired();
+        };
+        renewSilently();
+      }
 
       window.addEventListener('thaalam:auth-expired', () => {
-        showGuest();
-        status.hidden = false;
-        status.textContent = 'Your Google session expired. Sign in again to sync your ratings.';
+        sessionStorage.removeItem(accessTokenStorageKey);
+        setReconnectRequired();
       });
       window.addEventListener('thaalam:sync-unavailable', () => {
         syncStatus.hidden = false;
@@ -1777,51 +1947,13 @@
         sessionStorage.removeItem(accessTokenStorageKey);
         window.location.reload();
       });
+      reconnectButton.addEventListener('click', () => requestGoogleAccess(false));
       profileDialog.addEventListener('click', (event) => {
         if (event.target === profileDialog) profileDialog.close();
       });
 
       signInButton.addEventListener('click', () => {
-        if (!clientId || !window.google?.accounts?.oauth2) {
-          status.hidden = false;
-          status.textContent = 'Google sign-in is not available. Check the OAuth client configuration and reload.';
-          return;
-        }
-        const tokenClient = window.google.accounts.oauth2.initTokenClient({
-          client_id: clientId,
-          scope: 'openid email profile',
-          callback: (response) => {
-            if (response.error) {
-              status.hidden = false;
-              status.textContent = 'Google sign-in failed. Please try again.';
-              return;
-            }
-            fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-              headers: { Authorization: `Bearer ${response.access_token}` }
-            })
-              .then((result) => {
-                if (!result.ok) throw new Error('Could not load Google profile');
-                return result.json();
-              })
-              .then((user) => {
-                const profile = { sub: user.sub || '', name: user.name || '', email: user.email || '', picture: user.picture || '' };
-                localStorage.setItem(profileStorageKey, JSON.stringify(profile));
-                sessionStorage.setItem(accessTokenStorageKey, response.access_token);
-                savedProfile = profile;
-                showProfile(profile);
-                syncStatus.hidden = true;
-                window.dispatchEvent(new Event('thaalam:authenticated'));
-                profileDialog.close();
-              })
-              .catch(() => {
-                status.hidden = false;
-                status.textContent = 'Signed in with Google, but the profile photo could not be loaded.';
-                profileButton.setAttribute('aria-label', 'Account information');
-                profileDialog.close();
-              });
-          }
-        });
-        tokenClient.requestAccessToken();
+        requestGoogleAccess(false);
       });
     })();
   </script>
