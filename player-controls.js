@@ -853,7 +853,14 @@ function refreshSleepTimerStatus() {
   if (remaining <= 0) {
     stopSleepTimer();
 
-    controlsRadio.pause();
+    if (
+      window.onDemandPlaybackActive &&
+      window.onDemandPlaying
+    ) {
+      window.toggleOnDemandPlayback?.(false);
+    } else {
+      controlsRadio.pause();
+    }
 
     sleepTimerStatus.textContent =
       'Timer complete. Playback paused.';

@@ -274,6 +274,15 @@ function setStreamOffline(isOffline) {
   if (!streamQuality) return;
 
   isStreamOffline = isOffline;
+  if (window.onDemandPlaybackActive) {
+    streamQuality.classList.remove('is-offline');
+    streamQuality.textContent = 'ADAPTIVE';
+    streamQuality.setAttribute(
+      'aria-label',
+      'On-demand audio quality: adaptive (selected by YouTube; exact bitrate unavailable)'
+    );
+    return;
+  }
   streamQuality.classList.toggle('is-offline', isOffline);
 
   if (isOffline) {
@@ -290,7 +299,7 @@ function setStreamOffline(isOffline) {
 }
 
 function updateStreamQuality(levelIndex, levels = []) {
-  if (!streamQuality) return;
+  if (!streamQuality || window.onDemandPlaybackActive) return;
 
   const sortedLevels = levels
     .map((level, index) => ({ index, bitrate: level.bitrate || level.averageBitrate || 0 }))
@@ -317,10 +326,10 @@ window.setOnDemandAudioQuality = (isOnDemand) => {
 
   if (isOnDemand) {
     streamQuality.classList.remove('is-offline');
-    streamQuality.textContent = 'AUTO';
+    streamQuality.textContent = 'ADAPTIVE';
     streamQuality.setAttribute(
       'aria-label',
-      'On-demand audio quality: automatic (selected by YouTube)'
+      'On-demand audio quality: adaptive (selected by YouTube; exact bitrate unavailable)'
     );
     return;
   }
