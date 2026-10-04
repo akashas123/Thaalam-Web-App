@@ -811,7 +811,11 @@ document.addEventListener('DOMContentLoaded', () => {
   if (tagline && nowPlayingEl) {
     window.updateMarquee = () => {
       if (window.matchMedia('(min-width: 56.25rem) and (pointer: fine)').matches) {
-        const availableWidth = tagline.clientWidth;
+        const likeButton = tagline.querySelector('.on-demand-like-button');
+        const likeSpace = likeButton
+          ? likeButton.offsetWidth + parseFloat(getComputedStyle(likeButton).marginLeft || '0')
+          : 0;
+        const availableWidth = Math.max(0, tagline.clientWidth - likeSpace);
         const measureText = (text, pseudo) => {
           const styles = getComputedStyle(nowPlayingEl, pseudo);
           const measure = document.createElement('span');
@@ -838,7 +842,11 @@ document.addEventListener('DOMContentLoaded', () => {
       tagline.classList.remove('marquee');
       tagline.classList.remove('title-marquee', 'artist-marquee');
       requestAnimationFrame(() => {
-        if (nowPlayingEl.scrollWidth > tagline.clientWidth) {
+        const likeButton = tagline.querySelector('.on-demand-like-button');
+        const likeSpace = likeButton
+          ? likeButton.offsetWidth + parseFloat(getComputedStyle(likeButton).marginLeft || '0')
+          : 0;
+        if (nowPlayingEl.scrollWidth > tagline.clientWidth - likeSpace) {
           tagline.classList.add('marquee');
         }
       });

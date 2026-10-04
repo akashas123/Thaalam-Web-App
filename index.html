@@ -11,7 +11,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=129">
+  <link rel="stylesheet" href="style.css?v=130">
   <link rel="icon" type="image/png" href="icon-512.png?v=3">
   <link rel="apple-touch-icon" href="icon-192.png?v=3">
 
@@ -337,6 +337,9 @@
 
     <div class="tagline now-playing-track">
       <span id="nowPlaying" data-track-title="Non-Stop 24x7" data-track-artist=""></span>
+      <button class="on-demand-like-button" id="onDemandLikeButton" type="button" aria-label="Like song" title="Like song" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78Z"/></svg>
+      </button>
     </div>
 
     <div class="live-row">
@@ -1396,17 +1399,52 @@
       genreResults.replaceChildren();
       genreResults.setAttribute('aria-busy', 'true');
       const token = window.getThaalamGoogleAccessToken?.();
-      if (!token) {
+      const userId = window.getThaalamGoogleUserId?.();
+      if (!token || !userId) {
         genreResults.setAttribute('aria-busy', 'false');
-        const empty = document.createElement('p');
-        empty.className = 'genre-empty';
-        empty.textContent = 'Sign in with Google to see the songs you liked.';
-        genreResults.appendChild(empty);
+        let localRatings = {};
+        let songInfo = {};
+        try { localRatings = JSON.parse(localStorage.getItem('thaalam24x7-ratings') || '{}'); } catch { /* Ignore malformed browser ratings. */ }
+        try { songInfo = JSON.parse(localStorage.getItem('thaalam24x7-song-info-v1') || '{}'); } catch { /* Song cards can still use rating keys. */ }
+        const songs = Object.entries(localRatings && typeof localRatings === 'object' ? localRatings : {})
+          .filter(([, rating]) => rating === 'up')
+          .map(([trackKey]) => {
+            const info = songInfo?.[trackKey] || {};
+            const [keyTitle = '', keyArtist = ''] = trackKey.startsWith('youtube:') ? ['', ''] : trackKey.split('|');
+            const videoId = trackKey.startsWith('youtube:') ? trackKey.slice('youtube:'.length) : '';
+            return {
+              trackName: info.track || keyTitle || 'Liked song',
+              artistName: info.artist || keyArtist || 'Unknown artist',
+              artworkUrl100: info.artworkUrl100 || '',
+              ...(videoId ? { youtubeVideoId: videoId } : {})
+            };
+          });
+        renderGenreResults(songs);
+        const missingArtwork = songs.filter((song) => !song.artworkUrl100);
+        if (missingArtwork.length && typeof window.lookupAlbumArtwork === 'function') {
+          void Promise.all(missingArtwork.map(async (song) => {
+            song.artworkUrl100 = await window.lookupAlbumArtwork(song.trackName, song.artistName) || '';
+          })).then(() => {
+            if (requestId !== genreRequestId || activeGenre !== 'you-like') return;
+            songs.forEach((song) => {
+              if (!song.artworkUrl100) return;
+              const key = song.youtubeVideoId
+                ? `youtube:${song.youtubeVideoId}`
+                : `${song.trackName.trim().toLowerCase().replace(/\\s+/g, ' ')}|${song.artistName.trim().toLowerCase().replace(/\\s+/g, ' ')}`;
+              songInfo[key] = { ...songInfo[key], track: song.trackName, artist: song.artistName, artworkUrl100: song.artworkUrl100 };
+            });
+            try { localStorage.setItem('thaalam24x7-song-info-v1', JSON.stringify(songInfo)); } catch { /* Keep the resolved covers for this view. */ }
+            renderGenreResults(songs);
+          });
+        }
+        if (!songs.length) {
+          const empty = genreResults.querySelector('.genre-empty');
+          if (empty) empty.textContent = 'No songs liked';
+        }
         return;
       }
 
       try {
-        const userId = window.getThaalamGoogleUserId?.();
         const cacheKey = userId ? `thaalam.favourites:${userId}` : '';
         let cached = null;
         if (cacheKey) {
@@ -1487,7 +1525,9 @@
     function loadGenre(genre) {
       genreTabList.hidden = false;
       homeSubtitle.textContent = genre === 'you-like'
-        ? 'Songs you favourited with this Google account'
+        ? (window.getThaalamGoogleAccessToken?.() && window.getThaalamGoogleUserId?.()
+          ? 'Songs you favourited with this Google account'
+          : 'Songs you favourited on this device')
         : 'Explore songs by genre';
       genreTabs.forEach((tab) => {
         const selected = tab.dataset.genre === genre;
