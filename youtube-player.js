@@ -98,7 +98,7 @@ function setYouTubeSearchCache(query, items) {
 }
 
 async function searchYouTubeVideos(query, maxResults = 10) {
-  const normalizedQuery = query.trim().replace(/\s+/g, ' ');
+  const normalizedQuery = String(query || '').trim().replace(/\s+/g, ' ');
   if (!normalizedQuery) return [];
   const cacheKey = `${normalizedQuery.toLowerCase()}|${maxResults}`;
   const cached = getYouTubeSearchCache(cacheKey);
@@ -956,6 +956,16 @@ async function playRelatedTrack(track) {
 
 async function startOnDemandSong(song, { preserveQueue = false } = {}) {
   if (!song?.trackName) return;
+  // Ratings-backed favourites may contain partial or older metadata. Keep the
+  // player input shape consistent before artwork lookup, search, and queueing.
+  song = {
+    ...song,
+    trackName: String(song.trackName || '').trim(),
+    artistName: String(song.artistName || '').trim(),
+    collectionName: String(song.collectionName || '').trim(),
+    artworkUrl100: String(song.artworkUrl100 || '')
+  };
+  if (!song.trackName) return;
   if (!preserveQueue) {
     const current = onDemandQueue[onDemandQueueIndex];
     const isSameAsCurrent = current
