@@ -51,9 +51,11 @@ let lastArtwork = '';
 let lastStationLabel = 'Thaalam 24x7';
 let artworkRequestId = 0;
 let nowPlayingRequestId = 0;
+let scheduleRequestId = 0;
 let isConnecting = false;
 let isStreamOffline = false;
 let shouldResumePlayback = false;
+let liveDataPaused = false;
 let audioIsAdvancing = false;
 let hasStartedPlayback = (() => {
   try {
@@ -339,6 +341,7 @@ window.setOnDemandAudioQuality = (isOnDemand) => {
 
 async function startLiveStream() {
   if (isConnecting || !radio || window.onDemandPlaybackActive) return;
+  liveDataPaused = false;
   isConnecting = true;
   shouldResumePlayback = true;
   setStreamLoading(true);
@@ -537,25 +540,30 @@ function togglePlay() {
   if (!radio) return;
   if (radio.paused) {
     shouldResumePlayback = true;
+    liveDataPaused = false;
+    refreshStationAndTrackInfo();
     startLiveStream();
   } else {
     shouldResumePlayback = false;
+    pauseLiveData();
     window.clearTimeout(streamStallTimer);
     setStreamLoading(false);
     setStreamOffline(false);
-    radio.pause();
+    audioIsAdvancing = false;
+    setVisualState(false);
+    showPlayIcon();
+    stopLiveStreamTransport();
   }
 }
 
-window.pauseLiveStreamForOnDemand = () => {
-  shouldResumePlayback = false;
-  window.clearTimeout(streamStallTimer);
-  setStreamLoading(false);
-  setStreamOffline(false);
+function pauseLiveData() {
+  liveDataPaused = true;
+  nowPlayingRequestId += 1;
+  scheduleRequestId += 1;
+}
+
+function stopLiveStreamTransport() {
   radio?.pause();
-  // A paused media element can keep its HLS loader and buffered playlist
-  // requests alive. Tear down the live source entirely while OnDemand owns
-  // playback; startLiveStream() recreates it when the listener returns live.
   if (hlsPlayer) {
     hlsPlayer.destroy();
     hlsPlayer = null;
@@ -564,7 +572,18 @@ window.pauseLiveStreamForOnDemand = () => {
     radio.removeAttribute('src');
     radio.load();
   }
-  nowPlayingRequestId += 1;
+}
+
+window.pauseLiveStreamForOnDemand = () => {
+  shouldResumePlayback = false;
+  pauseLiveData();
+  window.clearTimeout(streamStallTimer);
+  setStreamLoading(false);
+  setStreamOffline(false);
+  // A paused media element can keep its HLS loader and buffered playlist
+  // requests alive. Tear down the live source entirely while OnDemand owns
+  // playback; startLiveStream() recreates it when the listener returns live.
+  stopLiveStreamTransport();
 };
 
 window.setPlayerVisualState = setVisualState;
@@ -654,14 +673,15 @@ function paintStationLabel(label) {
 }
 
 async function updateStationNameFromSchedule() {
-  if (window.onDemandPlaybackActive) return;
+  if (window.onDemandPlaybackActive || liveDataPaused) return;
+  const requestId = ++scheduleRequestId;
 
   try {
     const response = await fetch(SCHEDULE_API, { cache: 'no-store' });
     const schedule = await response.json();
     // On-demand may have started while this request was in flight; that mode
     // owns the station label, so drop the late response.
-    if (window.onDemandPlaybackActive) return;
+    if (requestId !== scheduleRequestId || window.onDemandPlaybackActive || liveDataPaused) return;
     // The station mostly publishes "playlist" slots, so fall back to any
     // entry flagged is_now when no "live" slot is currently on air.
     const currentShow = schedule.find((item) => item.is_now === true && item.type === 'live') ||
@@ -686,7 +706,7 @@ async function updateStationNameFromSchedule() {
       paintStationLabel(showName);
     }
   } catch (_) {
-    if (!window.onDemandPlaybackActive) {
+    if (requestId === scheduleRequestId && !window.onDemandPlaybackActive && !liveDataPaused) {
       paintStationLabel('Thaalam 24x7');
     }
   }
@@ -727,7 +747,7 @@ function updateAlbumArt(artworkUrl) {
 }
 
 async function updateNowPlaying() {
-  if (window.onDemandPlaybackActive) return;
+  if (window.onDemandPlaybackActive || liveDataPaused) return;
   const requestId = ++nowPlayingRequestId;
 
   try {
@@ -735,7 +755,7 @@ async function updateNowPlaying() {
     if (!response.ok) return;
     const rawData = await response.json();
     if (requestId !== nowPlayingRequestId) return;
-    if (window.onDemandPlaybackActive) return;
+    if (window.onDemandPlaybackActive || liveDataPaused) return;
 
     window.rawNowPlayingData = rawData;
     window.rawNowPlayingReceivedAt = performance.now() / 1000;
