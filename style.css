@@ -1652,6 +1652,63 @@ body::after {
     rgba(0, 0, 0, 0.45);
 }
 
+.on-demand-like-button {
+  appearance: none;
+  -webkit-appearance: none;
+  display: none;
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  right: 0.15rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0.4rem;
+  align-items: center;
+  justify-content: center;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: #fff;
+  cursor: pointer;
+  pointer-events: auto;
+  opacity: 0.9;
+}
+
+.on-demand-like-button:hover,
+.on-demand-like-button:active {
+  background: none;
+}
+
+.on-demand-like-button svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: transparent;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+
+.on-demand-like-button.rating-selected svg {
+  fill: currentColor;
+  filter:
+    drop-shadow(0 0 0.2rem rgba(255, 255, 255, 0.85))
+    drop-shadow(0 0 0.5rem rgba(255, 255, 255, 0.45));
+}
+
+.on-demand-like-button:focus-visible {
+  outline: 0.125rem solid #fff;
+  outline-offset: 0.15rem;
+}
+
+body.on-demand-active .on-demand-like-button {
+  display: flex;
+}
+
+body.on-demand-active .tagline.now-playing-track {
+  padding-right: 0;
+}
+
 [class~="tagline"] span {
   display: inline-block;
 
@@ -3259,14 +3316,33 @@ body.has-lyrics .lyrics-panel {
   }
 
   body.view-now-playing .now-playing-track {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    align-items: start;
+    column-gap: 0.5rem;
     white-space: normal;
   }
 
+  body.view-now-playing .now-playing-track > #nowPlaying {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  body.view-now-playing .now-playing-track > .on-demand-like-button {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+    position: relative;
+    top: auto;
+    right: auto;
+    transform: none;
+  }
+
   body.view-now-playing .now-playing-track > .stream-quality {
-    align-self: flex-start;
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: start;
     margin-top: 0.35rem;
     opacity: 1;
     text-shadow: none;
@@ -3279,9 +3355,9 @@ body.has-lyrics .lyrics-panel {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
-    width: 100%;
+    width: auto;
     min-width: 0;
-    overflow: visible;
+    overflow: hidden;
     color: transparent;
     font-size: 0;
     white-space: normal;

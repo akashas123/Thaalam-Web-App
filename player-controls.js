@@ -37,6 +37,9 @@ const thumbsDownButton =
 const thumbsUpButton =
   document.getElementById('thumbsUpButton');
 
+const onDemandLikeButton =
+  document.getElementById('onDemandLikeButton');
+
 let sleepTimerDeadline = 0;
 let sleepTimerInterval = 0;
 let sleepTimerDuration = 0;
@@ -395,6 +398,11 @@ function clearRatingSelection() {
       'false'
     );
   }
+
+  if (onDemandLikeButton) {
+    onDemandLikeButton.classList.remove('rating-selected');
+    onDemandLikeButton.setAttribute('aria-pressed', 'false');
+  }
 }
 
 function applyStoredRating(
@@ -414,6 +422,16 @@ function applyStoredRating(
       'aria-pressed',
       'true'
     );
+  }
+
+  if (value === 'up' && onDemandLikeButton) {
+    onDemandLikeButton.classList.add('rating-selected');
+    onDemandLikeButton.setAttribute('aria-pressed', 'true');
+    onDemandLikeButton.setAttribute('aria-label', 'Unlike song');
+    onDemandLikeButton.title = 'Unlike song';
+  } else if (onDemandLikeButton) {
+    onDemandLikeButton.setAttribute('aria-label', 'Like song');
+    onDemandLikeButton.title = 'Like song';
   }
 
   if (
@@ -1242,6 +1260,15 @@ if (thumbsUpButton) {
       }
     }
   );
+}
+
+if (onDemandLikeButton) {
+  onDemandLikeButton.addEventListener('click', () => {
+    if (!currentRatingTrackKey) refreshCurrentRating();
+    selectRating(onDemandLikeButton, 'up');
+    const savedRating = getStoredRatings()[currentRatingTrackKey] || null;
+    void persistRatingToCloud(currentRatingTrackKey, savedRating);
+  });
 }
 
 if (thumbsDownButton) {
