@@ -553,6 +553,18 @@ window.pauseLiveStreamForOnDemand = () => {
   setStreamLoading(false);
   setStreamOffline(false);
   radio?.pause();
+  // A paused media element can keep its HLS loader and buffered playlist
+  // requests alive. Tear down the live source entirely while OnDemand owns
+  // playback; startLiveStream() recreates it when the listener returns live.
+  if (hlsPlayer) {
+    hlsPlayer.destroy();
+    hlsPlayer = null;
+  }
+  if (radio) {
+    radio.removeAttribute('src');
+    radio.load();
+  }
+  nowPlayingRequestId += 1;
 };
 
 window.setPlayerVisualState = setVisualState;
@@ -715,6 +727,7 @@ function updateAlbumArt(artworkUrl) {
 }
 
 async function updateNowPlaying() {
+  if (window.onDemandPlaybackActive) return;
   const requestId = ++nowPlayingRequestId;
 
   try {
