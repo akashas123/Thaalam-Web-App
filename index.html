@@ -1497,6 +1497,11 @@
 
     function showView(view) {
       if (!desktopNavigation.matches) return Promise.resolve();
+      // Re-selecting the current page should not flash the page loader or
+      // repeat page-specific work.
+      if (document.body.classList.contains(`view-${view}`)) {
+        return Promise.resolve();
+      }
 
       window.clearTimeout(viewChangeTimeout);
       pageLoading.hidden = false;
