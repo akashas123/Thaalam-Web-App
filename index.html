@@ -1440,10 +1440,35 @@
             return {
               trackName: entry.title || 'Liked song',
               artistName: entry.artist || 'Unknown artist',
+              artworkUrl100: entry.artworkUrl100 || '',
               ...(videoId ? { youtubeVideoId: videoId } : {})
             };
           });
         renderGenreResults(songs);
+        // Liked tracks come from the ratings service without catalog artwork.
+        // Resolve missing covers once and keep them beside the cached ratings
+        // so later visits can paint the cards without another iTunes request.
+        const missingArtwork = songs.filter((song) => !song.artworkUrl100);
+        if (missingArtwork.length && typeof window.lookupAlbumArtwork === 'function') {
+          void Promise.all(missingArtwork.map(async (song) => {
+            song.artworkUrl100 = await window.lookupAlbumArtwork(song.trackName, song.artistName) || '';
+          })).then(() => {
+            if (cacheKey) {
+              const artworkByKey = new Map(songs.map((song) => [
+                `${song.trackName.toLowerCase()}|${song.artistName.toLowerCase()}`,
+                song.artworkUrl100
+              ]));
+              ratings = ratings.map((entry) => {
+                if (entry.rating !== 'up') return entry;
+                const key = `${String(entry.title || 'Liked song').toLowerCase()}|${String(entry.artist || 'Unknown artist').toLowerCase()}`;
+                const artworkUrl100 = artworkByKey.get(key);
+                return artworkUrl100 ? { ...entry, artworkUrl100 } : entry;
+              });
+              try { localStorage.setItem(cacheKey, JSON.stringify({ etag, ratings })); } catch { /* Artwork remains available for this view. */ }
+            }
+            if (requestId === genreRequestId && activeGenre === 'you-like') renderGenreResults(songs);
+          });
+        }
         if (!songs.length) {
           const empty = genreResults.querySelector('.genre-empty');
           if (empty) empty.textContent = 'Your favourite songs will appear here.';
