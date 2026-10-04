@@ -563,6 +563,10 @@ body::after {
     transition: transform 0.25s ease;
   }
 
+  .mini-player-art img.is-youtube-thumbnail {
+    transform: scale(1.35);
+  }
+
   .mini-player-art:hover img {
     transform: scale(1.05);
   }
@@ -1660,20 +1664,25 @@ body::after {
   z-index: 2;
   top: 50%;
   right: 0.15rem;
-  width: 2.25rem;
-  height: 2.25rem;
-  padding: 0.4rem;
+  width: 3rem;
+  height: 3rem;
+  padding: 0;
   align-items: center;
   justify-content: center;
   transform: translateY(-50%);
   border: 0;
-  border-radius: 0;
+  border-radius: 50%;
   background: none;
   box-shadow: none;
   color: #fff;
   cursor: pointer;
   pointer-events: auto;
   opacity: 0.9;
+  transition:
+    background 0.2s ease,
+    opacity 0.2s ease,
+    transform 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .on-demand-like-button:hover,
@@ -1681,9 +1690,17 @@ body::after {
   background: none;
 }
 
+.on-demand-like-button:hover {
+  opacity: 1;
+}
+
+.on-demand-like-button:active {
+  transform: translateY(-50%) scale(0.92);
+}
+
 .on-demand-like-button svg {
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 1.45rem;
+  height: 1.45rem;
   fill: transparent;
   stroke: currentColor;
   stroke-width: 1.8;
@@ -1691,14 +1708,17 @@ body::after {
 
 .on-demand-like-button.rating-selected svg {
   fill: currentColor;
-  filter:
-    drop-shadow(0 0 0.2rem rgba(255, 255, 255, 0.85))
-    drop-shadow(0 0 0.5rem rgba(255, 255, 255, 0.45));
+  stroke: none;
+  filter: drop-shadow(0 0 0.32rem rgba(255, 255, 255, 0.95));
+}
+
+.on-demand-like-button.rating-selected {
+  opacity: 1;
 }
 
 .on-demand-like-button:focus-visible {
-  outline: 0.125rem solid #fff;
-  outline-offset: 0.15rem;
+  outline: 0.125rem solid rgba(255, 255, 255, 0.85);
+  outline-offset: 0.2rem;
 }
 
 body.on-demand-active .on-demand-like-button {

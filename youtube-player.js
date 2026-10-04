@@ -665,7 +665,9 @@ function updateOnDemandMetadata(song, video) {
   const colorRequestId = window.bumpArtworkRequestId?.() ?? 0;
   const artworkRequestId = ++onDemandArtworkRequestId;
   onDemandArtwork.src = 'album-placeholder.svg?v=2';
+  onDemandArtwork.classList.remove('is-youtube-thumbnail');
   onDemandMiniArtwork.src = 'album-placeholder.svg?v=2';
+  onDemandMiniArtwork.classList.remove('is-youtube-thumbnail');
 
   // Prefer iTunes album art; use the Topic upload artwork if iTunes has none.
   const videoIdArtwork = video.videoId
@@ -697,6 +699,10 @@ function updateOnDemandMetadata(song, video) {
         image.naturalWidth / image.naturalHeight > 1.1
       );
       onDemandMiniArtwork.src = candidates[index];
+      onDemandMiniArtwork.classList.toggle(
+        'is-youtube-thumbnail',
+        image.naturalWidth / image.naturalHeight > 1.1
+      );
       window.updateAlbumColors?.(candidates[index], colorRequestId);
       if (candidates[index] !== artwork) {
         song.artworkUrl100 = candidates[index];
@@ -1188,6 +1194,7 @@ function returnToLive() {
   onDemandMount.hidden = true;
   onDemandArtwork.hidden = false;
   onDemandArtwork.classList.remove('is-youtube-thumbnail');
+  onDemandMiniArtwork.classList.remove('is-youtube-thumbnail');
   returnToLiveButton.hidden = true;
   onDemandModeLabel.textContent = 'LIVE';
   onDemandStation.textContent = 'Thaalam 24x7';
