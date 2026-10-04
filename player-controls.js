@@ -56,6 +56,9 @@ const prefetchingSongInfo =
 const RATING_STORAGE_KEY =
   'thaalam24x7-ratings';
 
+const RATING_DELETE_STORAGE_PREFIX =
+  'thaalam24x7-rating-deletions:';
+
 const SONG_INFO_STORAGE_KEY =
   'thaalam24x7-song-info-v1';
 
@@ -118,6 +121,12 @@ function getTrackRatingKey(
 ) {
   if (!song) {
     return '';
+  }
+
+  const videoId = song.youtubeVideoId ||
+    (typeof song.id === 'string' && /^[\w-]{11}$/.test(song.id) ? song.id : '');
+  if (videoId && /^[\w-]{11}$/.test(videoId)) {
+    return `youtube:${videoId}`;
   }
 
   const title =
@@ -221,6 +230,149 @@ function saveStoredRatings(
   }
 }
 
+function getRatingTrackDetails(trackKey) {
+  const song = window.latestNowPlayingData?.now_playing?.song || window.currentNowPlayingSong || {};
+  return {
+    title: song.title || '',
+    artist: song.artist || '',
+    videoId: song.youtubeVideoId || song.id || ''
+  };
+}
+
+function getPendingRatingDeletes() {
+  const userId = window.getThaalamGoogleUserId?.() ||
+    localStorage.getItem(`${RATING_STORAGE_KEY}-owner`) || 'anonymous';
+  const key = `${RATING_DELETE_STORAGE_PREFIX}${userId}`;
+  try {
+    const entries = JSON.parse(localStorage.getItem(key) || '[]');
+    return new Set(Array.isArray(entries) ? entries.filter((entry) => typeof entry === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function savePendingRatingDeletes(deletions) {
+  const userId = window.getThaalamGoogleUserId?.() ||
+    localStorage.getItem(`${RATING_STORAGE_KEY}-owner`) || 'anonymous';
+  try {
+    localStorage.setItem(
+      `${RATING_DELETE_STORAGE_PREFIX}${userId}`,
+      JSON.stringify([...deletions])
+    );
+  } catch {
+    // Cloud delete retries are best-effort if browser storage is unavailable.
+  }
+}
+
+async function requestCloudRatings(method, body) {
+  const token = window.getThaalamGoogleAccessToken?.();
+  if (!token) return null;
+  const response = await fetch('/api/ratings', {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(body ? { 'Content-Type': 'application/json' } : {})
+    },
+    ...(body ? { body: JSON.stringify(body) } : {})
+  });
+  if (response.status === 401) {
+    sessionStorage.removeItem('thaalam.googleAccessToken');
+    window.dispatchEvent(new Event('thaalam:auth-expired'));
+    throw new Error('Google sign-in expired.');
+  }
+  if (response.status === 503) {
+    window.dispatchEvent(new Event('thaalam:sync-unavailable'));
+  }
+  if (!response.ok) throw new Error(`Ratings sync failed (${response.status})`);
+  return method === 'GET' ? response.json() : true;
+}
+
+async function persistRatingToCloud(trackKey, rating) {
+  if (!trackKey) return;
+  const deletions = getPendingRatingDeletes();
+  if (rating) deletions.delete(trackKey);
+  else deletions.add(trackKey);
+  savePendingRatingDeletes(deletions);
+  if (!window.getThaalamGoogleAccessToken?.()) return;
+  const details = getRatingTrackDetails(trackKey);
+  try {
+    await requestCloudRatings(rating ? 'PUT' : 'DELETE', {
+      trackKey,
+      rating,
+      ...details
+    });
+    if (!rating) deletions.delete(trackKey);
+    savePendingRatingDeletes(deletions);
+  } catch (error) {
+    console.warn('Could not sync this rating to the account.', error);
+  }
+}
+
+async function syncRatingsFromCloud() {
+  const userId = window.getThaalamGoogleUserId?.();
+  if (!window.getThaalamGoogleAccessToken?.() || !userId) return;
+  try {
+    const response = await requestCloudRatings('GET');
+    const remoteRatings = {};
+    for (const entry of response.ratings || []) {
+      if (entry.track_key && (entry.rating === 'up' || entry.rating === 'down')) {
+        remoteRatings[entry.track_key] = entry.rating;
+      }
+    }
+
+    const pendingDeletes = getPendingRatingDeletes();
+    if (pendingDeletes.size) {
+      await requestCloudRatings('DELETE', { trackKeys: [...pendingDeletes] });
+      for (const trackKey of pendingDeletes) {
+        delete remoteRatings[trackKey];
+        pendingDeletes.delete(trackKey);
+      }
+    }
+    savePendingRatingDeletes(pendingDeletes);
+
+    // Bring existing browser ratings into the account the first time it syncs.
+    const ratingsOwnerKey = `${RATING_STORAGE_KEY}-owner`;
+    const owner = localStorage.getItem(ratingsOwnerKey) || '';
+    let localRatings = getStoredRatings();
+    if (owner && owner !== userId) {
+      localStorage.setItem(`${RATING_STORAGE_KEY}:${owner}`, JSON.stringify(localRatings));
+      try {
+        localRatings = JSON.parse(localStorage.getItem(`${RATING_STORAGE_KEY}:${userId}`) || '{}');
+      } catch {
+        localRatings = {};
+      }
+      saveStoredRatings(localRatings);
+    }
+    const localEntries = Object.entries(localRatings)
+      .filter(([, rating]) => rating === 'up' || rating === 'down')
+      .slice(0, 500);
+    const uploads = [];
+    for (const [trackKey, rating] of localEntries) {
+      if (remoteRatings[trackKey]) continue;
+      const [title = '', artist = ''] = trackKey.startsWith('youtube:')
+        ? ['', '']
+        : trackKey.split('|');
+      const videoId = trackKey.startsWith('youtube:') ? trackKey.slice('youtube:'.length) : '';
+      uploads.push({ trackKey, rating, title, artist, videoId });
+      remoteRatings[trackKey] = rating;
+    }
+    if (uploads.length) await requestCloudRatings('PUT', { ratings: uploads });
+
+    saveStoredRatings({ ...localRatings, ...remoteRatings });
+    localStorage.setItem(ratingsOwnerKey, userId);
+    updateStoredRatingForCurrentSong(
+      window.latestNowPlayingData?.now_playing?.song || window.currentNowPlayingSong || null
+    );
+  } catch (error) {
+    console.warn('Could not sync account ratings.', error);
+  }
+}
+
+window.addEventListener('thaalam:authenticated', syncRatingsFromCloud);
+if (window.getThaalamGoogleAccessToken?.()) {
+  void syncRatingsFromCloud();
+}
+
 function clearRatingSelection() {
   if (thumbsDownButton) {
     thumbsDownButton.classList.remove(
@@ -296,11 +448,18 @@ function updateStoredRatingForCurrentSong(
   const ratings =
     getStoredRatings();
 
-  const savedRating =
-    ratings[key] === 'up' ||
-    ratings[key] === 'down'
-      ? ratings[key]
-      : null;
+  let savedRating = ratings[key];
+  if ((!savedRating || (savedRating !== 'up' && savedRating !== 'down')) && key.startsWith('youtube:')) {
+    const legacyKey = `${normalizeStorageText(song.title)}|${normalizeStorageText(song.artist)}`;
+    const legacyRating = ratings[legacyKey];
+    if (legacyRating === 'up' || legacyRating === 'down') {
+      savedRating = legacyRating;
+      ratings[key] = legacyRating;
+      delete ratings[legacyKey];
+      saveStoredRatings(ratings);
+    }
+  }
+  if (savedRating !== 'up' && savedRating !== 'down') savedRating = null;
 
   applyStoredRating(
     savedRating
@@ -1067,6 +1226,8 @@ if (thumbsUpButton) {
           thumbsUpButton,
           'up'
         );
+      const savedRating = getStoredRatings()[currentRatingTrackKey] || null;
+      void persistRatingToCloud(currentRatingTrackKey, savedRating);
 
       if (
         triggered &&
@@ -1101,6 +1262,8 @@ if (thumbsDownButton) {
           thumbsDownButton,
           'down'
         );
+      const savedRating = getStoredRatings()[currentRatingTrackKey] || null;
+      void persistRatingToCloud(currentRatingTrackKey, savedRating);
 
       if (
         triggered &&
