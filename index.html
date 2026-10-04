@@ -11,7 +11,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=123">
+  <link rel="stylesheet" href="style.css?v=129">
   <link rel="icon" type="image/png" href="icon-512.png?v=3">
   <link rel="apple-touch-icon" href="icon-192.png?v=3">
 
@@ -162,6 +162,27 @@
       <button type="button" data-view="about">About</button>
     </div>
   </nav>
+
+  <button class="desktop-profile-button" id="profileButton" type="button" aria-label="Account and sync information" aria-haspopup="dialog" aria-controls="profileDialog">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"></path></svg>
+  </button>
+  <dialog class="control-dialog profile-dialog" id="profileDialog" aria-labelledby="profileDialogTitle">
+    <form method="dialog"><button class="dialog-close" aria-label="Close account information">&times;</button></form>
+    <p class="site-page-eyebrow">THAALAM ACCOUNT</p>
+    <h2 id="profileDialogTitle">Listen across browsers</h2>
+    <div id="profileGuestView">
+      <p class="profile-dialog-copy">Sign in with your Google account to listen across browsers.</p>
+      <p class="profile-dialog-status" id="profileDialogStatus" role="status">Google sign-in needs a Google OAuth client ID before it can be used.</p>
+      <button class="profile-dialog-action" id="googleSignInButton" type="button" disabled title="Google sign-in is not configured yet">Continue with Google</button>
+    </div>
+    <div id="profileAccountView" hidden>
+      <img class="profile-account-avatar" id="profileAccountAvatar" alt="Profile picture">
+      <p class="profile-account-name" id="profileAccountName"></p>
+      <p class="profile-account-email" id="profileAccountEmail"></p>
+      <p class="profile-sync-status" id="profileSyncStatus" role="status" hidden></p>
+      <button class="profile-logout-button" id="profileLogoutButton" type="button">Log out</button>
+    </div>
+  </dialog>
 
   <main class="site-page home-page" id="homePage" aria-labelledby="homeTitle">
     <div class="site-page-content">
@@ -652,8 +673,10 @@
   <script src="audio-recovery.js?v=2"></script>
   <script src="marquee.js?v=3"></script>
   <script src="media-metadata.js?v=7"></script>
-  <script src="player-controls.js?v=32"></script>
+  <script src="player-controls.js?v=33"></script>
   <script src="lyrics.js?v=32"></script>
+  <script src="/google-auth-config.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script>
     const desktopNavigation =
       window.matchMedia('(min-width: 56.25rem) and (pointer: fine)');
@@ -1667,5 +1690,140 @@
     })();
   </script>
 
+  <script>
+    (() => {
+      const profileButton = document.getElementById('profileButton');
+      const profileDialog = document.getElementById('profileDialog');
+      const signInButton = document.getElementById('googleSignInButton');
+      const status = document.getElementById('profileDialogStatus');
+      const guestView = document.getElementById('profileGuestView');
+      const accountView = document.getElementById('profileAccountView');
+      const accountAvatar = document.getElementById('profileAccountAvatar');
+      const accountName = document.getElementById('profileAccountName');
+      const accountEmail = document.getElementById('profileAccountEmail');
+      const syncStatus = document.getElementById('profileSyncStatus');
+      const logoutButton = document.getElementById('profileLogoutButton');
+      if (!profileButton || !profileDialog || !signInButton || !status || !guestView || !accountView) return;
+
+      const clientId = window.THAALAM_GOOGLE_CLIENT_ID || '';
+      const profileStorageKey = 'thaalam.googleProfile';
+      const accessTokenStorageKey = 'thaalam.googleAccessToken';
+      window.getThaalamGoogleAccessToken = () => sessionStorage.getItem(accessTokenStorageKey) || '';
+      let savedProfile = null;
+      try {
+        savedProfile = JSON.parse(localStorage.getItem(profileStorageKey) || 'null');
+      } catch (_) {
+        localStorage.removeItem(profileStorageKey);
+      }
+      window.getThaalamGoogleUserId = () => savedProfile?.sub || '';
+
+      const showProfile = (user) => {
+        if (user.picture) {
+          const avatar = document.createElement('img');
+          avatar.className = 'profile-avatar';
+          avatar.src = user.picture;
+          avatar.alt = '';
+          avatar.referrerPolicy = 'no-referrer';
+          avatar.addEventListener('error', () => avatar.remove());
+          profileButton.replaceChildren(avatar);
+        } else {
+          profileButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"></path></svg>';
+        }
+        profileButton.setAttribute('aria-label', user.name ? `Account: ${user.name}` : 'Account information');
+        accountAvatar.src = user.picture || '';
+        accountAvatar.hidden = !user.picture;
+        accountAvatar.onerror = () => { accountAvatar.hidden = true; };
+        accountName.textContent = user.name || '';
+        accountEmail.textContent = user.email || '';
+        guestView.hidden = true;
+        accountView.hidden = false;
+        document.getElementById('profileDialogTitle').hidden = true;
+        profileDialog.classList.add('is-signed-in');
+      };
+
+      const showGuest = () => {
+        profileButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"></path></svg>';
+        profileButton.setAttribute('aria-label', 'Account and sync information');
+        accountView.hidden = true;
+        guestView.hidden = false;
+        document.getElementById('profileDialogTitle').hidden = false;
+        profileDialog.classList.remove('is-signed-in');
+        status.hidden = Boolean(clientId);
+        if (!clientId) status.textContent = 'Google sign-in needs a Google OAuth client ID before it can be used.';
+      };
+
+      if (savedProfile && typeof savedProfile === 'object' && window.getThaalamGoogleAccessToken()) {
+        showProfile(savedProfile);
+      } else showGuest();
+
+      window.addEventListener('thaalam:auth-expired', () => {
+        showGuest();
+        status.hidden = false;
+        status.textContent = 'Your Google session expired. Sign in again to sync your ratings.';
+      });
+      window.addEventListener('thaalam:sync-unavailable', () => {
+        syncStatus.hidden = false;
+        syncStatus.textContent = 'Likes are saved on this device, but account sync is not available yet.';
+      });
+
+      if (clientId) {
+        signInButton.disabled = false;
+        signInButton.title = '';
+      }
+
+      profileButton.addEventListener('click', () => profileDialog.showModal());
+      logoutButton.addEventListener('click', () => {
+        localStorage.removeItem(profileStorageKey);
+        sessionStorage.removeItem(accessTokenStorageKey);
+        window.location.reload();
+      });
+      profileDialog.addEventListener('click', (event) => {
+        if (event.target === profileDialog) profileDialog.close();
+      });
+
+      signInButton.addEventListener('click', () => {
+        if (!clientId || !window.google?.accounts?.oauth2) {
+          status.hidden = false;
+          status.textContent = 'Google sign-in is not available. Check the OAuth client configuration and reload.';
+          return;
+        }
+        const tokenClient = window.google.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: 'openid email profile',
+          callback: (response) => {
+            if (response.error) {
+              status.hidden = false;
+              status.textContent = 'Google sign-in failed. Please try again.';
+              return;
+            }
+            fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+              headers: { Authorization: `Bearer ${response.access_token}` }
+            })
+              .then((result) => {
+                if (!result.ok) throw new Error('Could not load Google profile');
+                return result.json();
+              })
+              .then((user) => {
+                const profile = { sub: user.sub || '', name: user.name || '', email: user.email || '', picture: user.picture || '' };
+                localStorage.setItem(profileStorageKey, JSON.stringify(profile));
+                sessionStorage.setItem(accessTokenStorageKey, response.access_token);
+                savedProfile = profile;
+                showProfile(profile);
+                syncStatus.hidden = true;
+                window.dispatchEvent(new Event('thaalam:authenticated'));
+                profileDialog.close();
+              })
+              .catch(() => {
+                status.hidden = false;
+                status.textContent = 'Signed in with Google, but the profile photo could not be loaded.';
+                profileButton.setAttribute('aria-label', 'Account information');
+                profileDialog.close();
+              });
+          }
+        });
+        tokenClient.requestAccessToken();
+      });
+    })();
+  </script>
 </body>
 </html>

@@ -200,6 +200,164 @@ body::after {
   display: none;
 }
 
+.desktop-profile-button {
+  position: fixed;
+  z-index: 6;
+  top: 0.45rem;
+  right: 1.25rem;
+  display: none;
+  width: 2.35rem;
+  height: 2.35rem;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  cursor: pointer;
+  backdrop-filter: blur(1.25rem) saturate(150%);
+  -webkit-backdrop-filter: blur(1.25rem) saturate(150%);
+}
+
+.desktop-profile-button:hover,
+.desktop-profile-button:focus-visible {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.desktop-profile-button:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.75);
+  outline-offset: 2px;
+}
+
+.desktop-profile-button svg {
+  width: 1.3rem;
+  height: 1.3rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.7;
+}
+
+.desktop-profile-button .profile-avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.profile-dialog {
+  width: min(26rem, calc(100vw - 2rem));
+  padding: 2.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 1.25rem;
+  background: linear-gradient(145deg, #302d1e, #172a25);
+  color: #fff;
+  box-shadow: 0 1.5rem 5rem rgba(0, 0, 0, 0.5);
+}
+
+.profile-dialog h2 {
+  margin: 0.75rem 0 1.15rem;
+  font-size: 1.6rem;
+}
+
+.profile-dialog-copy,
+.profile-dialog-status {
+  color: rgba(255, 255, 255, 0.78);
+  line-height: 1.55;
+}
+
+.profile-dialog-copy {
+  margin: 0 0 1.25rem;
+}
+
+.profile-dialog-status {
+  padding: 0.75rem 0.9rem;
+  border-radius: 0.7rem;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 0.88rem;
+}
+
+.profile-dialog.is-signed-in > #profileDialogTitle {
+  display: none;
+}
+
+.profile-dialog.is-signed-in > .site-page-eyebrow {
+  display: block;
+  margin: 0 0 1rem;
+  text-align: center;
+}
+
+.profile-account-avatar {
+  display: block;
+  width: 6rem;
+  height: 6rem;
+  margin: 0 auto 0.75rem;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.profile-account-name {
+  margin: 0;
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.profile-account-email {
+  margin: 0.25rem 0 1.25rem;
+  color: rgba(255, 255, 255, 0.68);
+  text-align: center;
+  font-size: 0.8rem;
+}
+
+.profile-sync-status {
+  margin: -0.5rem 0 1rem;
+  color: rgba(255, 255, 255, 0.68);
+  text-align: center;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.profile-logout-button {
+  width: 100%;
+  margin-top: 0;
+  padding: 0.8rem 1rem;
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
+  color: #111;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.profile-logout-button:hover,
+.profile-logout-button:focus-visible {
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.profile-dialog-action {
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.9rem 1rem;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.75);
+  color: #25251e;
+  font: inherit;
+  font-weight: 600;
+}
+
+.profile-dialog-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.profile-dialog::backdrop {
+  background: rgba(8, 12, 10, 0.62);
+  backdrop-filter: blur(0.25rem);
+}
+
 .site-page {
   display: none;
 }
@@ -209,6 +367,103 @@ body::after {
 }
 
 @media (min-width: 56.25rem) and (pointer: fine) {
+  .desktop-profile-button {
+    position: fixed;
+    z-index: 6;
+    top: 0.45rem;
+    right: 1.25rem;
+    display: none;
+    width: 2.35rem;
+    height: 2.35rem;
+    place-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    cursor: pointer;
+    backdrop-filter: blur(1.25rem) saturate(150%);
+    -webkit-backdrop-filter: blur(1.25rem) saturate(150%);
+  }
+
+  body.view-home .desktop-profile-button {
+    display: grid;
+  }
+
+  .desktop-profile-button:hover,
+  .desktop-profile-button:focus-visible {
+    background: rgba(255, 255, 255, 0.22);
+  }
+
+  .desktop-profile-button:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.75);
+    outline-offset: 2px;
+  }
+
+  .desktop-profile-button svg {
+    width: 1.3rem;
+    height: 1.3rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-width: 1.7;
+  }
+
+  .desktop-profile-button .profile-avatar {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+
+  .profile-dialog {
+    width: min(26rem, calc(100vw - 2rem));
+    padding: 2rem;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 1.25rem;
+    background: linear-gradient(145deg, #302d1e, #172a25);
+    color: #fff;
+    box-shadow: 0 1.5rem 5rem rgba(0, 0, 0, 0.5);
+  }
+
+  .profile-dialog h2 {
+    margin: 0.35rem 0 0.75rem;
+    font-size: 1.6rem;
+  }
+
+  .profile-dialog-copy,
+  .profile-dialog-status {
+    color: rgba(255, 255, 255, 0.78);
+    line-height: 1.55;
+  }
+
+  .profile-dialog-status {
+    padding: 0.75rem 0.9rem;
+    border-radius: 0.7rem;
+    background: rgba(255, 255, 255, 0.08);
+    font-size: 0.88rem;
+  }
+
+  .profile-dialog-action {
+    width: 100%;
+    margin-top: 0.5rem;
+    padding: 0.8rem 1rem;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.75);
+    color: #25251e;
+    font: inherit;
+    font-weight: 600;
+  }
+
+  .profile-dialog-action:disabled {
+    cursor: not-allowed;
+    opacity: 0.72;
+  }
+
+  .profile-dialog::backdrop {
+    background: rgba(8, 12, 10, 0.62);
+    backdrop-filter: blur(0.25rem);
+  }
   body.view-home .site-page.home-page,
   body.view-about .site-page.about-page {
     position: fixed;
