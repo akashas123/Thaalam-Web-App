@@ -119,6 +119,114 @@ function normalizeStorageText(
     .replace(/\s+/g, ' ');
 }
 
+function hasUsableLiveArtist(
+  song
+) {
+  const artist = String(
+    song?.artist ?? ''
+  ).trim();
+  if (!artist) {
+    return false;
+  }
+  return artist.toLowerCase() !==
+    'unknown artist';
+}
+
+function updateLiveActionAvailability(
+  song
+) {
+  const onDemandActive =
+    Boolean(
+      window.onDemandPlaybackActive
+    ) ||
+    Boolean(
+      document.body?.classList?.contains(
+        'on-demand-active'
+      )
+    );
+
+  if (onDemandActive) {
+    [
+      thumbsUpButton,
+      thumbsDownButton,
+      songInfoButton
+    ].forEach((button) => {
+      if (!button) {
+        return;
+      }
+
+      button.disabled = false;
+      button.classList.remove(
+        'is-disabled'
+      );
+      button.setAttribute(
+        'aria-disabled',
+        'false'
+      );
+    });
+
+    if (thumbsUpButton) {
+      thumbsUpButton.title = 'Like';
+    }
+
+    if (thumbsDownButton) {
+      thumbsDownButton.title =
+        'Dislike';
+    }
+
+    if (songInfoButton) {
+      songInfoButton.title =
+        'Song information';
+    }
+
+    return;
+  }
+
+  const actionable =
+    hasUsableLiveArtist(song);
+
+  [
+    thumbsUpButton,
+    thumbsDownButton,
+    songInfoButton
+  ].forEach((button) => {
+    if (!button) {
+      return;
+    }
+
+    button.disabled = !actionable;
+    button.classList.toggle(
+      'is-disabled',
+      !actionable
+    );
+    button.setAttribute(
+      'aria-disabled',
+      String(!actionable)
+    );
+
+    if (!actionable) {
+      button.removeAttribute(
+        'title'
+      );
+    } else if (
+      button === thumbsUpButton
+    ) {
+      button.title = 'Like';
+    } else if (
+      button === thumbsDownButton
+    ) {
+      button.title = 'Dislike';
+    } else {
+      button.title =
+        'Song information';
+    }
+  });
+
+  if (!actionable) {
+    clearRatingSelection();
+  }
+}
+
 function getTrackRatingKey(
   song
 ) {
@@ -452,6 +560,25 @@ function applyStoredRating(
 function updateStoredRatingForCurrentSong(
   song
 ) {
+  updateLiveActionAvailability(
+    song
+  );
+
+  const isLiveContext =
+    !window.onDemandPlaybackActive &&
+    !document.body?.classList?.contains(
+      'on-demand-active'
+    );
+
+  if (
+    isLiveContext &&
+    !hasUsableLiveArtist(song)
+  ) {
+    currentRatingTrackKey = '';
+    clearRatingSelection();
+    return;
+  }
+
   const key =
     getTrackRatingKey(song);
 
@@ -1181,6 +1308,17 @@ function restoreSleepTimer() {
 songInfoButton?.addEventListener(
   'click',
   () => {
+    if (
+      songInfoButton.disabled ||
+      !hasUsableLiveArtist(
+        window.latestNowPlayingData
+          ?.now_playing?.song ||
+          window.currentNowPlayingSong
+      )
+    ) {
+      return;
+    }
+
     updateSongInfo();
 
     openDialog(
@@ -1235,6 +1373,17 @@ if (thumbsUpButton) {
   thumbsUpButton.addEventListener(
     'click',
     () => {
+      if (
+        thumbsUpButton.disabled ||
+        !hasUsableLiveArtist(
+          window.latestNowPlayingData
+            ?.now_playing?.song ||
+            window.currentNowPlayingSong
+        )
+      ) {
+        return;
+      }
+
       if (!currentRatingTrackKey) {
         refreshCurrentRating();
       }
@@ -1280,6 +1429,17 @@ if (thumbsDownButton) {
   thumbsDownButton.addEventListener(
     'click',
     () => {
+      if (
+        thumbsDownButton.disabled ||
+        !hasUsableLiveArtist(
+          window.latestNowPlayingData
+            ?.now_playing?.song ||
+            window.currentNowPlayingSong
+        )
+      ) {
+        return;
+      }
+
       if (!currentRatingTrackKey) {
         refreshCurrentRating();
       }
