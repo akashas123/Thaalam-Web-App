@@ -2318,6 +2318,28 @@ body.on-demand-active .transport-btn:disabled {
     );
 }
 
+.rating-btn:disabled,
+.rating-btn.is-disabled,
+.side-control:disabled,
+.side-control.is-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.rating-btn:disabled:hover,
+.rating-btn.is-disabled:hover,
+.side-control:disabled:hover,
+.side-control.is-disabled:hover,
+.rating-btn:disabled:active,
+.rating-btn.is-disabled:active,
+.side-control:disabled:active,
+.side-control.is-disabled:active {
+  background: transparent;
+  opacity: 0.35;
+  transform: none;
+}
+
 .rating-btn:focus-visible,
 .side-control:focus-visible,
 .play-btn:focus-visible,
