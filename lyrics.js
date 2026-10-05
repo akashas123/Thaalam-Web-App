@@ -45,6 +45,14 @@ function normalizeTrackTitle(value) {
     .replace(/[^a-z0-9]/g, '') || '';
 }
 
+function normalizeArtistName(value) {
+  return normalizeTrackTitle(
+    String(value || '')
+      .split(/\s*[·•|]\s*|\s+\.\s+/)[0]
+      .replace(/\s+(feat\.?|ft\.?).*$/i, '')
+  );
+}
+
 async function fetchLrclibLyrics(song) {
   if (!song?.artist || !song?.title) {
     return '';
@@ -77,9 +85,12 @@ async function fetchLrclibLyrics(song) {
 
     const normalizedTitle =
       normalizeTrackTitle(song.title);
+    const normalizedArtist =
+      normalizeArtistName(song.artist);
 
     const result = matches.find((match) =>
       normalizeTrackTitle(match.trackName) === normalizedTitle &&
+      normalizeArtistName(match.artistName) === normalizedArtist &&
       (match.syncedLyrics || match.plainLyrics)
     );
 
@@ -655,7 +666,9 @@ async function fetchLyrics(nowPlayingData = null) {
   try {
     let data = nowPlayingData;
 
-    if (!data) {
+    if (!data && window.onDemandPlaybackActive) {
+      data = window.latestNowPlayingData || null;
+    } else if (!data) {
       const response = await fetch(
         `${lyricsApi}?t=${Date.now()}`,
         { cache: 'no-store' }
@@ -686,54 +699,24 @@ async function fetchLyrics(nowPlayingData = null) {
       lyricsLookupSongId =
         songId;
 
-      const azuraCastLyrics =
-        getAzuraCastLyrics(song);
-
-      const azuraHasTimestamps =
-        parseLyrics(
-          azuraCastLyrics
-        ).length > 0;
-
-      lyricsLookupResult =
-        azuraCastLyrics;
-
       const requestId =
         ++lyricsLookupRequestId;
 
+      if (!window.onDemandPlaybackActive) {
+        // Live radio lyrics come only from Thaalam/AzuraCast.
+        lyricsLookupResult = getAzuraCastLyrics(song);
+        updateLyrics(data);
+        return;
+      }
+
+      // On-demand metadata comes from the selected YouTube track.
+      lyricsLookupResult = '';
       updateLyrics(data);
+      const lrclibLyrics = await fetchLrclibLyrics(song);
+      if (requestId !== lyricsLookupRequestId) return;
 
-      if (azuraHasTimestamps) {
-        console.info(
-          'Using timestamped lyrics from AzuraCast.'
-        );
-
-        return;
-      }
-
-      console.info(
-        'AzuraCast lyrics have no timestamps; checking LRCLIB.'
-      );
-
-      const lrclibLyrics =
-        await fetchLrclibLyrics(
-          song
-        );
-
-      if (
-        requestId !==
-        lyricsLookupRequestId
-      ) {
-        return;
-      }
-
-      lyricsLookupResult =
-        lrclibLyrics ||
-        azuraCastLyrics;
-
-      updateLyrics(
-        data,
-        true
-      );
+      lyricsLookupResult = lrclibLyrics;
+      updateLyrics(data, true);
 
       return;
     }
