@@ -114,15 +114,15 @@ async function searchYouTubeVideos(query, maxResults = 10) {
     payload = JSON.parse(responseText);
   } catch {
     if (/^\s*</.test(responseText)) {
-      throw new Error('YouTube search backend is missing. Include _worker.js in the Cloudflare Pages upload, or deploy the Pages Function through Git integration or Wrangler.');
+      throw new Error('');
     }
-    throw new Error(`YouTube search returned an unreadable response (${response.status}).`);
+    throw new Error(`Returned an unreadable response (${response.status}).`);
   }
   if (!response.ok) {
     const apiError = typeof payload?.error === 'string'
       ? payload.error
       : payload?.error?.message;
-    throw new Error(apiError || `YouTube search failed (${response.status}).`);
+    throw new Error(apiError || `Playback failed (${response.status}).`);
   }
 
   const items = payload.results || [];
@@ -137,7 +137,7 @@ async function fetchYouTubeAutoplayQueue(videoId, playlistId = '') {
   if (playlistId) url.searchParams.set('playlistId', playlistId);
   const response = await fetch(url, { cache: 'no-store' });
   const payload = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(payload?.error || `YouTube autoplay failed (${response.status}).`);
+  if (!response.ok) throw new Error(payload?.error || `Autoplay failed (${response.status}).`);
   return {
     playlistId: payload?.playlistId || playlistId,
     tracks: Array.isArray(payload?.results) ? payload.results : []
@@ -249,7 +249,7 @@ async function findYouTubeSong(song) {
 
   const ranked = [...candidates.values()].sort((a, b) => b.score - a.score);
   const best = ranked[0];
-  if (!best) throw new Error('YouTube Music found no playable song for this search.');
+  if (!best) throw new Error('Song Not playable');
   return { ...best, alternatives: ranked.slice(1).map((item) => item.videoId) };
 }
 
@@ -360,7 +360,7 @@ function loadYouTubeApi() {
     const timeoutId = window.setTimeout(() => {
       youtubeApiPromise = null;
       script.remove();
-      reject(new Error('YouTube player timed out loading.'));
+      reject(new Error('player timed out loading.'));
     }, 12000);
 
     window.onYouTubeIframeAPIReady = () => {
@@ -371,7 +371,7 @@ function loadYouTubeApi() {
     script.onerror = () => {
       window.clearTimeout(timeoutId);
       youtubeApiPromise = null;
-      reject(new Error('YouTube player failed to load.'));
+      reject(new Error('Player failed to load.'));
     };
 
     document.head.appendChild(script);
@@ -540,14 +540,14 @@ function handleYouTubeError(event) {
     event.target.loadVideoById(videoCandidates[videoCandidateIndex]);
     return;
   }
-  console.error('YouTube rejected every matching video:', event.data);
+  console.error('Rejected every matching video:', event.data);
   onDemandMount.hidden = true;
   onDemandArtwork.hidden = false;
   onDemandArtwork.style.opacity = '1';
   onDemandPlayButton.disabled = true;
   onDemandMiniToggle.disabled = true;
   onDemandModeLabel.textContent = 'UNAVAILABLE';
-  onDemandStation.textContent = 'YouTube playback unavailable';
+  onDemandStation.textContent = 'Playback unavailable';
   setOnDemandPlaying(false);
   returnToLiveButton.hidden = false;
 }
@@ -812,7 +812,7 @@ async function fetchRelatedTracks(videoId, song) {
         playlistId: queue.playlistId || song?.youtubePlaylistId || ''
       }));
   } catch (error) {
-    console.warn('Autoplay: YouTube related search failed.', error);
+    console.warn('Autoplay: Failed.', error);
     return [];
   }
 }
