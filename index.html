@@ -1729,6 +1729,7 @@
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
         navigator.standalone === true;
       let deferredInstallPrompt = null;
+      let autoPromptAttempted = false;
 
       if (!installPlatform) return;
       if (isStandalone) {
@@ -1768,14 +1769,23 @@
           installStepOne.textContent = 'Tap Share in the sheet that opens.';
           installStepTwo.textContent = 'Choose Add to Home Screen, then confirm.';
           installAction.textContent = 'Install now';
+          return true;
         } else if (deferredInstallPrompt) {
           installDescription.textContent = 'Keep Thaalam close and open it like any other app.';
           installAction.textContent = 'Install now';
+          return true;
         } else {
           installDescription.textContent = 'Browser not supported';
           installDescription.classList.add('is-unsupported');
           installAction.disabled = true;
+          return false;
         }
+      }
+
+      function canShowInstallPrompt() {
+        if (installPlatform === 'ios') return true;
+        if (installPlatform === 'android' && deferredInstallPrompt) return true;
+        return false;
       }
 
       window.addEventListener('beforeinstallprompt', (event) => {
@@ -1783,6 +1793,10 @@
         event.preventDefault();
         deferredInstallPrompt = event;
         if (installDialog.open) configureInstallDialog();
+        else if (autoPromptAttempted && !hasSeenPrompt() && document.visibilityState === 'visible') {
+          configureInstallDialog();
+          installDialog.showModal();
+        }
       });
 
       window.addEventListener('appinstalled', () => {
@@ -1827,7 +1841,9 @@
 
       if (!hasSeenPrompt()) {
         window.setTimeout(() => {
+          autoPromptAttempted = true;
           if (document.visibilityState !== 'visible' || hasSeenPrompt()) return;
+          if (!canShowInstallPrompt()) return;
           configureInstallDialog();
           installDialog.showModal();
         }, 3000);
