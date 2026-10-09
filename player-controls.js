@@ -842,12 +842,23 @@ function setStoredRating(
         if (/^[\w-]{11}$/.test(candidate)) videoId = candidate;
       }
       const fallbackArt = videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '';
-      const artworkUrl100 = source?.art || source?.artworkUrl100 || song?.art || song?.artworkUrl100 || fallbackArt;
+      // Preserve any real metadata the iTunes prefetch already resolved. This
+      // snapshot exists to give the Liked view a title/artist/artwork; it must
+      // never clobber fetched details with the all-N/A fallback, otherwise the
+      // info button greys out the next time this track is opened.
+      const existingInfo = getStoredSongInfo(currentRatingTrackKey) || {};
+      const artworkUrl100 = source?.art || source?.artworkUrl100 || song?.art || song?.artworkUrl100 ||
+        existingInfo.artworkUrl100 || existingInfo.artwork || fallbackArt;
+      const existingDetails = existingInfo.details;
+      const details = (existingDetails &&
+        hasUsableSongDetails({ title: rawTitle, artist: cleanArtist }, existingDetails))
+        ? existingDetails
+        : `Album: ${source?.album || 'N/A'}\nRelease date: N/A\nGenre: N/A\nDuration: N/A`;
       saveStoredSongInfo(currentRatingTrackKey, {
         track: rawTitle,
         artist: cleanArtist,
         ...(artworkUrl100 ? { artworkUrl100 } : {}),
-        details: `Album: ${source?.album || 'N/A'}\nRelease date: N/A\nGenre: N/A\nDuration: N/A`
+        details
       });
     }
   }

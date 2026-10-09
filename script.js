@@ -17,6 +17,15 @@ const miniPlayerElapsed = document.getElementById('miniPlayerElapsed');
 const miniPlayerDuration = document.getElementById('miniPlayerDuration');
 const miniPlayerToggle = document.getElementById('miniPlayerToggle');
 const miniPlayerIcon = document.getElementById('miniPlayerIcon');
+const miniPlayerProgress = document.getElementById('miniPlayerProgress');
+const miniPlayerProgressFill = document.getElementById('miniPlayerProgressFill');
+const miniPrevButton = document.getElementById('miniPrevButton');
+const miniNextButton = document.getElementById('miniNextButton');
+const miniLikeButton = document.getElementById('miniLikeButton');
+const miniInfoButton = document.getElementById('miniInfoButton');
+const miniVolumeButton = document.getElementById('miniVolumeButton');
+const miniVolumeSlider = document.getElementById('miniVolumeSlider');
+const miniVolumeValue = document.getElementById('miniVolumeValue');
 const root = document.documentElement;
 
 document.addEventListener('contextmenu', (event) => {
@@ -217,6 +226,9 @@ function showPauseIcon() {
 }
 
 function setStreamLoading(isLoading) {
+  // On-demand owns the shared buttons' spinner while it is active; live-state
+  // events (e.g. the teardown <audio> element pausing) must not strip it.
+  if (window.onDemandPlaybackActive) return;
   playButton?.classList.toggle('is-loading', isLoading);
   miniPlayerToggle?.classList.toggle('is-loading', isLoading);
   playButton?.setAttribute(
@@ -232,24 +244,228 @@ function formatMiniTime(seconds) {
   return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
 }
 
+/* Last live clock reading, used to freeze the mini timer while paused. */
+let lastLiveClockValue = 0;
+
 function updateMiniPlayerTime() {
   if (!miniPlayerElapsed || !miniPlayerDuration) return;
   const onDemandClock = window.onDemandPlaybackActive
     ? window.getOnDemandTrackClock?.()
     : null;
   if (onDemandClock) {
-    miniPlayerElapsed.textContent = formatMiniTime(onDemandClock.elapsed);
+    // Follow an in-progress scrub instead of the player's real position.
+    const scrubSeconds = window.getDemandScrubSeconds?.();
+    const elapsed = Number.isFinite(scrubSeconds)
+      ? scrubSeconds
+      : onDemandClock.elapsed;
+    miniPlayerElapsed.textContent = formatMiniTime(elapsed);
     miniPlayerDuration.textContent = formatMiniTime(onDemandClock.duration);
+    updateMiniPlayerProgress(elapsed, onDemandClock.duration);
     return;
   }
   const clock = window.getAudibleTrackClock?.();
   if (clock) {
-    miniPlayerElapsed.textContent = formatMiniTime(clock.elapsed);
+    // Freeze the mini timer/fill at the last audible reading while the stream
+    // is paused. On resume, lyrics.js holds the clock until the fresh
+    // now-playing snapshot re-syncs it to the live playback position.
+    const paused = Boolean(radio?.paused);
+    const elapsed = paused ? lastLiveClockValue : clock.elapsed;
+    if (!paused) lastLiveClockValue = elapsed;
+    miniPlayerElapsed.textContent = formatMiniTime(elapsed);
     miniPlayerDuration.textContent = formatMiniTime(clock.duration);
+    updateMiniPlayerProgress(elapsed, clock.duration);
     return;
   }
   miniPlayerElapsed.textContent = document.getElementById('trackElapsed')?.textContent || '0:00';
   miniPlayerDuration.textContent = document.getElementById('trackDuration')?.textContent || '0:00';
+  updateMiniPlayerProgress(0, 0);
+}
+
+/* Paints the mini seek bar. When the track length is unknown it falls back to
+   the static "live" indicator rather than a moving fill. */
+function updateMiniPlayerProgress(elapsed, duration) {
+  if (!miniPlayerProgress || !miniPlayerProgressFill) return;
+  const safeDuration = Number(duration) || 0;
+  const safeElapsed = Number(elapsed) || 0;
+  if (safeDuration <= 0) {
+    miniPlayerProgress.classList.add('is-live');
+    miniPlayerProgressFill.style.width = '';
+    miniPlayerProgress.setAttribute('aria-valuenow', '0');
+    return;
+  }
+  miniPlayerProgress.classList.remove('is-live');
+  const percent = Math.min(100, Math.max(0, (safeElapsed / safeDuration) * 100));
+  miniPlayerProgressFill.style.width = `${percent}%`;
+  miniPlayerProgress.setAttribute('aria-valuenow', String(Math.round(percent)));
+}
+
+/* The mini transport/action buttons reuse the full player's own controls so the
+   two never drift. Clicking a mini button simply triggers its counterpart. */
+function bindMiniPlayerProxy(miniButton, targetId) {
+  if (!miniButton) return;
+  miniButton.addEventListener('click', () => {
+    const target = document.getElementById(targetId);
+    if (target && !target.disabled) target.click();
+  });
+}
+
+bindMiniPlayerProxy(miniPrevButton, 'onDemandPrevButton');
+bindMiniPlayerProxy(miniNextButton, 'onDemandNextButton');
+bindMiniPlayerProxy(miniInfoButton, 'songInfoButton');
+
+/* "Like" maps to a different control per mode: the on-demand heart, or the
+   live-radio thumbs-up. Pick the right one at click time. */
+if (miniLikeButton) {
+  miniLikeButton.addEventListener('click', () => {
+    const target = window.onDemandPlaybackActive
+      ? document.getElementById('onDemandLikeButton')
+      : document.getElementById('thumbsUpButton');
+    if (target && !target.disabled) target.click();
+  });
+}
+
+/* Mirror the real controls' availability/selection onto the mini buttons so the
+   docked player reflects live vs on-demand state without duplicating logic. */
+function syncMiniPlayerControls() {
+  const onDemandActive = Boolean(window.onDemandPlaybackActive);
+
+  // The mini seek bar is only interactive for on-demand tracks.
+  miniPlayerProgress?.classList.toggle('is-seekable', onDemandActive);
+  const prevButton = document.getElementById('onDemandPrevButton');
+  const nextButton = document.getElementById('onDemandNextButton');
+  const likeButton = document.getElementById('onDemandLikeButton');
+  const thumbsUp = document.getElementById('thumbsUpButton');
+
+  if (miniPrevButton) miniPrevButton.disabled = !onDemandActive || Boolean(prevButton?.disabled);
+  if (miniNextButton) miniNextButton.disabled = !onDemandActive || Boolean(nextButton?.disabled);
+
+  // "Like" is pressed when either the on-demand heart or the live thumbs-up is.
+  const liked = Boolean(
+    likeButton?.classList.contains('rating-selected') ||
+    thumbsUp?.classList.contains('rating-selected')
+  );
+  if (miniLikeButton) {
+    miniLikeButton.classList.toggle('is-active', liked);
+    miniLikeButton.setAttribute('aria-pressed', String(liked));
+    miniLikeButton.setAttribute('aria-label', liked ? 'Unlike' : 'Like');
+    miniLikeButton.title = liked ? 'Unlike' : 'Like';
+  }
+
+  if (miniInfoButton) {
+    const info = document.getElementById('songInfoButton');
+    miniInfoButton.disabled = Boolean(info?.disabled);
+  }
+}
+
+window.syncMiniPlayerControls = syncMiniPlayerControls;
+setInterval(syncMiniPlayerControls, 250);
+
+/* Volume + mute. The app has two audio sources that both need to be controlled
+   together: the live-radio <audio> element and the YouTube on-demand player.
+   The slider (and mouse wheel over the control) set a persisted volume LEVEL
+   (0-100); the speaker button is an independent MUTE toggle. Both are remembered
+   so a reload or a radio reconnect keeps the listener's choices. */
+const VOLUME_MUTED_KEY = 'thaalam-muted-v1';
+const VOLUME_LEVEL_KEY = 'thaalam-volume-v1';
+const DEFAULT_VOLUME = 100;
+const VOLUME_WHEEL_STEP = 5;
+
+let currentVolumeLevel = DEFAULT_VOLUME;
+
+function isVolumeMuted() {
+  try {
+    return localStorage.getItem(VOLUME_MUTED_KEY) === '1';
+  } catch (_) {
+    return false;
+  }
+}
+
+function getStoredVolume() {
+  try {
+    const value = Number(localStorage.getItem(VOLUME_LEVEL_KEY));
+    if (Number.isFinite(value) && value >= 0 && value <= 100) return value;
+  } catch (_) { /* fall through to default */ }
+  return DEFAULT_VOLUME;
+}
+
+/* Reflect the current level + mute flag onto the speaker icon. The icon shows
+   the "muted" state whenever the output is silent: either the explicit mute
+   toggle is on, or the level has been dragged/wheeled all the way down to 0. */
+function updateVolumeVisual() {
+  if (!miniVolumeButton) return;
+  const effectivelyMuted = isVolumeMuted() || currentVolumeLevel === 0;
+  miniVolumeButton.classList.toggle('is-muted', effectivelyMuted);
+  miniVolumeButton.setAttribute('aria-pressed', String(effectivelyMuted));
+  miniVolumeButton.setAttribute('aria-label', effectivelyMuted ? 'Unmute' : 'Mute');
+  miniVolumeButton.title = effectivelyMuted ? 'Unmute' : 'Mute';
+  if (miniVolumeValue) miniVolumeValue.classList.toggle('is-muted', effectivelyMuted);
+}
+
+/* Push a 0-100 level to both audio sources and the slider, then refresh the
+   icon so hitting zero flips it to the muted animation. The radio takes 0-1;
+   the YouTube player takes 0-100 via the bridge exposed in youtube-player.js. */
+function applyVolumeLevel(level, { persist = false } = {}) {
+  const clamped = Math.max(0, Math.min(100, Math.round(Number(level) || 0)));
+  currentVolumeLevel = clamped;
+  if (radio) radio.volume = clamped / 100;
+  if (typeof window.setYouTubeVolume === 'function') window.setYouTubeVolume(clamped);
+  if (miniVolumeSlider && Number(miniVolumeSlider.value) !== clamped) {
+    miniVolumeSlider.value = String(clamped);
+  }
+  if (miniVolumeValue) miniVolumeValue.textContent = String(clamped);
+  if (persist) {
+    try { localStorage.setItem(VOLUME_LEVEL_KEY, String(clamped)); } catch (_) { /* ignore */ }
+  }
+  updateVolumeVisual();
+  return clamped;
+}
+
+function applyMuteState(muted) {
+  // Live radio element.
+  if (radio) radio.muted = muted;
+  // On-demand YouTube player (exposed by youtube-player.js).
+  if (typeof window.setYouTubeMuted === 'function') window.setYouTubeMuted(muted);
+  updateVolumeVisual();
+}
+
+if (miniVolumeButton) {
+  miniVolumeButton.addEventListener('click', () => {
+    const next = !isVolumeMuted();
+    try {
+      localStorage.setItem(VOLUME_MUTED_KEY, next ? '1' : '0');
+    } catch (_) { /* storage may be unavailable; the toggle still works */ }
+    applyMuteState(next);
+  });
+}
+
+if (miniVolumeSlider) {
+  miniVolumeSlider.addEventListener('input', () => {
+    applyVolumeLevel(miniVolumeSlider.value, { persist: true });
+  });
+}
+
+/* Mouse wheel over the volume control adjusts the level, like desktop players.
+   Attached to both the speaker button and the slider so the whole control acts
+   as one hover target. preventDefault keeps the page from scrolling underneath. */
+function handleVolumeWheel(event) {
+  event.preventDefault();
+  const direction = event.deltaY < 0 ? 1 : -1;
+  applyVolumeLevel(currentVolumeLevel + direction * VOLUME_WHEEL_STEP, { persist: true });
+}
+
+if (miniVolumeButton) miniVolumeButton.addEventListener('wheel', handleVolumeWheel, { passive: false });
+if (miniVolumeSlider) miniVolumeSlider.addEventListener('wheel', handleVolumeWheel, { passive: false });
+
+// Restore the persisted choices as soon as the script runs, and keep the radio
+// in sync if it reconnects later (a reload of the stream can clear these).
+currentVolumeLevel = getStoredVolume();
+applyVolumeLevel(currentVolumeLevel);
+applyMuteState(isVolumeMuted());
+if (radio) {
+  radio.addEventListener('playing', () => {
+    applyVolumeLevel(getStoredVolume());
+    if (isVolumeMuted()) radio.muted = true;
+  });
 }
 
 function updateMiniPlayerMarquees() {
@@ -269,6 +485,7 @@ function updateMiniPlayerMarquees() {
 }
 
 window.updateMiniPlayerMarquees = updateMiniPlayerMarquees;
+window.updateMiniPlayerTime = updateMiniPlayerTime;
 setInterval(updateMiniPlayerTime, 250);
 window.addEventListener('resize', updateMiniPlayerMarquees);
 
@@ -497,9 +714,9 @@ function alignNowPlayingToAudio(data) {
       duration: Number.isFinite(audibleDuration) && audibleDuration > 0
         ? audibleDuration
         : nowPlaying.duration,
-      elapsed: Number.isFinite(audibleDuration) && audibleDuration > 0
-        ? Math.min(audibleElapsed, audibleDuration)
-        : audibleElapsed,
+      // Live songs can overrun their nominal length; keep the true audible
+      // elapsed so readouts are not clamped to the total duration.
+      elapsed: audibleElapsed,
       remaining: Number.isFinite(audibleDuration) && audibleDuration > 0
         ? Math.max(0, audibleDuration - audibleElapsed)
         : nowPlaying.remaining
@@ -518,9 +735,9 @@ function captureAudibleNowPlayingSnapshot() {
   if (songId !== clock.songId) return;
 
   const duration = clock.duration || Number(nowPlaying.duration) || 0;
-  const elapsed = duration > 0
-    ? Math.min(clock.elapsed, duration)
-    : clock.elapsed;
+  // No clamp to duration: live songs can overrun, and the snapshot must keep
+  // the true audible elapsed for the frozen readout while paused.
+  const elapsed = clock.elapsed;
 
   window.lastAudibleNowPlayingData = {
     ...data,
