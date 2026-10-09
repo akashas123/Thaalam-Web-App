@@ -620,9 +620,13 @@ async function loadVideo(videoId, requestId, startSeconds = 0, shouldPlay = true
             onReady(event) {
               youtubePlayerReady = true;
               // Honor the persisted volume/mute choices before any audio starts.
+              // The bridge in script.js guards the missing-key case (Number(null)
+              // === 0) and falls back to the shared default level.
               try {
-                const storedLevel = Number(localStorage.getItem('thaalam-volume-v1'));
-                if (Number.isFinite(storedLevel) && storedLevel >= 0 && storedLevel <= 100) {
+                const storedLevel = typeof window.getStoredVolumeLevel === 'function'
+                  ? window.getStoredVolumeLevel()
+                  : NaN;
+                if (Number.isFinite(storedLevel)) {
                   event.target.setVolume(storedLevel);
                 }
                 if (localStorage.getItem('thaalam-muted-v1') === '1') event.target.mute();
