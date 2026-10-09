@@ -65,7 +65,7 @@ const RATING_DELETE_STORAGE_PREFIX =
 const SONG_INFO_STORAGE_KEY =
   'thaalam24x7-song-info-v1';
 
-const SONG_INFO_CACHE_LIMIT = 100;
+const SONG_INFO_CACHE_LIMIT = 500;
 
 const SLEEP_TIMER_STORAGE_KEY =
   'thaalam24x7-sleep-timer';
@@ -132,6 +132,121 @@ function hasUsableLiveArtist(
     'unknown artist';
 }
 
+function hasUsableSongDetails(
+  song,
+  cachedOverride
+) {
+  if (!song?.title || !song?.artist) {
+    return false;
+  }
+
+  let details = null;
+  if (typeof cachedOverride === 'string') {
+    details = cachedOverride;
+  } else if (cachedOverride && typeof cachedOverride.details === 'string') {
+    details = cachedOverride.details;
+  } else {
+    details = getStoredSongInfo(getTrackRatingKey(song))?.details || null;
+  }
+
+  // Unknown until the iTunes prefetch lands - leave the button as-is
+  // so valid songs don't flicker disabled on every track change.
+  if (!details) {
+    return true;
+  }
+
+  if (details.includes('unavailable')) {
+    return false;
+  }
+
+  const values = details
+    .split('\n')
+    .map((line) => {
+      const separator = line.indexOf(':');
+      return (separator === -1 ? line : line.slice(separator + 1)).trim().toLowerCase();
+    })
+    .filter(Boolean);
+
+  if (!values.length) {
+    return false;
+  }
+
+  return values.some((value) => value !== 'n/a' && value !== '-' && value !== 'unknown');
+}
+
+function setSongInfoButtonEnabled(
+  enabled
+) {
+  if (!songInfoButton) {
+    return;
+  }
+
+  songInfoButton.disabled = !enabled;
+  songInfoButton.classList.toggle(
+    'is-disabled',
+    !enabled
+  );
+  songInfoButton.setAttribute(
+    'aria-disabled',
+    String(!enabled)
+  );
+
+  if (!enabled) {
+    songInfoButton.removeAttribute(
+      'title'
+    );
+  } else {
+    songInfoButton.title =
+      'Song information';
+  }
+}
+
+function refreshSongInfoAvailability(
+  song,
+  cachedOverride
+) {
+  if (!songInfoButton) {
+    return;
+  }
+
+  // Artist-gating lives in updateLiveActionAvailability - never re-enable
+  // a button it deliberately disabled.
+  const onDemandActive =
+    Boolean(
+      window.onDemandPlaybackActive
+    ) ||
+    Boolean(
+      document.body?.classList?.contains(
+        'on-demand-active'
+      )
+    );
+
+  if (!onDemandActive && !hasUsableLiveArtist(song)) {
+    return;
+  }
+
+  if (!song?.title || !song?.artist) {
+    setSongInfoButtonEnabled(false);
+    return;
+  }
+
+  let details = null;
+  if (typeof cachedOverride === 'string') {
+    details = cachedOverride;
+  } else if (cachedOverride && typeof cachedOverride.details === 'string') {
+    details = cachedOverride.details;
+  } else {
+    details = getStoredSongInfo(getTrackRatingKey(song))?.details || null;
+  }
+
+  // Still loading - keep current state.
+  if (!details) {
+    return;
+  }
+
+  setSongInfoButtonEnabled(hasUsableSongDetails(song, details));
+}
+
 function updateLiveActionAvailability(
   song
 ) {
@@ -146,38 +261,23 @@ function updateLiveActionAvailability(
     );
 
   if (onDemandActive) {
-    [
-      thumbsUpButton,
-      thumbsDownButton,
-      songInfoButton
-    ].forEach((button) => {
-      if (!button) {
-        return;
-      }
-
-      button.disabled = false;
-      button.classList.remove(
-        'is-disabled'
-      );
-      button.setAttribute(
-        'aria-disabled',
-        'false'
-      );
-    });
-
+    // On-demand always has a real title/artist. Like/dislike stay enabled,
+    // but the info button greys out when every detail is N/A.
     if (thumbsUpButton) {
+      thumbsUpButton.disabled = false;
+      thumbsUpButton.classList.remove('is-disabled');
+      thumbsUpButton.setAttribute('aria-disabled', 'false');
       thumbsUpButton.title = 'Like';
     }
 
     if (thumbsDownButton) {
-      thumbsDownButton.title =
-        'Dislike';
+      thumbsDownButton.disabled = false;
+      thumbsDownButton.classList.remove('is-disabled');
+      thumbsDownButton.setAttribute('aria-disabled', 'false');
+      thumbsDownButton.title = 'Dislike';
     }
 
-    if (songInfoButton) {
-      songInfoButton.title =
-        'Song information';
-    }
+    refreshSongInfoAvailability(song);
 
     return;
   }
@@ -187,8 +287,7 @@ function updateLiveActionAvailability(
 
   [
     thumbsUpButton,
-    thumbsDownButton,
-    songInfoButton
+    thumbsDownButton
   ].forEach((button) => {
     if (!button) {
       return;
@@ -212,15 +311,20 @@ function updateLiveActionAvailability(
       button === thumbsUpButton
     ) {
       button.title = 'Like';
-    } else if (
-      button === thumbsDownButton
-    ) {
-      button.title = 'Dislike';
     } else {
-      button.title =
-        'Song information';
+      button.title = 'Dislike';
     }
   });
+
+  // Info button follows its own rule: enabled when the artist is usable
+  // AND at least one detail (album/date/genre/duration) is real data.
+  if (songInfoButton) {
+    if (!actionable) {
+      setSongInfoButtonEnabled(false);
+    } else {
+      refreshSongInfoAvailability(song);
+    }
+  }
 
   if (!actionable) {
     clearRatingSelection();
@@ -342,11 +446,44 @@ function saveStoredRatings(
 }
 
 function getRatingTrackDetails(trackKey) {
-  const song = window.latestNowPlayingData?.now_playing?.song || window.currentNowPlayingSong || {};
+  const liveSong = window.latestNowPlayingData?.now_playing?.song || window.currentNowPlayingSong || null;
+  const onDemandSong = (typeof window.getCurrentOnDemandSong === 'function'
+    ? window.getCurrentOnDemandSong()
+    : null) || null;
+  const onDemandActive = Boolean(window.onDemandPlaybackActive) ||
+    Boolean(document.body?.classList?.contains('on-demand-active'));
+  // Live and on-demand both publish {title,artist,art,id}; catalog items use
+  // {trackName,artistName,artworkUrl100,youtubeVideoId}. Accept both shapes.
+  const song = (onDemandActive && onDemandSong?.trackName)
+    ? {
+      title: onDemandSong.trackName,
+      artist: onDemandSong.artistName,
+      album: onDemandSong.collectionName,
+      art: onDemandSong.artworkUrl100,
+      youtubeVideoId: onDemandSong.youtubeVideoId
+    }
+    : (liveSong?.title ? liveSong : null) || {};
+  const rawTitle = song.title || song.trackName || '';
+  const rawArtist = String(song.artist || song.artistName || '').replace(/\s-\sTopic$/i, '').trim();
+  let videoId = song.youtubeVideoId || '';
+  if (!videoId && typeof song.id === 'string' && /^[\w-]{11}$/.test(song.id)) videoId = song.id;
+  if (!videoId && typeof trackKey === 'string' && trackKey.startsWith('youtube:')) {
+    const candidate = trackKey.slice('youtube:'.length);
+    if (/^[\w-]{11}$/.test(candidate)) videoId = candidate;
+  }
+  let artwork = song.art || song.artworkUrl100 || '';
+  if (!artwork && trackKey) {
+    try {
+      const cached = JSON.parse(localStorage.getItem(SONG_INFO_STORAGE_KEY) || '{}')?.[trackKey];
+      artwork = cached?.artworkUrl100 || cached?.artwork || '';
+    } catch { /* Keep artwork empty; renderers fall back to YouTube thumbnails. */ }
+  }
+  if (!artwork && videoId) artwork = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
   return {
-    title: song.title || '',
-    artist: song.artist || '',
-    videoId: song.youtubeVideoId || song.id || ''
+    title: String(rawTitle || '').trim(),
+    artist: rawArtist,
+    videoId,
+    artwork: String(artwork || '').trim()
   };
 }
 
@@ -457,14 +594,23 @@ async function syncRatingsFromCloud() {
     const localEntries = Object.entries(localRatings)
       .filter(([, rating]) => rating === 'up' || rating === 'down')
       .slice(0, 500);
+    let songInfoCache = {};
+    try { songInfoCache = JSON.parse(localStorage.getItem(SONG_INFO_STORAGE_KEY) || '{}'); } catch { songInfoCache = {}; }
     const uploads = [];
     for (const [trackKey, rating] of localEntries) {
       if (remoteRatings[trackKey]) continue;
-      const [title = '', artist = ''] = trackKey.startsWith('youtube:')
+      // Prefer the snapshot taken at like-time (has real title/artist/artwork).
+      // The raw key alone is lossy: `youtube:ID` carries no names at all.
+      const cached = songInfoCache?.[trackKey] || {};
+      let [title = '', artist = ''] = trackKey.startsWith('youtube:')
         ? ['', '']
         : trackKey.split('|');
-      const videoId = trackKey.startsWith('youtube:') ? trackKey.slice('youtube:'.length) : '';
-      uploads.push({ trackKey, rating, title, artist, videoId });
+      title = cached.track || title;
+      artist = cached.artist || artist;
+      let videoId = trackKey.startsWith('youtube:') ? trackKey.slice('youtube:'.length) : '';
+      if (!/^[\w-]{11}$/.test(videoId)) videoId = '';
+      const artwork = cached.artworkUrl100 || cached.artwork || (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '');
+      uploads.push({ trackKey, rating, title, artist, videoId, artwork });
       remoteRatings[trackKey] = rating;
     }
     if (uploads.length) await requestCloudRatings('PUT', { ratings: uploads });
@@ -621,6 +767,10 @@ function setStoredRating(
     return false;
   }
 
+  const song =
+    window.latestNowPlayingData?.now_playing?.song ||
+    window.currentNowPlayingSong || null;
+
   const ratings =
     getStoredRatings();
 
@@ -656,6 +806,50 @@ function setStoredRating(
 
   if (!saved) {
     return false;
+  }
+
+  // Snapshot the visible metadata alongside the rating key. The key alone
+  // (especially `youtube:VIDEO_ID`) carries no title/artist/artwork, so
+  // without this the Liked view falls back to `Liked song / Unknown artist`.
+  if (value === 'up') {
+    const liveSong =
+      window.latestNowPlayingData?.now_playing?.song ||
+      window.currentNowPlayingSong || null;
+    const onDemandSong = (typeof window.getCurrentOnDemandSong === 'function'
+      ? window.getCurrentOnDemandSong()
+      : null) || null;
+    // On-demand now-playing uses {title,artist,art,id}; live radio uses the
+    // same shape, while catalog songs use {trackName,artistName,artworkUrl100}.
+    const source = (song?.title && song?.artist)
+      ? song
+      : (liveSong?.title && liveSong?.artist ? liveSong : null)
+        || (onDemandSong?.trackName ? {
+          title: onDemandSong.trackName,
+          artist: onDemandSong.artistName,
+          album: onDemandSong.collectionName,
+          art: onDemandSong.artworkUrl100,
+          youtubeVideoId: onDemandSong.youtubeVideoId
+        } : null);
+    const rawTitle = String(source?.title || song?.trackName || '').trim();
+    const cleanArtist = String(source?.artist || song?.artistName || '')
+      .replace(/\s-\sTopic$/i, '')
+      .trim();
+    if (rawTitle && cleanArtist && cleanArtist.toLowerCase() !== 'unknown artist') {
+      let videoId = source?.youtubeVideoId || '';
+      if (!videoId && typeof source?.id === 'string' && /^[\w-]{11}$/.test(source.id)) videoId = source.id;
+      if (!videoId && typeof currentRatingTrackKey === 'string' && currentRatingTrackKey.startsWith('youtube:')) {
+        const candidate = currentRatingTrackKey.slice('youtube:'.length);
+        if (/^[\w-]{11}$/.test(candidate)) videoId = candidate;
+      }
+      const fallbackArt = videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '';
+      const artworkUrl100 = source?.art || source?.artworkUrl100 || song?.art || song?.artworkUrl100 || fallbackArt;
+      saveStoredSongInfo(currentRatingTrackKey, {
+        track: rawTitle,
+        artist: cleanArtist,
+        ...(artworkUrl100 ? { artworkUrl100 } : {}),
+        details: `Album: ${source?.album || 'N/A'}\nRelease date: N/A\nGenre: N/A\nDuration: N/A`
+      });
+    }
   }
 
   applyStoredRating(
@@ -794,7 +988,7 @@ async function prefetchSongInfo(song) {
   if (!cacheKey) return;
 
   const cached = getStoredSongInfo(cacheKey);
-  if (cached?.track && cached?.artist && cached?.details) return;
+  if (cached?.track && cached?.artist && cached?.details && cached?.artworkUrl100) return;
   if (prefetchingSongInfo.has(cacheKey)) return;
 
   prefetchingSongInfo.add(cacheKey);
@@ -825,6 +1019,7 @@ async function prefetchSongInfo(song) {
     let entry = {
       track: song.title,
       artist: song.artist,
+      artworkUrl100: song.art || '',
       details: fallbackDetails
     };
 
@@ -841,6 +1036,9 @@ async function prefetchSongInfo(song) {
       entry = {
         track: match.trackName || song.title,
         artist: match.artistName || song.artist,
+        artworkUrl100: match.artworkUrl100
+          ?.replace(/^http:/, 'https:')
+          .replace(/\d+x\d+bb\./, '600x600bb.') || song.art || '',
         details: [
           `Album: ${match.collectionName || song.album || 'N/A'}`,
           `Release date: ${releaseDate}`,
@@ -855,11 +1053,25 @@ async function prefetchSongInfo(song) {
     saveStoredSongInfo(cacheKey, {
       track: song.title,
       artist: song.artist,
+      artworkUrl100: song.art || '',
       details: fallbackDetails
     });
   }
 
   prefetchingSongInfo.delete(cacheKey);
+
+  // Details just resolved - grey back in (or out) without a track change.
+  // Same single button drives both desktop + the mobile now-playing view.
+  try {
+    const liveSong = window.latestNowPlayingData?.now_playing?.song || window.currentNowPlayingSong;
+    if (liveSong && getTrackRatingKey(liveSong) === cacheKey) {
+      refreshSongInfoAvailability(liveSong);
+    } else if (getTrackRatingKey(song) === cacheKey) {
+      refreshSongInfoAvailability(song);
+    }
+  } catch {
+    // Availability is best-effort; dialog still guards on click.
+  }
 
   const currentSongKey = getTrackRatingKey(window.currentNowPlayingSong);
   if (songInfoDialog?.open && currentSongKey === cacheKey) {
@@ -1308,13 +1520,29 @@ function restoreSleepTimer() {
 songInfoButton?.addEventListener(
   'click',
   () => {
+    const onDemandActive =
+      Boolean(window.onDemandPlaybackActive) ||
+      Boolean(document.body?.classList?.contains('on-demand-active'));
+    const onDemandSong = (typeof window.getCurrentOnDemandSong === 'function'
+      ? window.getCurrentOnDemandSong()
+      : null) || null;
+    const liveSong =
+      window.latestNowPlayingData
+        ?.now_playing?.song ||
+      window.currentNowPlayingSong;
+    // On-demand and live publish different song shapes; check the active one.
+    const activeSong = onDemandActive && onDemandSong?.trackName
+      ? {
+        title: onDemandSong.trackName,
+        artist: onDemandSong.artistName,
+        album: onDemandSong.collectionName,
+        art: onDemandSong.artworkUrl100,
+        youtubeVideoId: onDemandSong.youtubeVideoId
+      }
+      : liveSong;
     if (
       songInfoButton.disabled ||
-      !hasUsableLiveArtist(
-        window.latestNowPlayingData
-          ?.now_playing?.song ||
-          window.currentNowPlayingSong
-      )
+      !hasUsableSongDetails(activeSong)
     ) {
       return;
     }

@@ -674,11 +674,11 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=44"></script>
-  <script src="youtube-player.js?v=52"></script>
+  <script src="youtube-player.js?v=53"></script>
   <script src="audio-recovery.js?v=2"></script>
   <script src="marquee.js?v=3"></script>
   <script src="media-metadata.js?v=7"></script>
-  <script src="player-controls.js?v=34"></script>
+  <script src="player-controls.js?v=35"></script>
   <script src="lyrics.js?v=33"></script>
   <script src="/google-auth-config.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -1411,15 +1411,56 @@
           .map(([trackKey]) => {
             const info = songInfo?.[trackKey] || {};
             const [keyTitle = '', keyArtist = ''] = trackKey.startsWith('youtube:') ? ['', ''] : trackKey.split('|');
-            const videoId = trackKey.startsWith('youtube:') ? trackKey.slice('youtube:'.length) : '';
+            const rawVideoId = trackKey.startsWith('youtube:') ? trackKey.slice('youtube:'.length) : '';
+            const videoId = /^[\w-]{11}$/.test(rawVideoId) ? rawVideoId : '';
+            // Saved rows may predate artwork persistence. A YouTube thumbnail is
+            // better than the blank placeholder while iTunes lookup runs.
+            const fallbackArtwork = videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '';
             return {
               trackName: info.track || keyTitle || 'Liked song',
               artistName: info.artist || keyArtist || 'Unknown artist',
-              artworkUrl100: info.artworkUrl100 || '',
+              artworkUrl100: info.artworkUrl100 || info.artwork || fallbackArtwork,
               ...(videoId ? { youtubeVideoId: videoId } : {})
             };
           });
         renderGenreResults(songs);
+        // Rescue pass for likes saved before metadata snapshots existed:
+        // a `youtube:ID` with no cached title can often be recovered from the
+        // public oEmbed endpoint, so old rows heal instead of staying blank.
+        const missingMeta = songs.filter((song) =>
+          (song.trackName === 'Liked song' || song.artistName === 'Unknown artist') && song.youtubeVideoId);
+        if (missingMeta.length) {
+          void Promise.all(missingMeta.map(async (song) => {
+            try {
+              const response = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${song.youtubeVideoId}`)}&format=json`);
+              if (!response.ok) return;
+              const data = await response.json();
+              const fullTitle = String(data?.title || '').trim();
+              const author = String(data?.author_name || '').replace(/ Topic$/, '').replace(/-Topic$/, '').trim();
+              if (!fullTitle) return;
+              let title = fullTitle;
+              let artist = author && author.toLowerCase() !== 'unknown artist' ? author : '';
+              const dash = fullTitle.indexOf(' - ');
+              if (!artist && dash > 0) {
+                artist = fullTitle.slice(0, dash).trim();
+                title = fullTitle.slice(dash + 3).trim() || title;
+              }
+              if (!title) return;
+              song.trackName = title;
+              if (artist) song.artistName = artist;
+            } catch { /* Keep the fallback text if the lookup fails. */ }
+          })).then(() => {
+            if (requestId !== genreRequestId || activeGenre !== 'you-like') return;
+            songs.forEach((song) => {
+              const key = song.youtubeVideoId
+                ? `youtube:${song.youtubeVideoId}`
+                : `${String(song.trackName || '').trim().toLowerCase()}|${String(song.artistName || '').trim().toLowerCase()}`;
+              songInfo[key] = { ...songInfo[key], track: song.trackName, artist: song.artistName, artworkUrl100: song.artworkUrl100 };
+            });
+            try { localStorage.setItem('thaalam24x7-song-info-v1', JSON.stringify(songInfo)); } catch { /* Keep the resolved covers for this view. */ }
+            renderGenreResults(songs);
+          });
+        }
         const missingArtwork = songs.filter((song) => !song.artworkUrl100);
         if (missingArtwork.length && typeof window.lookupAlbumArtwork === 'function') {
           void Promise.all(missingArtwork.map(async (song) => {
@@ -1427,11 +1468,16 @@
           })).then(() => {
             if (requestId !== genreRequestId || activeGenre !== 'you-like') return;
             songs.forEach((song) => {
-              if (!song.artworkUrl100) return;
               const key = song.youtubeVideoId
                 ? `youtube:${song.youtubeVideoId}`
-                : `${song.trackName.trim().toLowerCase().replace(/\\s+/g, ' ')}|${song.artistName.trim().toLowerCase().replace(/\\s+/g, ' ')}`;
-              songInfo[key] = { ...songInfo[key], track: song.trackName, artist: song.artistName, artworkUrl100: song.artworkUrl100 };
+                : `${song.trackName.trim().toLowerCase().replace(/\s+/g, ' ')}|${song.artistName.trim().toLowerCase().replace(/\s+/g, ' ')}`;
+              const prev = songInfo[key] || {};
+              songInfo[key] = {
+                ...prev,
+                track: song.trackName,
+                artist: song.artistName,
+                ...(song.artworkUrl100 ? { artworkUrl100: song.artworkUrl100 } : {})
+              };
             });
             try { localStorage.setItem('thaalam24x7-song-info-v1', JSON.stringify(songInfo)); } catch { /* Keep the resolved covers for this view. */ }
             renderGenreResults(songs);
@@ -1475,10 +1521,14 @@
           .map((entry) => {
             const candidateVideoId = entry.video_id || (entry.track_key || '').replace(/^youtube:/, '');
             const videoId = /^[\w-]{11}$/.test(candidateVideoId) ? candidateVideoId : '';
+            // Older cloud rows predate artwork persistence; fall back to the
+            // YouTube thumbnail instead of the blank placeholder card.
+            const storedArtwork = entry.artwork || entry.artworkUrl100 || '';
+            const fallbackArtwork = (!storedArtwork && videoId) ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '';
             return {
               trackName: entry.title || 'Liked song',
               artistName: entry.artist || 'Unknown artist',
-              artworkUrl100: entry.artworkUrl100 || '',
+              artworkUrl100: storedArtwork || fallbackArtwork,
               ...(videoId ? { youtubeVideoId: videoId } : {})
             };
           });
