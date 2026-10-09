@@ -367,7 +367,7 @@ setInterval(syncMiniPlayerControls, 250);
    so a reload or a radio reconnect keeps the listener's choices. */
 const VOLUME_MUTED_KEY = 'thaalam-muted-v1';
 const VOLUME_LEVEL_KEY = 'thaalam-volume-v1';
-const DEFAULT_VOLUME = 100;
+const DEFAULT_VOLUME = 50;
 const VOLUME_WHEEL_STEP = 5;
 
 let currentVolumeLevel = DEFAULT_VOLUME;
@@ -382,11 +382,18 @@ function isVolumeMuted() {
 
 function getStoredVolume() {
   try {
-    const value = Number(localStorage.getItem(VOLUME_LEVEL_KEY));
+    const raw = localStorage.getItem(VOLUME_LEVEL_KEY);
+    // A missing key returns null and Number(null) === 0, which would wrongly
+    // report silence for a brand-new visitor; treat it as "not set".
+    const value = raw === null || raw === '' ? NaN : Number(raw);
     if (Number.isFinite(value) && value >= 0 && value <= 100) return value;
   } catch (_) { /* fall through to default */ }
   return DEFAULT_VOLUME;
 }
+
+// Shared with youtube-player.js so the on-demand player starts at the same
+// stored/default level as the live radio.
+window.getStoredVolumeLevel = getStoredVolume;
 
 /* Reflect the current level + mute flag onto the speaker icon. The icon shows
    the "muted" state whenever the output is silent: either the explicit mute
