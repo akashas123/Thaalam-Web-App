@@ -252,15 +252,9 @@ function updateTrackTime() {
     return;
   }
 
-  let elapsed = getAudibleTrackElapsed();
-
-  if (
-    trackDurationSeconds > 0 &&
-    elapsed > trackDurationSeconds
-  ) {
-    elapsed =
-      trackDurationSeconds;
-  }
+  // No clamp to the total duration: live songs can overrun their nominal
+  // length, and the readout must keep counting past it.
+  const elapsed = getAudibleTrackElapsed();
 
   trackElapsed.textContent =
     formatTrackTime(elapsed);
@@ -916,7 +910,14 @@ function setStreamPlaybackState(
 
   if (streamIsActive) {
     if (!wasActive) {
-      trackElapsedSyncTime = performance.now() / 1000;
+      // Live radio rejoins the stream at the live edge on every resume, so hold
+      // the clock at its last value until the next now-playing snapshot lands
+      // (updateLyrics re-syncs both trackElapsedSeconds and the sync time).
+      // Ticking from the pre-pause position would show a time that is not
+      // audible. On-demand playback keeps its own clock in youtube-player.js.
+      trackElapsedSyncTime = window.onDemandPlaybackActive
+        ? performance.now() / 1000
+        : 0;
       playbackStartedOnMobile =
         window.matchMedia(
           '(max-width: 56.1875rem), (pointer: coarse)'

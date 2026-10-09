@@ -38,6 +38,7 @@ let onDemandQueue = [];
 let onDemandQueueIndex = -1;
 let isScrubbing = false;
 let scrubTargetSeconds = 0;
+let scrubbingBar = null;
 
 /* YouTube Music's generated next queue, fetched as soon as a track starts so
    the next eligible Topic audio track is ready when playback ends. */
@@ -426,10 +427,10 @@ function updatePlaybackProgress() {
 }
 
 /* Resolves the seconds a pointer x-position maps to, clamped to the track. */
-function getScrubSecondsFromPointer(clientX) {
-  if (!playbackProgressBar || !youtubePlayerReady) return null;
+function getScrubSecondsFromPointer(clientX, bar) {
+  if (!bar || !youtubePlayerReady) return null;
 
-  const rect = playbackProgressBar.getBoundingClientRect();
+  const rect = bar.getBoundingClientRect();
   if (!rect.width) return null;
 
   const duration = youtubePlayer.getDuration() || selectedDuration;
@@ -439,10 +440,55 @@ function getScrubSecondsFromPointer(clientX) {
   return ratio * duration;
 }
 
+/* Repaints the full-player bar and the mini bar from the scrub target so
+   neither keeps ticking to the real position while the pointer is held. */
+function repaintScrub() {
+  updatePlaybackProgress();
+  window.updateMiniPlayerTime?.();
+}
+
+/* On-demand only: live radio is not seekable, so pointerdown is ignored there. */
+function beginScrub(event, bar) {
+  if (!window.onDemandPlaybackActive || !youtubePlayerReady) return;
+
+  const seconds = getScrubSecondsFromPointer(event.clientX, bar);
+  if (seconds === null) return;
+
+  isScrubbing = true;
+  scrubTargetSeconds = seconds;
+  scrubbingBar = bar;
+  bar.classList.add('is-scrubbing');
+  bar.setPointerCapture?.(event.pointerId);
+  repaintScrub();
+}
+
+function moveScrub(event) {
+  if (!isScrubbing || !scrubbingBar) return;
+
+  const seconds = getScrubSecondsFromPointer(event.clientX, scrubbingBar);
+  if (seconds === null) return;
+
+  scrubTargetSeconds = seconds;
+  repaintScrub();
+}
+
+/* Shared reset when a track change or mode switch interrupts a drag. */
+function resetScrub() {
+  isScrubbing = false;
+  scrubTargetSeconds = 0;
+  scrubbingBar?.classList.remove('is-scrubbing');
+  playbackProgressBar?.classList.remove('is-scrubbing');
+  scrubbingBar = null;
+}
+
+/* The mini clock reads this so its readout follows the drag too. */
+window.getDemandScrubSeconds = () => (isScrubbing ? scrubTargetSeconds : NaN);
+
 function commitScrub() {
   if (!isScrubbing || !youtubePlayerReady) return;
   isScrubbing = false;
-  playbackProgressBar?.classList.remove('is-scrubbing');
+  scrubbingBar?.classList.remove('is-scrubbing');
+  scrubbingBar = null;
 
   // Nudge a few milliseconds past the target: the YouTube API can ignore a
   // seek to the exact position it is already reporting.
@@ -455,33 +501,16 @@ function commitScrub() {
   }
 }
 
-if (playbackProgressBar) {
-  playbackProgressBar.addEventListener('pointerdown', (event) => {
-    if (!window.onDemandPlaybackActive || !youtubePlayerReady) return;
-
-    const seconds = getScrubSecondsFromPointer(event.clientX);
-    if (seconds === null) return;
-
-    isScrubbing = true;
-    scrubTargetSeconds = seconds;
-    playbackProgressBar.classList.add('is-scrubbing');
-    playbackProgressBar.setPointerCapture?.(event.pointerId);
-    updatePlaybackProgress();
-  });
-
-  playbackProgressBar.addEventListener('pointermove', (event) => {
-    if (!isScrubbing) return;
-
-    const seconds = getScrubSecondsFromPointer(event.clientX);
-    if (seconds === null) return;
-
-    scrubTargetSeconds = seconds;
-    updatePlaybackProgress();
-  });
-
-  playbackProgressBar.addEventListener('pointerup', commitScrub);
-  playbackProgressBar.addEventListener('pointercancel', commitScrub);
+function bindScrubBar(bar) {
+  if (!bar) return;
+  bar.addEventListener('pointerdown', (event) => beginScrub(event, bar));
+  bar.addEventListener('pointermove', moveScrub);
+  bar.addEventListener('pointerup', commitScrub);
+  bar.addEventListener('pointercancel', commitScrub);
 }
+
+bindScrubBar(playbackProgressBar);
+bindScrubBar(document.getElementById('miniPlayerProgress'));
 
 function setOnDemandPlaying(isPlaying) {
   // Mirror of the live flag, so a restored session can reapply the pause state
@@ -514,6 +543,7 @@ function handleYouTubeState(event) {
   } else if (event.data === states.BUFFERING) {
     onDemandModeLabel.textContent = 'BUFFERING';
     onDemandPlayButton?.classList.add('is-loading');
+    onDemandMiniToggle?.classList.add('is-loading');
   } else if (event.data === states.ENDED) {
     onDemandModeLabel.textContent = 'ON DEMAND';
     setOnDemandPlaying(false);
@@ -589,6 +619,14 @@ async function loadVideo(videoId, requestId, startSeconds = 0, shouldPlay = true
           events: {
             onReady(event) {
               youtubePlayerReady = true;
+              // Honor the persisted volume/mute choices before any audio starts.
+              try {
+                const storedLevel = Number(localStorage.getItem('thaalam-volume-v1'));
+                if (Number.isFinite(storedLevel) && storedLevel >= 0 && storedLevel <= 100) {
+                  event.target.setVolume(storedLevel);
+                }
+                if (localStorage.getItem('thaalam-muted-v1') === '1') event.target.mute();
+              } catch (_) { /* storage unavailable; default to audible */ }
               if (!window.onDemandPlaybackActive) {
                 event.target.pauseVideo();
                 resolve(event.target);
@@ -930,9 +968,7 @@ async function playRelatedTrack(track) {
   onDemandQueueIndex = onDemandQueue.length - 1;
   updateTransportButtonState();
 
-  isScrubbing = false;
-  scrubTargetSeconds = 0;
-  playbackProgressBar?.classList.remove('is-scrubbing');
+  resetScrub();
 
   // A related track may be a poor match for the iframe, so keep the same
   // candidate fallback the search path uses.
@@ -1004,9 +1040,7 @@ async function startOnDemandSong(song, { preserveQueue = false } = {}) {
   selectedDuration = Number(song.trackTimeMillis) / 1000 || 0;
   enqueueOnDemandSong(song);
   updateTransportButtonState();
-  isScrubbing = false;
-  scrubTargetSeconds = 0;
-  playbackProgressBar?.classList.remove('is-scrubbing');
+  resetScrub();
   window.onDemandPlaybackActive = true;
   updateNowPlayingSubtitle(true);
   window.setOnDemandAudioQuality?.(true);
@@ -1018,6 +1052,7 @@ async function startOnDemandSong(song, { preserveQueue = false } = {}) {
   onDemandPlayButton.disabled = false;
   onDemandMiniToggle.disabled = false;
   onDemandPlayButton?.classList.add('is-loading');
+  onDemandMiniToggle?.classList.add('is-loading');
 
   try {
     await window.showView?.('now-playing');
@@ -1172,9 +1207,7 @@ function returnToLive() {
   }
   songRequestId += 1;
   if (youtubePlayerReady) youtubePlayer.pauseVideo();
-  isScrubbing = false;
-  scrubTargetSeconds = 0;
-  playbackProgressBar?.classList.remove('is-scrubbing');
+  resetScrub();
   // Cancel any in-flight related-tracks lookup so a late response cannot
   // restart on-demand playback after the listener has gone back to live.
   window.clearInterval(autoplayRetryTimer);
@@ -1215,6 +1248,26 @@ window.returnToLive = returnToLive;
 window.getCurrentOnDemandSong = () => currentOnDemandSong
   ? { ...currentOnDemandSong, youtubeVideoId: currentOnDemandVideoId || currentOnDemandSong.youtubeVideoId || '' }
   : null;
+
+/* Mute/unmute the on-demand YouTube player. No-op until the player is ready,
+   but the persisted state is re-applied in onReady so a reloaded session keeps
+   the listener's chosen volume. */
+window.setYouTubeMuted = (muted) => {
+  if (!youtubePlayerReady || !youtubePlayer) return;
+  try {
+    if (muted) youtubePlayer.mute();
+    else youtubePlayer.unMute();
+  } catch (_) { /* player not controllable yet */ }
+};
+
+/* Set the on-demand player's volume LEVEL (0-100). No-op until ready. */
+window.setYouTubeVolume = (level) => {
+  if (!youtubePlayerReady || !youtubePlayer) return;
+  try {
+    youtubePlayer.setVolume(Math.max(0, Math.min(100, Math.round(Number(level) || 0))));
+  } catch (_) { /* player not controllable yet */ }
+};
+
 if (onDemandArtwork) {
   onDemandArtwork.setAttribute('role', 'button');
   onDemandArtwork.tabIndex = 0;
