@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS user_ratings (
   title TEXT NOT NULL DEFAULT '',
   artist TEXT NOT NULL DEFAULT '',
   video_id TEXT,
+  artwork TEXT NOT NULL DEFAULT '',
   updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
   PRIMARY KEY (user_id, track_key)
 );

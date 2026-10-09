@@ -1212,6 +1212,9 @@ function returnToLive() {
 window.startOnDemandSong = startOnDemandSong;
 window.toggleOnDemandPlayback = toggleOnDemandPlayback;
 window.returnToLive = returnToLive;
+window.getCurrentOnDemandSong = () => currentOnDemandSong
+  ? { ...currentOnDemandSong, youtubeVideoId: currentOnDemandVideoId || currentOnDemandSong.youtubeVideoId || '' }
+  : null;
 if (onDemandArtwork) {
   onDemandArtwork.setAttribute('role', 'button');
   onDemandArtwork.tabIndex = 0;
