@@ -11,7 +11,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=151">
+  <link rel="stylesheet" href="style.css?v=161">
   <link rel="icon" type="image/png" href="icon-512.png?v=3">
   <link rel="apple-touch-icon" href="icon-192.png?v=3">
 
@@ -94,11 +94,11 @@
     @media (min-width: 56.25rem) and (pointer: fine) {
       body.view-now-playing #nowPlayingHeading {
         display: block !important;
-        position: fixed !important;
-        top: calc(4rem + clamp(1.25rem, 3.5vw, 3.5rem) - 1.25rem) !important;
+        position: absolute !important;
+        top: calc(4rem + clamp(1.25rem, 3.5vw, 2rem) - 1.25rem) !important;
         left: 50% !important;
         z-index: 8 !important;
-        width: min(88rem, calc(100vw - 4rem));
+        width: min(58rem + clamp(2rem, 4vw, 4rem) + min(27rem, 29vw), 100vw - 2rem);
         max-width: none;
         box-sizing: border-box;
         padding-left: clamp(1.25rem, 3.5vw, 3.5rem);
@@ -124,8 +124,12 @@
         line-height: 1.6;
       }
 
+      /* The player no longer carries a fixed offset below the heading: the
+         body reserves the heading's measured height (see
+         --now-playing-heading-bottom) and centres the player in what is left,
+         so the artwork can never ride up over the heading's divider line. */
       body.view-now-playing #playerView {
-        top: 7.5rem !important;
+        top: 0 !important;
         transform: none !important;
       }
 
@@ -762,6 +766,24 @@
     };
     placeStationForViewport();
     placeStreamQualityForViewport();
+    // The desktop heading is fixed and its height follows the window width, so
+    // publish where it ends and let the CSS lay the player out below it.
+    const publishHeadingBottom = () => {
+      if (!nowPlayingHeading) return;
+      // The heading scrolls with the page, so measure from the page top.
+      const { bottom } = nowPlayingHeading.getBoundingClientRect();
+      document.documentElement.style.setProperty(
+        '--now-playing-heading-bottom',
+        `${Math.max(0, Math.round(bottom + window.scrollY))}px`
+      );
+    };
+    publishHeadingBottom();
+    window.addEventListener('resize', publishHeadingBottom, { passive: true });
+    if (window.ResizeObserver && nowPlayingHeading) {
+      new ResizeObserver(publishHeadingBottom).observe(nowPlayingHeading);
+    }
+    window.addEventListener('load', publishHeadingBottom);
+    document.fonts?.ready.then(publishHeadingBottom);
     const returnToLiveOnMobile = () => {
       if (mobilePlayerLayout.matches && window.onDemandPlaybackActive) {
         window.returnToLive?.();
