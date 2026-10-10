@@ -1124,9 +1124,30 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').catch((error) => {
-      console.log('Service worker registration failed:', error);
-    });
+    navigator.serviceWorker.register('./sw.js')
+      .then((registration) => {
+        // Poll for a newer worker so deployed versions reach open tabs without
+        // the user having to close every tab + hard-refresh twice.
+        setInterval(() => registration.update(), 60 * 1000);
+
+        // A new worker is downloading/installing.
+        registration.addEventListener('updatefound', () => {
+          const installing = registration.installing;
+          if (!installing) return;
+          installing.addEventListener('statechange', () => {
+            if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+              // New version ready and an old one is still in control -> prompt a reload.
+              const reloaded = sessionStorage.getItem('thaalam-sw-reload');
+              if (reloaded) return; // already reloaded once; don't loop
+              sessionStorage.setItem('thaalam-sw-reload', '1');
+              window.location.reload();
+            }
+          });
+        });
+      })
+      .catch((error) => {
+        console.log('Service worker registration failed:', error);
+      });
   }
 });
 
