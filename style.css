@@ -11,6 +11,13 @@
   --c3: #171717;
   --c4: #0f172a;
   --c5: #05070d;
+  --home-tint: transparent;
+}
+
+@property --home-tint {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: transparent;
 }
 
 html,
@@ -33,6 +40,50 @@ body {
     "Segoe UI",
     sans-serif;
   color: #fff;
+}
+
+/* Home glows from the first card's real artwork (see --home-art in index.html):
+   soft top-left wash flowing down. No albums -> flat dark (#05070d), same
+   as About. The live album gradient belongs to Now Playing only. */
+body.view-home {
+  background: #05070d;
+}
+
+/* Only paint the tint wash once album art has set a real color. */
+body.view-home.has-home-glow {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--home-tint) 62%, transparent) 0%,
+      color-mix(in srgb, var(--home-tint) 30%, transparent) 28%,
+      transparent 60%
+    ),
+    linear-gradient(180deg, #0a0d16 0%, #05070d 60%);
+}
+
+body.view-home::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: var(--home-art, none);
+  background-size: 52rem auto;
+  background-position: -8rem -14rem;
+  background-repeat: no-repeat;
+  filter: blur(6rem) saturate(1.35) brightness(1.18);
+  opacity: 0;
+  transition: opacity 0.8s ease;
+}
+
+/* Blurred art shows the moment a cover URL exists (CSS backgrounds have no
+   CORS probe, so this never flickers). Empty grids keep it at 0 = flat dark. */
+body.view-home.has-home-art::before {
+  opacity: 0.85;
+}
+
+body.view-about {
+  background: #05070d;
 }
 
 [class~="album-background"] {
@@ -159,6 +210,26 @@ body {
 body[class~="paused-gradient"]
 [class~="album-background"] {
   animation-play-state: paused;
+}
+
+/* About keeps a flat backdrop and the live album gradient is Now Playing
+   only. Hiding (rather than removing) the layer keeps the Now Playing
+   colors fresh when the listener navigates back. Home paints its own
+   artwork tint via body.view-home above. */
+body.view-home [class~="album-background"],
+body.view-about [class~="album-background"] {
+  opacity: 0;
+  visibility: hidden;
+  animation: none;
+  transition:
+    opacity 0.3s ease,
+    visibility 0s linear 0.3s;
+}
+
+body.view-now-playing [class~="album-background"] {
+  opacity: 0.95;
+  visibility: visible;
+  transition: opacity 0.3s ease;
 }
 
 body::after {
@@ -504,11 +575,11 @@ body::after {
     border: 0;
     border-top: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 0;
-    background: rgba(12, 12, 14, 0.97);
-    box-shadow: 0 -0.75rem 2.25rem rgba(0, 0, 0, 0.4);
+    background: #05070d;
+    box-shadow: none;
     color: #fff;
-    backdrop-filter: blur(1.25rem);
-    -webkit-backdrop-filter: blur(1.25rem);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     animation: miniPlayerDockIn 0.35s ease-out both;
   }
 
@@ -821,7 +892,7 @@ body::after {
     display: flex;
     flex: 0 1 auto;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.25rem;
     /* Sits right after the artwork/track info; capped so the bar keeps a
        moderate size instead of stretching across the whole player. */
     width: clamp(16rem, 34vw, 30rem);
@@ -830,7 +901,7 @@ body::after {
 
   .mini-player-clock {
     flex: 0 0 auto;
-    min-width: 2.6rem;
+    min-width: 2rem;
     color: rgba(255, 255, 255, 0.62);
     font-size: 0.68rem;
     font-variant-numeric: tabular-nums;
@@ -1260,7 +1331,7 @@ body::after {
   .home-page .site-page-content {
     width: min(88rem, 100%);
     max-height: calc(100dvh - 4rem);
-    padding: clamp(1.25rem, 3.5vw, 3.5rem);
+    padding: clamp(1rem, 2.5vw, 2.25rem);
     overflow-x: hidden;
     overflow-y: auto;
     scroll-behavior: auto;
@@ -1385,9 +1456,9 @@ body::after {
 
   .genre-results {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
-    gap: 1.35rem 1rem;
-    margin-top: 1.25rem;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 1rem 0.85rem;
+    margin-top: 1rem;
     overflow: visible;
   }
 
@@ -1507,13 +1578,13 @@ body::after {
   }
 
   .genre-card-details {
-    margin-top: 0.65rem;
+    margin-top: 0.5rem;
   }
 
   .genre-skeleton-details {
     display: grid;
-    gap: 0.4rem;
-    margin-top: 0.65rem;
+    gap: 0.35rem;
+    margin-top: 0.5rem;
   }
 
   .genre-card-skeleton .genre-card-art-frame {
@@ -1556,14 +1627,14 @@ body::after {
   }
 
   .genre-card-title {
-    font-size: 0.88rem;
+    font-size: 0.82rem;
     font-weight: 650;
   }
 
   .genre-card-artist {
-    margin-top: 0.25rem;
+    margin-top: 0.2rem;
     color: rgba(255, 255, 255, 0.64);
-    font-size: 0.78rem;
+    font-size: 0.74rem;
   }
 
   .genre-empty {

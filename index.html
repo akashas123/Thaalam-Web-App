@@ -11,7 +11,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=133">
+  <link rel="stylesheet" href="style.css?v=150">
   <link rel="icon" type="image/png" href="icon-512.png?v=3">
   <link rel="apple-touch-icon" href="icon-192.png?v=3">
 
@@ -763,6 +763,18 @@
       returnToLiveOnMobile();
       placeStationForViewport();
       placeStreamQualityForViewport();
+      if (!desktopNavigation.matches) {
+        // Home / About are desktop-only views. Shrinking from one leaves the
+        // body stuck on view-home/view-about, which hides the live
+        // album-background and paints the flat Home backdrop behind the
+        // player. Mobile is always Now Playing, so force it back.
+        applyView('now-playing');
+        requestAnimationFrame(() => {
+          window.updateMiniPlayerMarquees?.();
+          window.updateMarquee?.();
+        });
+        return;
+      }
       restoreActiveView();
     });
     const pageLoading =
@@ -796,7 +808,9 @@
     const artistInfoRequests = new Map();
     // Genre tabs use Apple's genre charts. Versioned separately from the old
     // text-search and filtered result caches.
-    const GENRE_CACHE_KEY = 'thaalam-itunes-genre-cache-v8';
+    // v9 keeps only the first 21 chart tracks (7 columns x 3 rows).
+    const GENRE_CACHE_KEY = 'thaalam-itunes-genre-cache-v9';
+    const GENRE_CHART_LIMIT = 21;
     const GENRE_CACHE_TTL = 12 * 60 * 60 * 1000;
     const ARTIST_INFO_STORAGE_KEY = 'thaalam-catalog-artist-info-v4';
     const ARTIST_INFO_CACHE_LIMIT = 600;
@@ -1114,6 +1128,107 @@
       return ordered;
     }
 
+    function setHomeTint(color) {
+      document.body.style.setProperty('--home-tint', color);
+      // Only show the wash when a real sampled color exists. Empty grids,
+      // CORS failures, and blank art keep Home flat dark (#05070d).
+      document.body.classList.toggle('has-home-glow', Boolean(color));
+    }
+
+    function setHomeArt(url) {
+      // Blurred real-artwork glow: the wash literally IS the first cover, so
+      // it can never mismatch (grey Taylor cover -> grey-white glow).
+      // Empty grids clear the art so Home stays flat dark.
+      document.body.style.setProperty(
+        '--home-art',
+        url ? `url("${url.replace(/"/g, '%22')}")` : 'none'
+      );
+      document.body.classList.toggle('has-home-art', Boolean(url));
+    }
+
+    function sampleHomeTint(url) {
+      // No fallback glow: empty grids, missing art, and CORS-blocked probes
+      // keep Home flat dark. Only a successfully sampled color adds the wash.
+      setHomeTint('');
+      if (!url) return;
+      const probe = new Image();
+      probe.crossOrigin = 'anonymous';
+      probe.decoding = 'async';
+      probe.onerror = () => {
+        // CORS-blocked art (e.g. some chart images) still gets a soft
+        // neutral glow from the blurred ::before layer alone — leave the
+        // wash cleared so it can't mismatch the real cover.
+      };
+      probe.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 32;
+          canvas.height = 32;
+          const context = canvas.getContext('2d', { willReadFrequently: true });
+          context.drawImage(probe, 0, 0, 32, 32);
+          const pixels = context.getImageData(0, 0, 32, 32).data;
+          // Saturation-weighted average: vivid pixels (curtains, stage lights,
+          // skin tones) count more than flat grey/black washes, so the glow
+          // actually matches the cover instead of collapsing to dark grey.
+          let rSum = 0;
+          let gSum = 0;
+          let bSum = 0;
+          let wSum = 0;
+          for (let index = 0; index < pixels.length; index += 4) {
+            const r = pixels[index];
+            const g = pixels[index + 1];
+            const b = pixels[index + 2];
+            const mx = Math.max(r, g, b);
+            const mn = Math.min(r, g, b);
+            const sat = mx - mn;
+            const luma = (r + g + b) / 3;
+            // Ignore near-black letterboxing and near-white glare spikes.
+            if (luma < 10 || luma > 245) continue;
+            const weight = 0.2 + sat / 255;
+            rSum += r * weight;
+            gSum += g * weight;
+            bSum += b * weight;
+            wSum += weight;
+          }
+          if (!wSum) return;
+          let red = rSum / wSum;
+          let green = gSum / wSum;
+          let blue = bSum / wSum;
+          // Re-saturate around grey so muted averages regain the cover hue,
+          // then lift so dark/grey covers still glow on the near-black bg.
+          // Grey covers (low saturation) get a white floor so the wash reads
+          // as a soft grey-white glow instead of disappearing into the bg.
+          const grey = (red + green + blue) / 3;
+          const boost = 1.7;
+          red = grey + (red - grey) * boost;
+          green = grey + (green - grey) * boost;
+          blue = grey + (blue - grey) * boost;
+          const spread = Math.max(red, green, blue) - Math.min(red, green, blue);
+          const lift = (channel) => channel * 0.72 + 58 * 0.28;
+          let channels = [lift(red), lift(green), lift(blue)];
+          if (spread < 22) {
+            channels = channels.map((channel) => Math.max(channel, 118));
+          }
+          const hex = channels
+            .map((channel) => Math.max(0, Math.min(255, Math.round(channel)))
+              .toString(16).padStart(2, '0'))
+            .join('');
+          setHomeTint(`#${hex}`);
+        } catch {
+          // Keep the default tint.
+        }
+      };
+      probe.src = url;
+    }
+
+    function updateHomeTint(songs) {
+      const firstArt = songs.find((song) => song.artworkUrl100)?.artworkUrl100
+        ?.replace(/^http:/, 'https:')
+        .replace(/\d+x\d+bb\./, '600x600bb.');
+      setHomeArt(firstArt || '');
+      sampleHomeTint(firstArt || '');
+    }
+
     function renderGenreResults(songs) {
       catalogArtworkObserver?.disconnect();
       genreResults.replaceChildren();
@@ -1124,10 +1239,12 @@
         empty.className = 'genre-empty';
         empty.textContent = 'No matching songs were found.';
         genreResults.appendChild(empty);
+        updateHomeTint([]);
         return;
       }
 
-      diversifyGenreSongs(songs).forEach((song) => {
+      const orderedSongs = diversifyGenreSongs(songs);
+      orderedSongs.forEach((song) => {
         const card = document.createElement('article');
         card.className = 'genre-card';
 
@@ -1206,13 +1323,17 @@
           artwork.src = 'album-placeholder.svg?v=2';
         }
       });
+      updateHomeTint(orderedSongs);
     }
 
     function showGenreLoading() {
       genreResults.replaceChildren();
       genreResults.setAttribute('aria-busy', 'true');
+      // Clear the glow while skeletons show so the old tab's art doesn't linger.
+      setHomeArt('');
+      setHomeTint('');
       const placeholders = document.createDocumentFragment();
-      for (let index = 0; index < 14; index += 1) {
+      for (let index = 0; index < GENRE_CHART_LIMIT; index += 1) {
         const card = document.createElement('article');
         card.className = 'genre-card genre-card-skeleton';
         card.setAttribute('aria-hidden', 'true');
@@ -1265,7 +1386,7 @@
       });
     }
 
-    function searchGenreChart(genreId, requestId, limit = 100) {
+    function searchGenreChart(genreId, requestId, limit = GENRE_CHART_LIMIT) {
       return new Promise((resolve, reject) => {
         const callbackName = `thaalamGenreChartCallback${requestId}`;
         const request = document.createElement('script');
@@ -1308,8 +1429,10 @@
       const requestId = ++genreRequestId;
       const cached = genreResultCache.get(cacheKey);
       if (cached) {
-        void prefetchCatalogArtistInfo(cached);
-        renderGenreResults(cached);
+        const cachedSongs = genreId ? cached.slice(0, GENRE_CHART_LIMIT) : cached;
+        if (cachedSongs.length !== cached.length) genreResultCache.set(cacheKey, cachedSongs);
+        void prefetchCatalogArtistInfo(cachedSongs);
+        renderGenreResults(cachedSongs);
         return;
       }
 
@@ -1320,9 +1443,15 @@
         Date.now() - storedEntry.savedAt < GENRE_CACHE_TTL &&
         Array.isArray(storedEntry.songs)
       ) {
-        genreResultCache.set(cacheKey, storedEntry.songs);
-        void prefetchCatalogArtistInfo(storedEntry.songs);
-        renderGenreResults(storedEntry.songs);
+        // Only the three RSS chart tabs trim to 21 — search results and
+        // Favourites keep their full lists.
+        const isChartCache = Object.prototype.hasOwnProperty.call(genreFeedIds, cacheKey);
+        const storedSongs = isChartCache
+          ? storedEntry.songs.slice(0, GENRE_CHART_LIMIT)
+          : storedEntry.songs;
+        genreResultCache.set(cacheKey, storedSongs);
+        void prefetchCatalogArtistInfo(storedSongs);
+        renderGenreResults(storedSongs);
         return;
       }
 
@@ -1331,16 +1460,17 @@
         const songs = genreId
           ? await searchGenreChart(genreId, requestId)
           : await searchGenre(term, requestId);
-        genreResultCache.set(cacheKey, songs);
-        storedCache[cacheKey] = { savedAt: Date.now(), songs };
+        const trimmedSongs = genreId ? songs.slice(0, GENRE_CHART_LIMIT) : songs;
+        genreResultCache.set(cacheKey, trimmedSongs);
+        storedCache[cacheKey] = { savedAt: Date.now(), songs: trimmedSongs };
         try {
           localStorage.setItem(GENRE_CACHE_KEY, JSON.stringify(storedCache));
         } catch {
           // Keep the in-memory results if storage is full or unavailable.
         }
         if (requestId === genreRequestId && activeGenre === cacheKey) {
-          void prefetchCatalogArtistInfo(songs);
-          renderGenreResults(songs);
+          void prefetchCatalogArtistInfo(trimmedSongs);
+          renderGenreResults(trimmedSongs);
         }
       } catch {
         if (requestId !== genreRequestId || activeGenre !== cacheKey) return;
@@ -1350,6 +1480,8 @@
         error.className = 'genre-empty';
         error.textContent = 'Could not load songs. Check your connection and try again.';
         genreResults.appendChild(error);
+        setHomeArt('');
+        setHomeTint('');
       }
     }
 
