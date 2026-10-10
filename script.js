@@ -215,6 +215,26 @@ function setVisualState(isPlaying) {
   }
 }
 
+/* Reveal the docked mini player the instant a track is selected, even before
+   its audio is ready. On-demand playback spends time searching and buffering on
+   YouTube, and until the first PLAYING event the player used to stay hidden, so
+   the listener saw nothing happen for several seconds after tapping a song.
+   This un-hides the mini player at once (its metadata is painted by the caller)
+   and lets the audio finish loading behind it. */
+function revealMiniPlayer() {
+  if (!hasStartedPlayback) {
+    hasStartedPlayback = true;
+    try {
+      localStorage.setItem(PLAYBACK_STARTED_KEY, 'true');
+    } catch {
+    }
+  }
+  document.body.classList.add('mini-player-visible');
+  if (miniPlayer) miniPlayer.hidden = false;
+}
+
+window.revealMiniPlayer = revealMiniPlayer;
+
 function showPlayIcon() {
   if (playIcon) playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
   if (miniPlayerIcon) miniPlayerIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';

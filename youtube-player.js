@@ -240,13 +240,23 @@ async function findYouTubeSong(song) {
     { query: `${normalizeYouTubeSongTitle(title)} ${artist}`, albumFirst: false }
   ].filter((entry) => String(entry?.query || '').trim());
   const candidates = new Map();
-  for (const { query, albumFirst } of queries) {
-    const items = await searchYouTubeVideos(query, 25);
-    rankResults(items, albumFirst).forEach((item) => {
+  // Fire every query at once instead of waiting on each in turn. The three
+  // searches are independent, so running them together turns ~3 sequential
+  // round-trips into one. A single query failing no longer aborts the lookup —
+  // the other results are still ranked and used — so this is also more
+  // resilient than the old sequential loop.
+  const settled = await Promise.allSettled(
+    queries.map(({ query, albumFirst }) =>
+      searchYouTubeVideos(query, 25).then((items) => ({ items, albumFirst }))
+    )
+  );
+  settled.forEach((result) => {
+    if (result.status !== 'fulfilled') return;
+    rankResults(result.value.items, result.value.albumFirst).forEach((item) => {
       const current = candidates.get(item.videoId);
       if (!current || item.score > current.score) candidates.set(item.videoId, item);
     });
-  }
+  });
 
   const ranked = [...candidates.values()].sort((a, b) => b.score - a.score);
   const best = ranked[0];
@@ -1084,6 +1094,15 @@ async function startOnDemandSong(song, { preserveQueue = false, openNowPlaying =
   document.body.classList.add('on-demand-active');
   window.pauseLiveStreamForOnDemand?.();
   returnToLiveButton.hidden = false;
+
+  // Reveal the mini player and paint the title/artist/artwork the instant the
+  // listener picks a track. The YouTube search + iframe load below can take
+  // several seconds; previously the docked player stayed hidden until audio
+  // actually started, so nothing appeared to happen on tap. The audio keeps
+  // loading behind the now-visible mini player.
+  window.revealMiniPlayer?.();
+  updateOnDemandMetadata(song, {});
+
   onDemandModeLabel.textContent = 'Hang on';
   onDemandStation.textContent = 'On-Demand';
   onDemandPlayButton.disabled = false;
@@ -1100,6 +1119,13 @@ async function startOnDemandSong(song, { preserveQueue = false, openNowPlaying =
       await window.showView?.('now-playing');
     }
     if (requestId !== songRequestId) return;
+
+    // Warm the YouTube IFrame API in parallel with the search so the CDN script
+    // download overlaps the (now parallel) search round-trips instead of running
+    // after them. loadVideo() awaits the same memoized promise, and a failed
+    // warm-up is harmless here because loadYouTubeApi() re-arms on error/timeout
+    // and loadVideo retries it. Swallow the rejection to avoid an unhandled one.
+    void loadYouTubeApi().catch(() => {});
 
     // History entries created by autoplay already have a resolved video ID.
     // Reuse it when navigating back so we don't run a fresh title search (which
@@ -1189,6 +1215,9 @@ async function restoreOnDemandSession() {
   document.body.classList.add('on-demand-active');
   window.pauseLiveStreamForOnDemand?.();
   returnToLiveButton.hidden = false;
+  // Show the docked player at once with the restored track's metadata rather
+  // than waiting for the cued video to finish loading.
+  window.revealMiniPlayer?.();
   onDemandModeLabel.textContent = 'LOADING';
   onDemandStation.textContent = 'Ready to resume';
   onDemandPlayButton.disabled = false;
