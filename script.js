@@ -269,11 +269,17 @@ function updateMiniPlayerTime() {
     // is paused. On resume, lyrics.js holds the clock until the fresh
     // now-playing snapshot re-syncs it to the live playback position.
     const paused = Boolean(radio?.paused);
-    const elapsed = paused ? lastLiveClockValue : clock.elapsed;
-    if (!paused) lastLiveClockValue = elapsed;
+    const rawElapsed = paused ? lastLiveClockValue : clock.elapsed;
+    if (!paused) lastLiveClockValue = rawElapsed;
+    // Clamp to the duration so the live mini clock never reads past the end
+    // of the song currently on air (matches the Now Playing readout).
+    const duration = Number(clock.duration) || 0;
+    const elapsed = duration > 0
+      ? Math.min(rawElapsed, duration)
+      : rawElapsed;
     miniPlayerElapsed.textContent = formatMiniTime(elapsed);
-    miniPlayerDuration.textContent = formatMiniTime(clock.duration);
-    updateMiniPlayerProgress(elapsed, clock.duration);
+    miniPlayerDuration.textContent = formatMiniTime(duration);
+    updateMiniPlayerProgress(elapsed, duration);
     return;
   }
   miniPlayerElapsed.textContent = document.getElementById('trackElapsed')?.textContent || '0:00';
@@ -480,12 +486,17 @@ function updateMiniPlayerMarquees() {
     if (!element) return;
     const text = element.textContent.trim();
     element.dataset.marqueeText = text;
-    const isOverflowing = element.scrollWidth > element.clientWidth + 1;
-    element.classList.toggle('is-marquee', isOverflowing);
+    // Drop the marquee state before measuring: the active ::before holds a
+    // duplicated copy of the text and inflates scrollWidth, which would keep
+    // the marquee running even after switching to a track that fits.
+    element.classList.remove('is-marquee');
+    const scrollWidth = element.scrollWidth;
+    const isOverflowing = scrollWidth > element.clientWidth + 1;
     if (isOverflowing) {
+      element.classList.add('is-marquee');
       element.style.setProperty(
         '--mini-marquee-duration',
-        `${Math.max(18, (element.scrollWidth + 150) / 24)}s`
+        `${Math.max(18, (scrollWidth + 150) / 24)}s`
       );
     }
   });

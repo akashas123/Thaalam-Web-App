@@ -252,9 +252,13 @@ function updateTrackTime() {
     return;
   }
 
-  // No clamp to the total duration: live songs can overrun their nominal
-  // length, and the readout must keep counting past it.
-  const elapsed = getAudibleTrackElapsed();
+  // Clamp to the total duration so the live readout never counts past the
+  // song's nominal length (the bar and the clock stop together at the end).
+  // The raw clock stays unclamped for lyric highlighting and re-syncing.
+  const rawElapsed = getAudibleTrackElapsed();
+  const elapsed = trackDurationSeconds > 0
+    ? Math.min(rawElapsed, trackDurationSeconds)
+    : rawElapsed;
 
   trackElapsed.textContent =
     formatTrackTime(elapsed);
