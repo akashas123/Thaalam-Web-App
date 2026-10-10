@@ -539,6 +539,8 @@ function handleYouTubeState(event) {
   const states = window.YT.PlayerState;
   if (event.data === states.PLAYING) {
     onDemandModeLabel.textContent = 'ON DEMAND';
+    // Re-pin the level in case this video came up at the player's default.
+    syncYouTubeVolumeToStored();
     setOnDemandPlaying(true);
   } else if (event.data === states.BUFFERING) {
     onDemandModeLabel.textContent = 'BUFFERING';
@@ -559,6 +561,32 @@ function handleYouTubeState(event) {
   }
 }
 
+/* Re-assert the listener's stored volume level + mute flag on the YouTube
+   player. The level is only pushed once in onReady today, so a later
+   loadVideoById (track change, autoplay advance, error fallback) can come up
+   at the player's own default (loud) while the slider visibly stays put.
+   Calling this right after every load and again on PLAYING keeps the audible
+   level pinned to what the slider shows. True loudness differences between
+   uploads (mastering) can't be normalized from here: the iframe is
+   cross-origin, so WebAudio metering/gain is unavailable. */
+function syncYouTubeVolumeToStored() {
+  if (!youtubePlayerReady || !youtubePlayer) return;
+  try {
+    const storedLevel = typeof window.getStoredVolumeLevel === 'function'
+      ? window.getStoredVolumeLevel()
+      : NaN;
+    if (Number.isFinite(storedLevel)) {
+      youtubePlayer.setVolume(Math.max(0, Math.min(100, Math.round(storedLevel))));
+    }
+    let muted = false;
+    try {
+      muted = localStorage.getItem('thaalam-muted-v1') === '1';
+    } catch (_) { /* storage unavailable; leave mute state alone */ }
+    if (muted) youtubePlayer.mute();
+    else if (typeof youtubePlayer.unMute === 'function') youtubePlayer.unMute();
+  } catch (_) { /* player not controllable yet */ }
+}
+
 function handleYouTubeError(event) {
   logOnDemand('player ERROR code =', event?.data,
     '(active =', window.onDemandPlaybackActive,
@@ -568,6 +596,7 @@ function handleYouTubeError(event) {
     videoCandidateIndex += 1;
     onDemandModeLabel.textContent = 'TRYING ANOTHER RESULT';
     event.target.loadVideoById(videoCandidates[videoCandidateIndex]);
+    syncYouTubeVolumeToStored();
     return;
   }
   console.error('Rejected every matching video:', event.data);
@@ -596,6 +625,7 @@ async function loadVideo(videoId, requestId, startSeconds = 0, shouldPlay = true
   if (youtubePlayerReady) {
     const loadMethod = shouldPlay ? 'loadVideoById' : 'cueVideoById';
     youtubePlayer[loadMethod]({ videoId, startSeconds: requestedStartSeconds });
+    syncYouTubeVolumeToStored();
     return;
   }
 
@@ -641,6 +671,7 @@ async function loadVideo(videoId, requestId, startSeconds = 0, shouldPlay = true
                   videoId: requestedVideoId,
                   startSeconds: requestedStartSeconds
                 });
+                syncYouTubeVolumeToStored();
               } else if (shouldPlay) {
                 event.target.playVideo();
               } else {
@@ -824,7 +855,9 @@ function skipOnDemandSong(offset) {
 
   onDemandQueueIndex = nextIndex;
   updateTransportButtonState();
-  startOnDemandSong(nextSong, { preserveQueue: true });
+  // Skips stay in the listener's current view; only fresh picks open Now
+  // Playing (see startOnDemandSong).
+  startOnDemandSong(nextSong, { preserveQueue: true, openNowPlaying: false });
 }
 
 onDemandPrevButton?.addEventListener('click', () => skipOnDemandSong(-1));
@@ -1001,7 +1034,7 @@ async function playRelatedTrack(track) {
   prefetchRelatedTracks(track.videoId, song);
 }
 
-async function startOnDemandSong(song, { preserveQueue = false } = {}) {
+async function startOnDemandSong(song, { preserveQueue = false, openNowPlaying = true } = {}) {
   if (!song?.trackName) return;
   // Ratings-backed favourites may contain partial or older metadata. Keep the
   // player input shape consistent before artwork lookup, search, and queueing.
@@ -1059,7 +1092,13 @@ async function startOnDemandSong(song, { preserveQueue = false } = {}) {
   onDemandMiniToggle?.classList.add('is-loading');
 
   try {
-    await window.showView?.('now-playing');
+    // openNowPlaying defaults to true for the artwork-search path. Catalog
+    // picks and prev/next skips pass false: they play through the mini player,
+    // whose art/title already open Now Playing, and yanking the listener out
+    // of Home/About on every pick or skip is unwanted.
+    if (openNowPlaying) {
+      await window.showView?.('now-playing');
+    }
     if (requestId !== songRequestId) return;
 
     // History entries created by autoplay already have a resolved video ID.

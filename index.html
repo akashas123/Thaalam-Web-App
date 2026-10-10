@@ -709,13 +709,13 @@
   </aside>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
-  <script src="script.js?v=48"></script>
-  <script src="youtube-player.js?v=56"></script>
+  <script src="script.js?v=50"></script>
+  <script src="youtube-player.js?v=59"></script>
   <script src="audio-recovery.js?v=2"></script>
   <script src="marquee.js?v=3"></script>
   <script src="media-metadata.js?v=7"></script>
   <script src="player-controls.js?v=35"></script>
-  <script src="lyrics.js?v=35"></script>
+  <script src="lyrics.js?v=36"></script>
   <script src="/google-auth-config.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script>
@@ -1141,7 +1141,9 @@
         playButton.title = 'Play on demand';
         playButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
         playButton.addEventListener('click', () => {
-          window.startOnDemandSong?.(song);
+          // Play in the mini player without yanking the listener out of the
+          // catalog. The mini player's art/title already open Now Playing.
+          window.startOnDemandSong?.(song, { openNowPlaying: false });
         });
 
         const infoButton = document.createElement('button');
@@ -1741,7 +1743,12 @@
       const storedView = readActiveView();
       if (storedView === 'now-playing') return;
       applyView(storedView);
-      requestAnimationFrame(() => window.updateMiniPlayerMarquees?.());
+      requestAnimationFrame(() => {
+        window.updateMiniPlayerMarquees?.();
+        // Same zero-width measurement issue as showView(): re-measure the
+        // now-playing marquee once the restored view is visible.
+        window.updateMarquee?.();
+      });
       if (storedView === 'home') {
         if (activeGenre.startsWith('search:')) loadCatalog(activeGenre, activeSearchTerm);
         else loadGenre(activeGenre);
@@ -1763,7 +1770,14 @@
         viewChangeTimeout = window.setTimeout(() => {
           applyView(view);
           storeActiveView(view);
-          requestAnimationFrame(() => window.updateMiniPlayerMarquees?.());
+          requestAnimationFrame(() => {
+            window.updateMiniPlayerMarquees?.();
+            // updateMarquee() measures the tagline width, which is 0 while the
+            // player view is display:none (view-home/view-about), so its
+            // title/artist marquee classes were stripped off. Re-measure now
+            // that Now Playing is visible or long titles stay clipped.
+            window.updateMarquee?.();
+          });
 
           pageLoading.hidden = true;
           if (view === 'about') loadAboutArtistPortraits();
