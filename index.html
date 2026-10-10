@@ -140,13 +140,25 @@
 <body class="view-now-playing">
 
   <script>
-    // Restore the last desktop view before the first paint, so a refresh keeps the
-    // page you were on instead of flashing the Now Playing landing page.
+    // Freshly opening the app (new tab, or reopening after closing it) always
+    // lands on Home. An in-tab refresh still restores the page you were on. The
+    // two are told apart with a per-tab sessionStorage marker: it survives a
+    // refresh but is cleared when the tab/app is closed.
     (function () {
       try {
+        if (!window.matchMedia('(min-width: 56.25rem) and (pointer: fine)').matches) return;
+        if (window.sessionStorage.getItem('thaalam-session-v1') === null) {
+          // Fresh open/reopen: land on Home and reset the persisted view so an
+          // in-session refresh stays on Home too.
+          window.sessionStorage.setItem('thaalam-session-v1', '1');
+          try { window.localStorage.setItem('thaalam-active-view-v1', 'home'); } catch { /* keep going */ }
+          document.body.classList.remove('view-now-playing');
+          document.body.classList.add('view-home');
+          return;
+        }
+        // Refresh within the same session: keep the page you were on.
         const storedView = window.localStorage.getItem('thaalam-active-view-v1');
         if (storedView !== 'home' && storedView !== 'about') return;
-        if (!window.matchMedia('(min-width: 56.25rem) and (pointer: fine)').matches) return;
         document.body.classList.remove('view-now-playing');
         document.body.classList.add(`view-${storedView}`);
       } catch {
