@@ -568,10 +568,16 @@ body::after {
     min-height: 4.5rem;
     margin: 0;
     padding: 0.5rem clamp(1rem, 4vw, 3rem);
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    /* Side clusters keep their natural width (buttons can never clip); the
+       center is the only flexible track, so it absorbs the remainder and
+       shrinks gracefully (seek shortens, title ellipsizes) at any width. */
+    grid-template-columns: auto minmax(0, 1fr) auto;
     grid-template-rows: auto;
     align-items: center;
     column-gap: 0;
+    /* Safety net: the center track is flexible so nothing should ever spill,
+       but this guarantees the fixed bar never forces a horizontal scrollbar. */
+    overflow: hidden;
     border: 0;
     border-top: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 0;
@@ -623,10 +629,15 @@ body::after {
     display: flex;
     min-width: 0;
     align-items: center;
-    gap: clamp(1rem, 2.5vw, 1.75rem);
+    gap: clamp(0.75rem, 2.5vw, 1.75rem);
     grid-column: 2;
     grid-row: 1;
-    justify-self: center;
+    /* Fill the middle track (instead of sizing to content) so a narrow window
+       shrinks the center rather than spilling it over the side clusters. */
+    justify-self: stretch;
+    justify-content: center;
+    width: 100%;
+    padding: 0 clamp(0.5rem, 2vw, 1.5rem);
   }
 
   .mini-player-art,
@@ -775,6 +786,7 @@ body::after {
   .mini-player-art {
     width: 3rem;
     height: 3rem;
+    flex: 0 0 auto;
     overflow: hidden;
     padding: 0;
     border: 1px solid rgba(255, 255, 255, 0.2);
@@ -896,6 +908,7 @@ body::after {
     /* Sits right after the artwork/track info; capped so the bar keeps a
        moderate size instead of stretching across the whole player. */
     width: clamp(16rem, 34vw, 30rem);
+    min-width: 0;
     max-width: 100%;
   }
 
@@ -1032,6 +1045,63 @@ body::after {
     .mini-player-title.is-marquee::before,
     .mini-player-artist.is-marquee::before {
       animation: none;
+    }
+  }
+
+  /* Shorter desktop windows: the buttons keep their full size and breathing
+     room; only the flexible center (title + seek bar) gives up space. */
+  @media (max-width: 75rem) {
+    .mini-player-transport,
+    .mini-player-actions {
+      gap: 0.6rem;
+    }
+
+    .mini-player-volume-slider {
+      width: clamp(4.5rem, 9vw, 6rem);
+      margin: 0 0.25rem;
+    }
+
+    .mini-player-meta {
+      max-width: 10rem;
+    }
+
+    .mini-player-seek {
+      width: clamp(8rem, 30vw, 20rem);
+    }
+  }
+
+  @media (max-width: 62rem) {
+    body.mini-player-visible.view-home .mini-player,
+    body.mini-player-visible.view-about .mini-player {
+      padding-right: 1rem;
+      padding-left: 1rem;
+    }
+
+    .mini-player-transport,
+    .mini-player-actions {
+      gap: 0.5rem;
+    }
+
+    .mini-player-center {
+      gap: 0.75rem;
+      padding: 0 1rem;
+    }
+
+    .mini-player-now {
+      gap: 0.7rem;
+    }
+
+    .mini-player-meta {
+      max-width: 8rem;
+    }
+
+    .mini-player-seek {
+      width: clamp(6rem, 24vw, 14rem);
+    }
+
+    .mini-player-volume-slider {
+      width: 4.5rem;
+      margin: 0 0.25rem;
     }
   }
 
@@ -1299,7 +1369,7 @@ body::after {
     left: 50%;
     z-index: 4;
     display: block;
-    width: min(88rem, calc(100vw - 4rem));
+    width: min(58rem + clamp(2rem, 4vw, 4rem) + min(27rem, 29vw), 100vw - 2rem);
     max-width: none;
     box-sizing: border-box;
     padding-left: clamp(1.25rem, 3.5vw, 3.5rem);
@@ -1530,25 +1600,27 @@ body::after {
   .genre-play-button {
     top: 50%;
     left: 50%;
-    width: 3rem;
+    /* Scales with the card (percentage of .genre-card-media) so it stays
+       proportionate when the cards shrink on narrower windows. */
+    width: clamp(1.9rem, 38%, 3rem);
     aspect-ratio: 1;
     border-radius: 50%;
     transform: translate(-50%, -50%);
   }
 
   .genre-play-button svg {
-    width: 1.35rem;
-    height: 1.35rem;
+    width: 45%;
+    height: 45%;
     fill: currentColor;
   }
 
   .genre-info-button {
-    right: 0.65rem;
-    bottom: 0.65rem;
-    width: 1.55rem;
-    height: 1.55rem;
+    right: clamp(0.35rem, 6%, 0.65rem);
+    bottom: clamp(0.35rem, 6%, 0.65rem);
+    width: clamp(1.15rem, 16%, 1.55rem);
+    height: clamp(1.15rem, 16%, 1.55rem);
     border-radius: 50%;
-    font: 700 0.78rem/1 system-ui, sans-serif;
+    font: 700 clamp(0.6rem, 1.1vw, 0.78rem)/1 system-ui, sans-serif;
     text-shadow: none;
   }
 
@@ -3838,8 +3910,8 @@ body.has-lyrics .lyrics-panel {
   }
 
   body.has-lyrics.view-now-playing .app {
-    width: min(58rem, calc(68vw - 2rem));
-    grid-template-columns: minmax(16rem, 22rem) minmax(20rem, 1fr);
+    width: min(58rem, calc(100vw - min(27rem, 29vw) - clamp(2rem, 4vw, 4rem) - 2rem));
+    grid-template-columns: minmax(13rem, 20rem) minmax(16rem, 1fr);
     column-gap: clamp(2rem, 4vw, 4rem);
     padding: clamp(1.5rem, 3vw, 2.5rem);
     transform: none;
@@ -3847,7 +3919,7 @@ body.has-lyrics .lyrics-panel {
 
   body.has-lyrics.view-now-playing .now-playing-heading::after {
     right: calc(
-      clamp(1.25rem, 3.5vw, 3.5rem) +
+      clamp(2rem, 4vw, 4rem) +
       min(27rem, 29vw)
     );
   }
@@ -3864,8 +3936,8 @@ body.has-lyrics .lyrics-panel {
   }
 
   body.view-now-playing .app {
-    width: min(58rem, calc(68vw - 2rem));
-    grid-template-columns: minmax(16rem, 22rem) minmax(20rem, 1fr);
+    width: min(58rem, calc(100vw - min(27rem, 29vw) - clamp(2rem, 4vw, 4rem) - 2rem));
+    grid-template-columns: minmax(13rem, 20rem) minmax(16rem, 1fr);
     column-gap: clamp(2rem, 4vw, 4rem);
     padding: clamp(1.5rem, 3vw, 2.5rem);
     transform: none;
@@ -3919,7 +3991,7 @@ body.has-lyrics .lyrics-panel {
 
   body.view-now-playing .now-playing-heading::after {
     right: calc(
-      clamp(1.25rem, 3.5vw, 3.5rem) +
+      clamp(2rem, 4vw, 4rem) +
       min(27rem, 29vw)
     );
   }
