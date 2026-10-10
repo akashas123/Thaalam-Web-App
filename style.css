@@ -3732,8 +3732,10 @@ body.has-lyrics .lyrics-panel {
     grid-area: title;
     align-self: start;
     width: 100%;
-    margin: 0.2rem 0 1.1rem;
-    transform: translateY(2rem);
+    /* Real spacing instead of a transform: translateY moved the title, album
+       line and quality badge visually but not in layout, so they overlapped
+       the progress bar below. */
+    margin: 2.2rem 0 1.25rem;
     color: #fff;
     font-size: clamp(1.35rem, 2vw, 1.9rem);
     font-weight: 650;
@@ -3862,15 +3864,24 @@ body.has-lyrics .lyrics-panel {
     grid-area: time;
     width: min(100%, 27rem);
     margin: 0.35rem 0 0.25rem;
-    transform: translateY(-1rem);
+    transform: translateY(-0.5rem);
   }
 
+  /* Flexible side slots around a fixed play slot: the 4.5rem play button no
+     longer overflows the base 4rem column onto its neighbours, and the row
+     shrinks cleanly when the lyrics panel narrows the column. */
   body.view-now-playing .player-controls {
     grid-area: controls;
+    grid-template-columns:
+      minmax(0, 1fr)
+      minmax(0, 1fr)
+      4.5rem
+      minmax(0, 1fr)
+      minmax(0, 1fr);
     width: min(100%, 27rem);
     min-height: 5.5rem;
-    justify-content: space-between;
-    column-gap: 0;
+    justify-content: stretch;
+    column-gap: 0.25rem;
     margin-top: 0.15rem;
   }
 
@@ -3883,9 +3894,10 @@ body.has-lyrics .lyrics-panel {
   }
 
   body.view-now-playing .player-controls .side-control,
-  body.view-now-playing .player-controls .rating-btn {
-    width: 3rem;
-    height: 3rem;
+  body.view-now-playing .player-controls .rating-btn,
+  body.view-now-playing .player-controls .transport-btn {
+    width: 2.75rem;
+    height: 2.75rem;
     border-radius: 50%;
     transition: background 0.2s ease, transform 0.2s ease;
   }
