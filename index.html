@@ -14,6 +14,8 @@
   <link rel="stylesheet" href="style.css?v=161">
   <link rel="icon" type="image/png" href="icon-512.png?v=3">
   <link rel="apple-touch-icon" href="icon-192.png?v=3">
+  <!-- Warm the iTunes DNS/TLS handshake ahead of the first search request. -->
+  <link rel="preconnect" href="https://itunes.apple.com">
 
   <style>
     .tagline[class~="marquee"] span {
@@ -838,6 +840,16 @@
       'hip-hop': 18
     };
     const genreResultCache = new Map();
+    // Recently fetched suggestions keyed by normalized term. Repeat searches
+    // and prefix refinements ("taylor" → "taylor swift") resolve instantly
+    // from memory instead of re-paying the iTunes round trip.
+    const suggestionCache = new Map();
+    const SUGGESTION_CACHE_LIMIT = 30;
+    // One in-flight request per term, shared by the suggestion dropdown and
+    // the results grid — Enter reuses the response already on the way instead
+    // of kicking off a second, redundant iTunes round trip.
+    const suggestionRequests = new Map();
+    let suggestionRenderScore = -1;
     const artistInfoCache = new Map();
     const artistInfoRequests = new Map();
     // Genre tabs use Apple's genre charts. Versioned separately from the old
@@ -845,6 +857,10 @@
     // v9 keeps only the first 21 chart tracks (7 columns x 3 rows).
     const GENRE_CACHE_KEY = 'thaalam-itunes-genre-cache-v9';
     const GENRE_CHART_LIMIT = 21;
+    // One small ranked search request feeds both the suggestion dropdown and
+    // the results grid: fetch 20, rank by relevance, show the top 20.
+    const SEARCH_FETCH_LIMIT = 20;
+    const SEARCH_RESULT_LIMIT = 20;
     const GENRE_CACHE_TTL = 12 * 60 * 60 * 1000;
     const ARTIST_INFO_STORAGE_KEY = 'thaalam-catalog-artist-info-v4';
     const ARTIST_INFO_CACHE_LIMIT = 600;
@@ -1387,7 +1403,30 @@
       genreResults.appendChild(placeholders);
     }
 
+    // The iTunes search API sends `Access-Control-Allow-Origin: *`, so a plain
+    // fetch beats JSONP: no script compile step, HTTP/2 multiplexing on the
+    // preconnected socket, and a real timeout. JSONP stays as an automatic
+    // fallback for environments where the fetch is blocked.
     function searchGenre(term, requestId, limit = 200, callbackPrefix = 'thaalamGenreCallback') {
+      const query = new URLSearchParams({
+        term,
+        entity: 'song',
+        media: 'music',
+        limit: String(limit)
+      });
+      const timeoutSignal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout
+        ? AbortSignal.timeout(12000)
+        : undefined;
+      return fetch(`https://itunes.apple.com/search?${query}`, { signal: timeoutSignal })
+        .then((response) => {
+          if (!response.ok) throw new Error(`The song search failed (${response.status}).`);
+          return response.json();
+        })
+        .then((data) => data?.results || [])
+        .catch(() => searchGenreJsonp(term, requestId, limit, callbackPrefix));
+    }
+
+    function searchGenreJsonp(term, requestId, limit = 200, callbackPrefix = 'thaalamGenreCallback') {
       return new Promise((resolve, reject) => {
         const callbackName = `${callbackPrefix}${requestId}`;
         const query = new URLSearchParams({
@@ -1458,12 +1497,34 @@
       });
     }
 
+    // iTunes pads result pages with loosely related songs. Keep only songs
+    // whose title/artist share words with the query — preferring matches that
+    // contain every query word — so the grid shows the exact songs searched
+    // for, not the long tail. Falls back gracefully when nothing matches all
+    // words (e.g. colloquial or misspelled queries).
+    function rankSearchResults(songs, term, limit) {
+      if (!Array.isArray(songs)) return [];
+      const words = term.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      if (!words.length) return songs.slice(0, limit);
+      const sharedWordCount = (song) => {
+        const haystack = `${song.trackName || ''} ${song.artistName || ''}`.toLowerCase();
+        return words.filter((word) => haystack.includes(word)).length;
+      };
+      const exact = songs.filter((song) => sharedWordCount(song) === words.length);
+      const partial = songs.filter((song) => sharedWordCount(song) > 0);
+      return (exact.length ? exact : partial.length ? partial : songs).slice(0, limit);
+    }
+
     async function loadCatalog(cacheKey, term, genreId = null) {
       activeGenre = cacheKey;
       const requestId = ++genreRequestId;
       const cached = genreResultCache.get(cacheKey);
       if (cached) {
-        const cachedSongs = genreId ? cached.slice(0, GENRE_CHART_LIMIT) : cached;
+        const cachedSongs = genreId
+          ? cached.slice(0, GENRE_CHART_LIMIT)
+          : term
+            ? rankSearchResults(cached, term, SEARCH_RESULT_LIMIT)
+            : cached;
         if (cachedSongs.length !== cached.length) genreResultCache.set(cacheKey, cachedSongs);
         void prefetchCatalogArtistInfo(cachedSongs);
         renderGenreResults(cachedSongs);
@@ -1477,12 +1538,14 @@
         Date.now() - storedEntry.savedAt < GENRE_CACHE_TTL &&
         Array.isArray(storedEntry.songs)
       ) {
-        // Only the three RSS chart tabs trim to 21 — search results and
-        // Favourites keep their full lists.
+        // Only the three RSS chart tabs trim to 21 — searches rank down to the
+        // top 20 and Favourites keep their full lists.
         const isChartCache = Object.prototype.hasOwnProperty.call(genreFeedIds, cacheKey);
         const storedSongs = isChartCache
           ? storedEntry.songs.slice(0, GENRE_CHART_LIMIT)
-          : storedEntry.songs;
+          : term
+            ? rankSearchResults(storedEntry.songs, term, SEARCH_RESULT_LIMIT)
+            : storedEntry.songs;
         genreResultCache.set(cacheKey, storedSongs);
         void prefetchCatalogArtistInfo(storedSongs);
         renderGenreResults(storedSongs);
@@ -1491,10 +1554,15 @@
 
       showGenreLoading();
       try {
+        // Search terms reuse the suggestion pipeline's single per-term request
+        // (fetchCatalogSuggestions dedupes by term), so Enter never triggers a
+        // second, redundant iTunes round trip. Chart tabs keep their RSS feed.
         const songs = genreId
           ? await searchGenreChart(genreId, requestId)
-          : await searchGenre(term, requestId);
-        const trimmedSongs = genreId ? songs.slice(0, GENRE_CHART_LIMIT) : songs;
+          : await fetchCatalogSuggestions(term);
+        const trimmedSongs = genreId
+          ? songs.slice(0, GENRE_CHART_LIMIT)
+          : rankSearchResults(songs, term, SEARCH_RESULT_LIMIT);
         genreResultCache.set(cacheKey, trimmedSongs);
         storedCache[cacheKey] = { savedAt: Date.now(), songs: trimmedSongs };
         try {
@@ -1575,8 +1643,107 @@
       loadGenre('pop');
       catalogSearchInput.focus();
     }
+
+    function cacheSuggestions(term, songs) {
+      const key = term.trim().toLowerCase();
+      if (!key) return;
+      // Re-insert so Map iteration order doubles as least-recently-used order.
+      suggestionCache.delete(key);
+      suggestionCache.set(key, songs);
+      while (suggestionCache.size > SUGGESTION_CACHE_LIMIT) {
+        suggestionCache.delete(suggestionCache.keys().next().value);
+      }
+    }
+
+    function filterCatalogSuggestions(songs, term) {
+      const key = term.trim().toLowerCase();
+      return songs.filter((song) =>
+        `${song.trackName || ''} ${song.artistName || ''}`.toLowerCase().includes(key)
+      );
+    }
+
+    function findInstantSuggestions(term) {
+      const key = term.trim().toLowerCase();
+      const exact = suggestionCache.get(key);
+      if (exact) return exact;
+      // Any shorter term the user typed through is a superset of the current
+      // one, so filter it locally right away while the network request that
+      // would return the authoritative list is still in flight.
+      let bestKey = '';
+      for (const cachedKey of suggestionCache.keys()) {
+        if (key.startsWith(cachedKey) && cachedKey.length > bestKey.length) {
+          bestKey = cachedKey;
+        }
+      }
+      if (!bestKey) return null;
+      return filterCatalogSuggestions(suggestionCache.get(bestKey), term);
+    }
+
+    // A response for an older (shorter) term may still be worth showing, but it
+    // must never clobber results for a more specific term. Score renders by
+    // term length plus a bonus for exact matches; only renders at least as
+    // specific as the previous one go through.
+    function renderSuggestionsForCurrentTerm(term, songs, exact) {
+      const score = term.length * 2 + (exact ? 1 : 0);
+      if (score < suggestionRenderScore) return;
+      suggestionRenderScore = score;
+      renderCatalogSuggestions(songs);
+    }
+
+    // The single source of search results per term: one network request whose
+    // response feeds both the suggestion dropdown and the results grid.
+    function fetchCatalogSuggestions(term) {
+      const key = term.trim().toLowerCase();
+      if (!key) return Promise.resolve([]);
+      const cached = suggestionCache.get(key);
+      if (cached) return Promise.resolve(cached);
+      const pending = suggestionRequests.get(key);
+      if (pending) return pending;
+      const request = searchGenre(term, ++suggestionRequestId, SEARCH_FETCH_LIMIT, 'thaalamSuggestionCallback')
+        .then((songs) => {
+          cacheSuggestions(term, songs);
+          return songs;
+        })
+        .finally(() => suggestionRequests.delete(key));
+      suggestionRequests.set(key, request);
+      return request;
+    }
+
+    function requestCatalogSuggestions(term, renderDropdown = true) {
+      const cacheKey = term.toLowerCase();
+      fetchCatalogSuggestions(term)
+        .then((songs) => {
+          if (!renderDropdown) return;
+          // A committed search owns the view — never pop the dropdown back
+          // open over the results grid for the term that's already showing.
+          if (activeSearchTerm && catalogSearchInput.value.trim() === activeSearchTerm) return;
+          const currentTerm = catalogSearchInput.value.trim();
+          const currentKey = currentTerm.toLowerCase();
+          if (currentKey === cacheKey) {
+            renderSuggestionsForCurrentTerm(currentTerm, songs, true);
+          } else if (currentKey.startsWith(cacheKey)) {
+            // The user kept typing while this request was in flight. Instead of
+            // discarding it, filter it down to the current term and show that
+            // right away — beats waiting for the refined request to land.
+            const filtered = filterCatalogSuggestions(songs, currentTerm);
+            if (filtered.length) {
+              // Never mark this exact: a filtered subset from an older term must
+              // not outrank the authoritative render for the current term.
+              renderSuggestionsForCurrentTerm(currentTerm, filtered, false);
+            }
+          }
+        })
+        .catch(() => {
+          if (catalogSearchInput.value.trim() === term && !catalogSuggestions.hidden) {
+            showCatalogSuggestionMessage('Suggestions are unavailable right now.');
+          }
+        });
+    }
+
     function updateCatalogSuggestions() {
       window.clearTimeout(suggestionTimer);
+      suggestionTimer = 0;
+      suggestionRenderScore = -1;
       catalogClearButton.hidden = catalogSearchInput.value.length === 0;
       const term = catalogSearchInput.value.trim();
       if (term.length < 2) {
@@ -1585,19 +1752,29 @@
         return;
       }
 
-      showCatalogSuggestionMessage('Finding songs...');
-      suggestionTimer = window.setTimeout(async () => {
-        const requestId = ++suggestionRequestId;
-        try {
-          const songs = await searchGenre(term, requestId, 8, 'thaalamSuggestionCallback');
-          if (requestId !== suggestionRequestId || catalogSearchInput.value.trim() !== term) return;
-          renderCatalogSuggestions(songs);
-        } catch {
-          if (requestId === suggestionRequestId && catalogSearchInput.value.trim() === term) {
-            showCatalogSuggestionMessage('Suggestions are unavailable right now.');
-          }
-        }
-      }, 400);
+      const instant = findInstantSuggestions(term);
+      if (instant) {
+        renderSuggestionsForCurrentTerm(
+          term,
+          instant,
+          suggestionCache.has(term.toLowerCase())
+        );
+      } else {
+        showCatalogSuggestionMessage('Finding songs...');
+      }
+
+      if (suggestionCache.has(term.toLowerCase())) return;
+      // Leading edge: the first keystroke of a typing burst fires the request
+      // immediately instead of waiting out the debounce. Refinements during the
+      // burst debounce at 200ms so we don't stack requests.
+      if (suggestionRequests.size === 0) {
+        void requestCatalogSuggestions(term);
+        return;
+      }
+      suggestionTimer = window.setTimeout(() => {
+        suggestionTimer = 0;
+        void requestCatalogSuggestions(term);
+      }, 200);
     }
     async function loadLikedSongs(requestId) {
       genreResults.replaceChildren();
@@ -1804,6 +1981,11 @@
     function searchCatalog(term) {
       const normalizedTerm = term.trim();
       if (!normalizedTerm) return;
+      // Cancel any pending trailing suggestion fetch — loadCatalog awaits the
+      // shared per-term request itself, so nothing is lost by stopping the
+      // timer here, and the dropdown can't pop back open over the results.
+      window.clearTimeout(suggestionTimer);
+      suggestionTimer = 0;
       genreTabList.hidden = true;
       homeSubtitle.textContent = 'Explore songs by search.';
       genreTabs.forEach((tab) => {
