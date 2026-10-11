@@ -1304,7 +1304,14 @@ body.view-rises-from-mini.view-now-playing .player-view {
 
   .about-voices-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+    /* A flat 14rem floor wrapped the four artists 3+1 on every width below
+       ~1145px (the whole tablet range). The clamp keeps 14rem on wide
+       screens but lets the minimum shrink with the viewport, so all four
+       portraits share one row on smaller tablets; the cards — and their
+       photos, sized by the media's 4/4.5 aspect ratio — simply get smaller
+       as the window narrows. Below ~640px the grid falls back to 2x2 and
+       then single column like before. */
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, clamp(7rem, 17vw, 14rem)), 1fr));
     gap: 1rem;
     list-style: none;
   }
