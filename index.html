@@ -11,7 +11,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=161">
+  <link rel="stylesheet" href="style.css?v=162">
   <link rel="icon" type="image/png" href="icon-512.png?v=3">
   <link rel="apple-touch-icon" href="icon-192.png?v=3">
   <!-- Warm the iTunes DNS/TLS handshake ahead of the first search request. -->
@@ -53,7 +53,7 @@
     @media (min-width: 56.25rem) and (pointer: fine) {
 
       .desktop-nav-links {
-        position: static;
+        position: relative;
         inset: auto;
         width: fit-content;
         height: 100%;
@@ -104,7 +104,12 @@
         max-width: none;
         box-sizing: border-box;
         padding-left: clamp(1.25rem, 3.5vw, 3.5rem);
-        transform: translateX(-50%) !important;
+        /* No !important on transform here: an important transform outranks
+           CSS animations in the cascade, which would freeze the heading while
+           the rest of the Now Playing page slides in. The inline origin
+           already beats the style.css rules, and nowPlayingHeadingSlideIn
+           takes over the transform while the slide runs. */
+        transform: translateX(-50%);
         text-align: left;
         pointer-events: none;
       }
@@ -129,10 +134,16 @@
       /* The player no longer carries a fixed offset below the heading: the
          body reserves the heading's measured height (see
          --now-playing-heading-bottom) and centres the player in what is left,
-         so the artwork can never ride up over the heading's divider line. */
+         so the artwork can never ride up over the heading's divider line.
+         These stay normal declarations on purpose: an !important transform
+         outranks CSS animations in the cascade, which used to kill the
+         viewSlideIn slide on the player card while the lyrics panel (which
+         has no such override) kept sliding. The ID selector already wins
+         over the .app class rules below, and while the slide runs the
+         animation origin correctly takes over the transform. */
       body.view-now-playing #playerView {
-        top: 0 !important;
-        transform: none !important;
+        top: 0;
+        transform: none;
       }
 
     }
@@ -175,6 +186,7 @@
 
   <nav class="desktop-nav" aria-label="Main navigation">
     <div class="desktop-nav-links">
+      <span class="desktop-nav-pill" aria-hidden="true"></span>
       <button type="button" data-view="home">Home</button>
       <button class="is-current" type="button" data-view="now-playing" aria-current="page">Now Playing</button>
       <button type="button" data-view="about">About</button>
@@ -362,10 +374,6 @@
       <button class="install-app-secondary" id="installAppDismiss" type="button">Not now</button>
     </div>
   </dialog>
-
-  <div class="page-loading" id="pageLoading" role="status" aria-label="Loading page" hidden>
-    <span class="loading-spinner" aria-hidden="true"></span>
-  </div>
 
     <header class="now-playing-heading" id="nowPlayingHeading">
       <h1>Now playing</h1>
@@ -772,11 +780,18 @@
     // publish where it ends and let the CSS lay the player out below it.
     const publishHeadingBottom = () => {
       if (!nowPlayingHeading) return;
-      // The heading scrolls with the page, so measure from the page top.
-      const { bottom } = nowPlayingHeading.getBoundingClientRect();
+      // Measure with layout offsets, not getBoundingClientRect(): the rect is
+      // inflated by the running view animation, and on the mini-player rise the
+      // heading flips from display:none mid-animation — translated ~100vh down
+      // — which used to publish a heading bottom a full viewport too low. CSS
+      // then reserved that space as the player's top padding, pushing the
+      // album art and controls below the fold for the whole session.
+      // offsetTop/offsetHeight ignore transforms, so they stay correct even
+      // while the rise (or the horizontal slide) is running.
+      const { offsetTop, offsetHeight } = nowPlayingHeading;
       document.documentElement.style.setProperty(
         '--now-playing-heading-bottom',
-        `${Math.max(0, Math.round(bottom + window.scrollY))}px`
+        `${Math.max(0, Math.round(offsetTop + offsetHeight))}px`
       );
     };
     publishHeadingBottom();
@@ -813,8 +828,8 @@
       }
       restoreActiveView();
     });
-    const pageLoading =
-      document.getElementById('pageLoading');
+    const navPill =
+      document.querySelector('.desktop-nav-pill');
     const viewButtons =
       document.querySelectorAll('[data-view]');
     const genreTabs =
@@ -882,7 +897,6 @@
     let suggestionRequestId = 0;
     let suggestionTimer = 0;
     let genreRequestId = 0;
-    let viewChangeTimeout = 0;
 
     function getGenreCache() {
       try {
@@ -1280,11 +1294,13 @@
     }
 
     function renderGenreResults(songs) {
-      catalogArtworkObserver?.disconnect();
-      genreResults.replaceChildren();
+      const wasBusy = genreResults.getAttribute('aria-busy') === 'true';
       genreResults.setAttribute('aria-busy', 'false');
 
       if (!songs.length) {
+        catalogArtworkObserver?.disconnect();
+        genreResults.replaceChildren();
+        delete genreResults.dataset.renderKey;
         const empty = document.createElement('p');
         empty.className = 'genre-empty';
         empty.textContent = 'No matching songs were found.';
@@ -1294,6 +1310,34 @@
       }
 
       const orderedSongs = diversifyGenreSongs(songs);
+      // Identity of everything the cards actually show, in display order.
+      // The liked-songs rescue passes patch titles/artwork on the same
+      // objects, so those fields must bust the key and force a rebuild.
+      const renderKey = orderedSongs
+        .map((song) => [
+          song.trackId ?? `${song.trackName}|${song.artistName}`,
+          song.trackViewUrl || '',
+          song.youtubeVideoId || '',
+          song.artworkUrl100 || ''
+        ].join('::'))
+        .join(' ');
+      // Switching back to Home re-runs the loader for the grid that is
+      // already on screen. Rebuilding identical cards would tear down and
+      // re-decode every cover and re-sample the Home glow on the main thread
+      // right as the slide-in animation starts — that is what stuttered the
+      // page slide and made the nav pill jump. Keep the rendered grid
+      // untouched when it already matches this exact song list.
+      if (
+        !wasBusy &&
+        genreResults.dataset.renderKey === renderKey &&
+        genreResults.childElementCount === orderedSongs.length &&
+        genreResults.firstElementChild?.classList.contains('genre-card')
+      ) {
+        return;
+      }
+
+      catalogArtworkObserver?.disconnect();
+      genreResults.replaceChildren();
       orderedSongs.forEach((song) => {
         const card = document.createElement('article');
         card.className = 'genre-card';
@@ -1373,6 +1417,7 @@
           artwork.src = 'album-placeholder.svg?v=2';
         }
       });
+      genreResults.dataset.renderKey = renderKey;
       updateHomeTint(orderedSongs);
     }
 
@@ -2053,6 +2098,20 @@
           button.removeAttribute('aria-current');
         }
       });
+      positionNavPill();
+    }
+
+    // Slide the segmented-control highlight under the tab that is now
+    // current. offsetLeft/offsetWidth track the button's real rendered box,
+    // so the pill stays correct at any nav width or zoom level.
+    function positionNavPill() {
+      if (!navPill) return;
+      const current = document.querySelector(
+        '.desktop-nav-links [data-view].is-current'
+      );
+      if (!current) return;
+      navPill.style.setProperty('--nav-pill-x', `${current.offsetLeft}px`);
+      navPill.style.setProperty('--nav-pill-width', `${current.offsetWidth}px`);
     }
 
     function storeActiveView(view) {
@@ -2074,7 +2133,24 @@
       }
     }
 
+    // Tab order used for slide direction: advancing rightwards along the nav
+    // brings the new page in from the right, going back from the left.
+    const VIEW_ORDER = ['home', 'now-playing', 'about'];
+
     function applyView(view) {
+      const previousView = VIEW_ORDER.find((name) =>
+        document.body.classList.contains(`view-${name}`)
+      );
+      const previousIndex = previousView
+        ? VIEW_ORDER.indexOf(previousView)
+        : -1;
+      const nextIndex = VIEW_ORDER.indexOf(view);
+      if (previousIndex !== -1 && nextIndex !== previousIndex) {
+        document.body.style.setProperty(
+          '--view-slide-dir',
+          nextIndex > previousIndex ? '1' : '-1'
+        );
+      }
       document.body.classList.remove(
         'view-home',
         'view-about',
@@ -2103,59 +2179,94 @@
       }
     }
 
-    function showView(view) {
+    // The Home loader rebuilds the whole catalog grid and re-samples the
+    // glow — main-thread work that would fight the incoming page's slide-in
+    // animation and stutter the nav pill along with it. Hold it until the
+    // slide has finished; on the usual revisit renderGenreResults() matches
+    // the already-rendered songs and does nothing at all.
+    // Kept in sync with the viewSlideIn duration in style.css (0.8s).
+    const VIEW_SLIDE_MS = 800;
+    let homeRefreshTimer = 0;
+    function scheduleHomeRefresh() {
+      window.clearTimeout(homeRefreshTimer);
+      homeRefreshTimer = window.setTimeout(() => {
+        homeRefreshTimer = 0;
+        if (activeGenre.startsWith('search:')) loadCatalog(activeGenre, activeSearchTerm);
+        else loadGenre(activeGenre);
+      }, VIEW_SLIDE_MS);
+    }
+
+    // Opening Now Playing from the docked mini player swaps the sideways page
+    // slide for a bottom-up rise (see nowPlayingRiseIn in style.css). The
+    // `view-rises-from-mini` class stays on the body for the whole Now Playing
+    // stay and is only stripped by the next showView() call, in the same task
+    // that removes `view-now-playing`. Stripping it earlier (e.g. on a timer,
+    // as before) switched the still-running view animation from
+    // nowPlayingRiseIn back to viewSlideIn, which restarted the sideways slide
+    // on top of the rise; nav-tab entries to other pages never carry the class
+    // and keep the horizontal slide.
+    function setMiniPlayerRise(enabled) {
+      document.body.classList.toggle('view-rises-from-mini', enabled);
+    }
+
+    function showView(view, { riseFromMiniPlayer = false } = {}) {
       if (!desktopNavigation.matches) return Promise.resolve();
-      // Re-selecting the current page should not flash the page loader or
-      // repeat page-specific work.
+      // Re-selecting the current page should not repeat page-specific work.
       if (document.body.classList.contains(`view-${view}`)) {
         return Promise.resolve();
       }
 
-      window.clearTimeout(viewChangeTimeout);
-      pageLoading.hidden = false;
-
-      return new Promise((resolve) => {
-        viewChangeTimeout = window.setTimeout(() => {
-          applyView(view);
-          storeActiveView(view);
-          requestAnimationFrame(() => {
-            window.updateMiniPlayerMarquees?.();
-            // updateMarquee() measures the tagline width, which is 0 while the
-            // player view is display:none (view-home/view-about), so its
-            // title/artist marquee classes were stripped off. Re-measure now
-            // that Now Playing is visible or long titles stay clipped.
-            window.updateMarquee?.();
-          });
-
-          pageLoading.hidden = true;
-          if (view === 'about') loadAboutArtistPortraits();
-          if (view === 'home') {
-            if (activeGenre.startsWith('search:')) loadCatalog(activeGenre, activeSearchTerm);
-            else loadGenre(activeGenre);
-          }
-          document.getElementById(
-            view === 'home'
-              ? 'homePage'
-              : view === 'about'
-                ? 'aboutPage'
-                : 'playerView'
-          )
-            ?.querySelector('h1')
-            ?.focus({ preventScroll: true });
-          resolve();
-        }, 350);
+      // Switching is only a class flip: the nav pill slides to the new tab
+      // and the incoming page runs its CSS slide-in animation, so there is no
+      // need for the old full-page spinner delay.
+      applyView(view);
+      // Armed after the view flip so entering Now Playing starts the rise in
+      // the same style recalc that displays the page, and leaving it drops the
+      // rise class only once `view-now-playing` is gone (both flips land in
+      // one recalc, so the horizontal slide can never restart mid-exit).
+      setMiniPlayerRise(riseFromMiniPlayer && view === 'now-playing');
+      storeActiveView(view);
+      requestAnimationFrame(() => {
+        window.updateMiniPlayerMarquees?.();
+        // updateMarquee() measures the tagline width, which is 0 while the
+        // player view is display:none (view-home/view-about), so its
+        // title/artist marquee classes were stripped off. Re-measure now
+        // that Now Playing is visible or long titles stay clipped.
+        window.updateMarquee?.();
       });
+
+      if (view === 'about') loadAboutArtistPortraits();
+      if (view === 'home') scheduleHomeRefresh();
+      document.getElementById(
+        view === 'home'
+          ? 'homePage'
+          : view === 'about'
+            ? 'aboutPage'
+            : 'playerView'
+      )
+        ?.querySelector('h1')
+        ?.focus({ preventScroll: true });
+      return Promise.resolve();
     }
 
     window.showView = showView;
 
     viewButtons.forEach((button) => {
       button.addEventListener('click', () => {
-        showView(button.dataset.view);
+        // The mini player's artwork/title buttons also carry data-view, but
+        // they should open Now Playing as a rise from the bottom bar rather
+        // than with the sideways page slide.
+        showView(button.dataset.view, {
+          riseFromMiniPlayer: Boolean(button.closest('.mini-player'))
+        });
       });
     });
 
     restoreActiveView();
+    positionNavPill();
+    // Web fonts can change the tab label widths, so re-measure once they land.
+    document.fonts?.ready.then(positionNavPill);
+    window.addEventListener('resize', positionNavPill, { passive: true });
     if (document.body.classList.contains('view-about')) loadAboutArtistPortraits();
   </script>
 
