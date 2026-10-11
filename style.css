@@ -433,6 +433,27 @@ body::after {
   display: none;
 }
 
+/* Tab switches slide the incoming page in from the side of the tab it came
+   from (direction published by applyView() as --view-slide-dir). Only the
+   `from` frame is declared, so the implicit `to` frame uses each page's own
+   styles and the animation cannot clobber transforms such as the has-lyrics
+   layout. */
+@keyframes viewSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--view-slide-dir, 1) * 3.5rem));
+  }
+}
+
+body.view-now-playing .player-view,
+body.view-home .site-page.home-page,
+body.view-about .site-page.about-page {
+  /* 0.8s + a gentle ease-in-out keeps the glide slow and even: the old
+     easeOutQuint curve covered most of the distance in the first frames,
+     which read as a snap rather than a slide. */
+  animation: viewSlideIn 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 .mini-player {
   display: none;
 }
@@ -1725,34 +1746,13 @@ body::after {
     }
   }
 
-  .page-loading:not([hidden]) {
-    position: fixed;
-    inset: 0;
-    z-index: 10;
-    display: grid;
-    place-items: center;
-    background: rgba(8, 9, 14, 0.2);
-    backdrop-filter: blur(0.6rem);
-    -webkit-backdrop-filter: blur(0.6rem);
-  }
-
-  .loading-spinner {
-    width: 2.5rem;
-    height: 2.5rem;
-    border: 3px solid rgba(255, 255, 255, 0.24);
-    border-top-color: #fff;
-    border-radius: 50%;
-    animation: pageSpinner 0.75s linear infinite;
-  }
-
-  @keyframes pageSpinner {
-    to { transform: rotate(360deg); }
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .loading-spinner {
-    animation-duration: 1.5s;
+  body.view-now-playing .player-view,
+  body.view-home .site-page.home-page,
+  body.view-about .site-page.about-page {
+    animation: none;
   }
 }
 
@@ -1790,6 +1790,7 @@ body::after {
   }
 
   .desktop-nav-links {
+    position: relative;
     display: flex;
     height: 100%;
     margin: 0;
@@ -1797,8 +1798,33 @@ body::after {
     gap: 0.1rem;
   }
 
+  /* Sliding segmented-control highlight behind the current tab. JS measures
+     the active button and publishes --nav-pill-x / --nav-pill-width here. */
+  .desktop-nav-pill {
+    position: absolute;
+    top: 0.05rem;
+    bottom: 0.05rem;
+    left: 0;
+    width: var(--nav-pill-width, 0px);
+    transform: translateX(var(--nav-pill-x, 0px));
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.14);
+    pointer-events: none;
+    /* Own layer up front: the glide runs on the compositor and never waits
+       on main-thread style/layout work (only the width tween does). */
+    will-change: transform;
+    /* Matches viewSlideIn's duration and easing so the pill and the incoming
+       page glide together instead of the pill arriving first. */
+    transition:
+      transform 0.8s cubic-bezier(0.4, 0, 0.2, 1),
+      width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
   .desktop-nav-links a,
   .desktop-nav-links button {
+    position: relative;
+    z-index: 1;
     display: inline-flex;
     height: calc(100% - 0.1rem);
     padding: 0 0.8rem;
@@ -1843,6 +1869,12 @@ body::after {
     background: transparent;
     color: #d7ecff;
     font-weight: 600;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .desktop-nav-pill {
+      transition: none;
+    }
   }
 
 }

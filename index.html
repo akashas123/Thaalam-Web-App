@@ -53,7 +53,7 @@
     @media (min-width: 56.25rem) and (pointer: fine) {
 
       .desktop-nav-links {
-        position: static;
+        position: relative;
         inset: auto;
         width: fit-content;
         height: 100%;
@@ -175,6 +175,7 @@
 
   <nav class="desktop-nav" aria-label="Main navigation">
     <div class="desktop-nav-links">
+      <span class="desktop-nav-pill" aria-hidden="true"></span>
       <button type="button" data-view="home">Home</button>
       <button class="is-current" type="button" data-view="now-playing" aria-current="page">Now Playing</button>
       <button type="button" data-view="about">About</button>
@@ -362,10 +363,6 @@
       <button class="install-app-secondary" id="installAppDismiss" type="button">Not now</button>
     </div>
   </dialog>
-
-  <div class="page-loading" id="pageLoading" role="status" aria-label="Loading page" hidden>
-    <span class="loading-spinner" aria-hidden="true"></span>
-  </div>
 
     <header class="now-playing-heading" id="nowPlayingHeading">
       <h1>Now playing</h1>
@@ -813,8 +810,8 @@
       }
       restoreActiveView();
     });
-    const pageLoading =
-      document.getElementById('pageLoading');
+    const navPill =
+      document.querySelector('.desktop-nav-pill');
     const viewButtons =
       document.querySelectorAll('[data-view]');
     const genreTabs =
@@ -882,7 +879,6 @@
     let suggestionRequestId = 0;
     let suggestionTimer = 0;
     let genreRequestId = 0;
-    let viewChangeTimeout = 0;
 
     function getGenreCache() {
       try {
@@ -1280,11 +1276,13 @@
     }
 
     function renderGenreResults(songs) {
-      catalogArtworkObserver?.disconnect();
-      genreResults.replaceChildren();
+      const wasBusy = genreResults.getAttribute('aria-busy') === 'true';
       genreResults.setAttribute('aria-busy', 'false');
 
       if (!songs.length) {
+        catalogArtworkObserver?.disconnect();
+        genreResults.replaceChildren();
+        delete genreResults.dataset.renderKey;
         const empty = document.createElement('p');
         empty.className = 'genre-empty';
         empty.textContent = 'No matching songs were found.';
@@ -1294,6 +1292,34 @@
       }
 
       const orderedSongs = diversifyGenreSongs(songs);
+      // Identity of everything the cards actually show, in display order.
+      // The liked-songs rescue passes patch titles/artwork on the same
+      // objects, so those fields must bust the key and force a rebuild.
+      const renderKey = orderedSongs
+        .map((song) => [
+          song.trackId ?? `${song.trackName}|${song.artistName}`,
+          song.trackViewUrl || '',
+          song.youtubeVideoId || '',
+          song.artworkUrl100 || ''
+        ].join('::'))
+        .join(' ');
+      // Switching back to Home re-runs the loader for the grid that is
+      // already on screen. Rebuilding identical cards would tear down and
+      // re-decode every cover and re-sample the Home glow on the main thread
+      // right as the slide-in animation starts — that is what stuttered the
+      // page slide and made the nav pill jump. Keep the rendered grid
+      // untouched when it already matches this exact song list.
+      if (
+        !wasBusy &&
+        genreResults.dataset.renderKey === renderKey &&
+        genreResults.childElementCount === orderedSongs.length &&
+        genreResults.firstElementChild?.classList.contains('genre-card')
+      ) {
+        return;
+      }
+
+      catalogArtworkObserver?.disconnect();
+      genreResults.replaceChildren();
       orderedSongs.forEach((song) => {
         const card = document.createElement('article');
         card.className = 'genre-card';
@@ -1373,6 +1399,7 @@
           artwork.src = 'album-placeholder.svg?v=2';
         }
       });
+      genreResults.dataset.renderKey = renderKey;
       updateHomeTint(orderedSongs);
     }
 
@@ -2053,6 +2080,20 @@
           button.removeAttribute('aria-current');
         }
       });
+      positionNavPill();
+    }
+
+    // Slide the segmented-control highlight under the tab that is now
+    // current. offsetLeft/offsetWidth track the button's real rendered box,
+    // so the pill stays correct at any nav width or zoom level.
+    function positionNavPill() {
+      if (!navPill) return;
+      const current = document.querySelector(
+        '.desktop-nav-links [data-view].is-current'
+      );
+      if (!current) return;
+      navPill.style.setProperty('--nav-pill-x', `${current.offsetLeft}px`);
+      navPill.style.setProperty('--nav-pill-width', `${current.offsetWidth}px`);
     }
 
     function storeActiveView(view) {
@@ -2074,7 +2115,24 @@
       }
     }
 
+    // Tab order used for slide direction: advancing rightwards along the nav
+    // brings the new page in from the right, going back from the left.
+    const VIEW_ORDER = ['home', 'now-playing', 'about'];
+
     function applyView(view) {
+      const previousView = VIEW_ORDER.find((name) =>
+        document.body.classList.contains(`view-${name}`)
+      );
+      const previousIndex = previousView
+        ? VIEW_ORDER.indexOf(previousView)
+        : -1;
+      const nextIndex = VIEW_ORDER.indexOf(view);
+      if (previousIndex !== -1 && nextIndex !== previousIndex) {
+        document.body.style.setProperty(
+          '--view-slide-dir',
+          nextIndex > previousIndex ? '1' : '-1'
+        );
+      }
       document.body.classList.remove(
         'view-home',
         'view-about',
@@ -2103,48 +2161,56 @@
       }
     }
 
+    // The Home loader rebuilds the whole catalog grid and re-samples the
+    // glow — main-thread work that would fight the incoming page's slide-in
+    // animation and stutter the nav pill along with it. Hold it until the
+    // slide has finished; on the usual revisit renderGenreResults() matches
+    // the already-rendered songs and does nothing at all.
+    // Kept in sync with the viewSlideIn duration in style.css (0.8s).
+    const VIEW_SLIDE_MS = 800;
+    let homeRefreshTimer = 0;
+    function scheduleHomeRefresh() {
+      window.clearTimeout(homeRefreshTimer);
+      homeRefreshTimer = window.setTimeout(() => {
+        homeRefreshTimer = 0;
+        if (activeGenre.startsWith('search:')) loadCatalog(activeGenre, activeSearchTerm);
+        else loadGenre(activeGenre);
+      }, VIEW_SLIDE_MS);
+    }
+
     function showView(view) {
       if (!desktopNavigation.matches) return Promise.resolve();
-      // Re-selecting the current page should not flash the page loader or
-      // repeat page-specific work.
+      // Re-selecting the current page should not repeat page-specific work.
       if (document.body.classList.contains(`view-${view}`)) {
         return Promise.resolve();
       }
 
-      window.clearTimeout(viewChangeTimeout);
-      pageLoading.hidden = false;
-
-      return new Promise((resolve) => {
-        viewChangeTimeout = window.setTimeout(() => {
-          applyView(view);
-          storeActiveView(view);
-          requestAnimationFrame(() => {
-            window.updateMiniPlayerMarquees?.();
-            // updateMarquee() measures the tagline width, which is 0 while the
-            // player view is display:none (view-home/view-about), so its
-            // title/artist marquee classes were stripped off. Re-measure now
-            // that Now Playing is visible or long titles stay clipped.
-            window.updateMarquee?.();
-          });
-
-          pageLoading.hidden = true;
-          if (view === 'about') loadAboutArtistPortraits();
-          if (view === 'home') {
-            if (activeGenre.startsWith('search:')) loadCatalog(activeGenre, activeSearchTerm);
-            else loadGenre(activeGenre);
-          }
-          document.getElementById(
-            view === 'home'
-              ? 'homePage'
-              : view === 'about'
-                ? 'aboutPage'
-                : 'playerView'
-          )
-            ?.querySelector('h1')
-            ?.focus({ preventScroll: true });
-          resolve();
-        }, 350);
+      // Switching is only a class flip: the nav pill slides to the new tab
+      // and the incoming page runs its CSS slide-in animation, so there is no
+      // need for the old full-page spinner delay.
+      applyView(view);
+      storeActiveView(view);
+      requestAnimationFrame(() => {
+        window.updateMiniPlayerMarquees?.();
+        // updateMarquee() measures the tagline width, which is 0 while the
+        // player view is display:none (view-home/view-about), so its
+        // title/artist marquee classes were stripped off. Re-measure now
+        // that Now Playing is visible or long titles stay clipped.
+        window.updateMarquee?.();
       });
+
+      if (view === 'about') loadAboutArtistPortraits();
+      if (view === 'home') scheduleHomeRefresh();
+      document.getElementById(
+        view === 'home'
+          ? 'homePage'
+          : view === 'about'
+            ? 'aboutPage'
+            : 'playerView'
+      )
+        ?.querySelector('h1')
+        ?.focus({ preventScroll: true });
+      return Promise.resolve();
     }
 
     window.showView = showView;
@@ -2156,6 +2222,10 @@
     });
 
     restoreActiveView();
+    positionNavPill();
+    // Web fonts can change the tab label widths, so re-measure once they land.
+    document.fonts?.ready.then(positionNavPill);
+    window.addEventListener('resize', positionNavPill, { passive: true });
     if (document.body.classList.contains('view-about')) loadAboutArtistPortraits();
   </script>
 
