@@ -104,7 +104,12 @@
         max-width: none;
         box-sizing: border-box;
         padding-left: clamp(1.25rem, 3.5vw, 3.5rem);
-        transform: translateX(-50%) !important;
+        /* No !important on transform here: an important transform outranks
+           CSS animations in the cascade, which would freeze the heading while
+           the rest of the Now Playing page slides in. The inline origin
+           already beats the style.css rules, and nowPlayingHeadingSlideIn
+           takes over the transform while the slide runs. */
+        transform: translateX(-50%);
         text-align: left;
         pointer-events: none;
       }
@@ -129,10 +134,16 @@
       /* The player no longer carries a fixed offset below the heading: the
          body reserves the heading's measured height (see
          --now-playing-heading-bottom) and centres the player in what is left,
-         so the artwork can never ride up over the heading's divider line. */
+         so the artwork can never ride up over the heading's divider line.
+         These stay normal declarations on purpose: an !important transform
+         outranks CSS animations in the cascade, which used to kill the
+         viewSlideIn slide on the player card while the lyrics panel (which
+         has no such override) kept sliding. The ID selector already wins
+         over the .app class rules below, and while the slide runs the
+         animation origin correctly takes over the transform. */
       body.view-now-playing #playerView {
-        top: 0 !important;
-        transform: none !important;
+        top: 0;
+        transform: none;
       }
 
     }
