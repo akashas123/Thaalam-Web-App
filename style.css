@@ -472,6 +472,44 @@ body.view-about .site-page.about-page {
   }
 }
 
+/* Tapping the docked mini player's artwork/title opens Now Playing like a
+   sheet rising off the bar, so those entries skip the sideways viewSlideIn
+   and travel straight up from below the viewport instead. showView() arms
+   this by adding `view-rises-from-mini` to the body; the class lives for the
+   whole Now Playing stay and is stripped only by the next view switch (in the
+   same style recalc that removes `view-now-playing`) because dropping it any
+   earlier would restart the sideways slide on top of the rise. Nav-tab
+   switches never carry the class and keep the horizontal slide. The distance
+   is a full viewport (rather than 100% of each element) on purpose: the
+   heading, player card and lyrics panel are three separate elements with very
+   different heights, and a shared absolute distance keeps them rigidly in
+   step so the page reads as one sheet moving. */
+@keyframes nowPlayingRiseIn {
+  from {
+    opacity: 0;
+    transform: translateY(100vh);
+  }
+}
+
+body.view-rises-from-mini.view-now-playing .player-view {
+  animation: nowPlayingRiseIn 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Same idea for the pinned heading; the keyframe repeats its resting
+   translateX(-50%) centring, exactly like nowPlayingHeadingSlideIn. */
+@keyframes nowPlayingHeadingRiseIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(100vh);
+  }
+}
+
+@media (min-width: 56.25rem) and (pointer: fine) {
+  body.view-rises-from-mini.view-now-playing #nowPlayingHeading {
+    animation: nowPlayingHeadingRiseIn 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
 .mini-player {
   display: none;
 }
@@ -1769,6 +1807,8 @@ body.view-about .site-page.about-page {
 @media (prefers-reduced-motion: reduce) {
   body.view-now-playing .player-view,
   body.view-now-playing #nowPlayingHeading,
+  body.view-rises-from-mini.view-now-playing .player-view,
+  body.view-rises-from-mini.view-now-playing #nowPlayingHeading,
   body.view-home .site-page.home-page,
   body.view-about .site-page.about-page {
     animation: none;

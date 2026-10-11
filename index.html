@@ -11,7 +11,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=161">
+  <link rel="stylesheet" href="style.css?v=162">
   <link rel="icon" type="image/png" href="icon-512.png?v=3">
   <link rel="apple-touch-icon" href="icon-192.png?v=3">
   <!-- Warm the iTunes DNS/TLS handshake ahead of the first search request. -->
@@ -780,11 +780,18 @@
     // publish where it ends and let the CSS lay the player out below it.
     const publishHeadingBottom = () => {
       if (!nowPlayingHeading) return;
-      // The heading scrolls with the page, so measure from the page top.
-      const { bottom } = nowPlayingHeading.getBoundingClientRect();
+      // Measure with layout offsets, not getBoundingClientRect(): the rect is
+      // inflated by the running view animation, and on the mini-player rise the
+      // heading flips from display:none mid-animation — translated ~100vh down
+      // — which used to publish a heading bottom a full viewport too low. CSS
+      // then reserved that space as the player's top padding, pushing the
+      // album art and controls below the fold for the whole session.
+      // offsetTop/offsetHeight ignore transforms, so they stay correct even
+      // while the rise (or the horizontal slide) is running.
+      const { offsetTop, offsetHeight } = nowPlayingHeading;
       document.documentElement.style.setProperty(
         '--now-playing-heading-bottom',
-        `${Math.max(0, Math.round(bottom + window.scrollY))}px`
+        `${Math.max(0, Math.round(offsetTop + offsetHeight))}px`
       );
     };
     publishHeadingBottom();
@@ -2189,7 +2196,20 @@
       }, VIEW_SLIDE_MS);
     }
 
-    function showView(view) {
+    // Opening Now Playing from the docked mini player swaps the sideways page
+    // slide for a bottom-up rise (see nowPlayingRiseIn in style.css). The
+    // `view-rises-from-mini` class stays on the body for the whole Now Playing
+    // stay and is only stripped by the next showView() call, in the same task
+    // that removes `view-now-playing`. Stripping it earlier (e.g. on a timer,
+    // as before) switched the still-running view animation from
+    // nowPlayingRiseIn back to viewSlideIn, which restarted the sideways slide
+    // on top of the rise; nav-tab entries to other pages never carry the class
+    // and keep the horizontal slide.
+    function setMiniPlayerRise(enabled) {
+      document.body.classList.toggle('view-rises-from-mini', enabled);
+    }
+
+    function showView(view, { riseFromMiniPlayer = false } = {}) {
       if (!desktopNavigation.matches) return Promise.resolve();
       // Re-selecting the current page should not repeat page-specific work.
       if (document.body.classList.contains(`view-${view}`)) {
@@ -2200,6 +2220,11 @@
       // and the incoming page runs its CSS slide-in animation, so there is no
       // need for the old full-page spinner delay.
       applyView(view);
+      // Armed after the view flip so entering Now Playing starts the rise in
+      // the same style recalc that displays the page, and leaving it drops the
+      // rise class only once `view-now-playing` is gone (both flips land in
+      // one recalc, so the horizontal slide can never restart mid-exit).
+      setMiniPlayerRise(riseFromMiniPlayer && view === 'now-playing');
       storeActiveView(view);
       requestAnimationFrame(() => {
         window.updateMiniPlayerMarquees?.();
@@ -2228,7 +2253,12 @@
 
     viewButtons.forEach((button) => {
       button.addEventListener('click', () => {
-        showView(button.dataset.view);
+        // The mini player's artwork/title buttons also carry data-view, but
+        // they should open Now Playing as a rise from the bottom bar rather
+        // than with the sideways page slide.
+        showView(button.dataset.view, {
+          riseFromMiniPlayer: Boolean(button.closest('.mini-player'))
+        });
       });
     });
 
