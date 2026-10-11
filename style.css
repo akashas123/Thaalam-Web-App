@@ -445,7 +445,6 @@ body::after {
   }
 }
 
-body.view-now-playing .player-view,
 body.view-home .site-page.home-page,
 body.view-about .site-page.about-page {
   /* 0.8s + a gentle ease-in-out keeps the glide slow and even: the old
@@ -467,6 +466,14 @@ body.view-about .site-page.about-page {
 }
 
 @media (min-width: 56.25rem) and (pointer: fine) {
+  /* Now Playing's sideways slide is desktop-only. On mobile the page is the
+     launch view — showView() no-ops there and the body class never switches —
+     so the global rule only made the player card and lyrics slide in on every
+     load/refresh for no reason. */
+  body.view-now-playing .player-view {
+    animation: viewSlideIn 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
   body.view-now-playing #nowPlayingHeading {
     animation: nowPlayingHeadingSlideIn 0.8s cubic-bezier(0.4, 0, 0.2, 1);
   }
