@@ -632,6 +632,16 @@ body.view-rises-from-mini.view-now-playing .player-view {
     text-align: center;
   }
 
+  body.view-home .site-page.home-page {
+    /* Anchor the Browse-music column to the top padding. Centering made the
+       header float to mid-screen whenever the grid was short (first paint,
+       "Choose a genre", empty or error states) and snap back up once album
+       cards rendered. The section now holds its position and only the inner
+       scroll area changes with card count. Horizontal centring is unchanged
+       (justify-items stays centre from place-items above). */
+    align-items: start;
+  }
+
   body.view-home .player-view,
   body.view-about .player-view,
   body.view-home .site-page.about-page,
@@ -1626,6 +1636,49 @@ body.view-rises-from-mini.view-now-playing .player-view {
     overflow: visible;
   }
 
+  /* One-shot cascade after an intentional genre-tab switch: script.js spends
+     a flag armed only by tab clicks/arrow keys, so first loads, searches, and
+     background refreshes never set .is-shuffling. The tiles deal themselves
+     into the fresh slots with alternating tilts — deliberately not a slide. */
+  .genre-results.is-shuffling .genre-card {
+    /* Compositor layer for the cascade only: transform/opacity stay on the
+       GPU so 21 tiles never repaint mid-flight. The class is stripped after
+       GENRE_SHUFFLE_MS, which releases the layers again. */
+    will-change: transform, opacity;
+    backface-visibility: hidden;
+    animation: genreTileShuffle 0.72s both;
+    /* 36ms per tile across all 21 slots (cap 20): even spacing, no clumped
+       tail, and the long glide overlaps the tiles into one continuous wave.
+       Keep GENRE_SHUFFLE_MS in index.html in sync (20 x 36ms + 720ms + buffer). */
+    animation-delay: calc(min(var(--genre-tile-index, 0), 20) * 36ms);
+  }
+
+  @keyframes genreTileShuffle {
+    from {
+      opacity: 0;
+      transform: translateY(0.9rem) scale(0.88)
+        rotate(var(--genre-tile-tilt, 3deg));
+      /* easeOutExpo: quick out of the gate, then a long glide to the landing.
+         Each keyframe carries its own timing function on purpose — the
+         animation-level easing restarts at every stop, and sharing one ease
+         across both segments made velocity jump at the hand-off and visibly
+         hitch the settle. */
+      animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    65% {
+      opacity: 1;
+      /* Barely-there overshoot so the tile breathes into place. */
+      transform: translateY(0) scale(1.02) rotate(0deg);
+      /* Released with an ease whose starting velocity is zero, matching the
+         near-zero arrival above, so the settle glides instead of snapping. */
+      animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1) rotate(0deg);
+    }
+  }
+
   .genre-card,
   .genre-card-link {
     min-width: 0;
@@ -1740,6 +1793,10 @@ body.view-rises-from-mini.view-now-playing .player-view {
     .genre-card-art,
     .genre-card-art-frame {
       transition: none;
+    }
+
+    .genre-results.is-shuffling .genre-card {
+      animation: none;
     }
   }
 
