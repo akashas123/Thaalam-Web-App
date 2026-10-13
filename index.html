@@ -11,7 +11,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=164">
+  <link rel="stylesheet" href="style.css?v=166">
   <link rel="icon" type="image/png" href="icon-512.png?v=3">
   <link rel="apple-touch-icon" href="icon-192.png?v=3">
   <!-- Warm the iTunes DNS/TLS handshake ahead of the first search request. -->
@@ -897,6 +897,15 @@
     let suggestionRequestId = 0;
     let suggestionTimer = 0;
     let genreRequestId = 0;
+    // Armed only by an intentional genre-tab switch (click or arrow keys) and
+    // spent by the next grid rebuild, so the tile-shuffle cascade in
+    // renderGenreResults() runs for tab switches alone — never on first load,
+    // background refreshes, or searches.
+    let genreTabShuffle = false;
+    let genreShuffleTimer = 0;
+    // Keep in sync with genreTileShuffle in style.css: 20 capped 36ms steps
+    // + 720ms duration + buffer.
+    const GENRE_SHUFFLE_MS = 1600;
 
     function getGenreCache() {
       try {
@@ -1296,6 +1305,10 @@
     function renderGenreResults(songs) {
       const wasBusy = genreResults.getAttribute('aria-busy') === 'true';
       genreResults.setAttribute('aria-busy', 'false');
+      // One-shot: armed by an intentional tab switch, spent by this rebuild —
+      // the identical-grid skip and the empty state disarm it as well.
+      const shuffle = genreTabShuffle;
+      genreTabShuffle = false;
 
       if (!songs.length) {
         catalogArtworkObserver?.disconnect();
@@ -1338,9 +1351,19 @@
 
       catalogArtworkObserver?.disconnect();
       genreResults.replaceChildren();
-      orderedSongs.forEach((song) => {
+      orderedSongs.forEach((song, cardIndex) => {
         const card = document.createElement('article');
         card.className = 'genre-card';
+        if (shuffle) {
+          card.style.setProperty('--genre-tile-index', String(cardIndex));
+          // Alternating tilt (even slots lean left, odd right) steepening
+          // slightly by position so the grid reads as tiles being dealt into
+          // fresh slots rather than sliding in from an edge.
+          card.style.setProperty(
+            '--genre-tile-tilt',
+            `${cardIndex % 2 ? '' : '-'}${3 + (cardIndex % 3)}deg`
+          );
+        }
 
         const media = document.createElement('div');
         media.className = 'genre-card-media';
@@ -1418,6 +1441,21 @@
         }
       });
       genreResults.dataset.renderKey = renderKey;
+      if (shuffle) {
+        // The class lands after the fresh cards exist so the cascade starts
+        // from the keyframe's from-state. A second switch (or the favourites
+        // rescue re-renders) while the cascade runs finds the class already
+        // present — the new cards animate too, and the cleanup timer below is
+        // simply pushed back instead of cutting the motion short.
+        genreResults.classList.add('is-shuffling');
+      }
+      if (genreResults.classList.contains('is-shuffling')) {
+        window.clearTimeout(genreShuffleTimer);
+        genreShuffleTimer = window.setTimeout(() => {
+          genreShuffleTimer = 0;
+          genreResults.classList.remove('is-shuffling');
+        }, GENRE_SHUFFLE_MS);
+      }
       updateHomeTint(orderedSongs);
     }
 
@@ -1621,6 +1659,9 @@
         }
       } catch {
         if (requestId !== genreRequestId || activeGenre !== cacheKey) return;
+        // No grid to cascade into; spend the one-shot so a later background
+        // render can't animate on a stale arming.
+        genreTabShuffle = false;
         genreResults.replaceChildren();
         genreResults.setAttribute('aria-busy', 'false');
         const error = document.createElement('p');
@@ -1989,6 +2030,7 @@
         }
       } catch {
         if (requestId !== genreRequestId || activeGenre !== 'you-like') return;
+        genreTabShuffle = false;
         genreResults.replaceChildren();
         genreResults.setAttribute('aria-busy', 'false');
         const error = document.createElement('p');
@@ -2026,6 +2068,9 @@
     function searchCatalog(term) {
       const normalizedTerm = term.trim();
       if (!normalizedTerm) return;
+      // A search supersedes a just-armed tab switch: its results must render
+      // without the tile-shuffle cascade.
+      genreTabShuffle = false;
       // Cancel any pending trailing suggestion fetch — loadCatalog awaits the
       // shared per-term request itself, so nothing is lost by stopping the
       // timer here, and the dropdown can't pop back open over the results.
@@ -2075,7 +2120,12 @@
     });
 
     genreTabs.forEach((tab) => {
-      tab.addEventListener('click', () => loadGenre(tab.dataset.genre));
+      // Arm the tile shuffle only here — deliberate tab switches. Page loads,
+      // view refreshes, and search resets call loadGenre() without it.
+      tab.addEventListener('click', () => {
+        genreTabShuffle = true;
+        loadGenre(tab.dataset.genre);
+      });
       tab.addEventListener('keydown', (event) => {
         if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
         event.preventDefault();
@@ -2084,6 +2134,7 @@
         const currentIndex = tabs.indexOf(tab);
         const nextTab = tabs[(currentIndex + direction + tabs.length) % tabs.length];
         nextTab.focus();
+        genreTabShuffle = true;
         loadGenre(nextTab.dataset.genre);
       });
     });
