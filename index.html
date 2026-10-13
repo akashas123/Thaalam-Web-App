@@ -11,7 +11,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=166">
+  <link rel="stylesheet" href="style.css?v=167">
   <link rel="icon" type="image/png" href="icon-512.png?v=3">
   <link rel="apple-touch-icon" href="icon-192.png?v=3">
   <!-- Warm the iTunes DNS/TLS handshake ahead of the first search request. -->
@@ -240,7 +240,6 @@
         <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="you-like">Favourites</button>
       </div>
       <div class="genre-results" id="genreResults" role="tabpanel" aria-live="polite">
-        <p class="genre-empty">Choose a genre to browse songs.</p>
       </div>
     </div>
   </main>
@@ -2026,7 +2025,7 @@
         }
         if (!songs.length) {
           const empty = genreResults.querySelector('.genre-empty');
-          if (empty) empty.textContent = 'Your favourite songs will appear here.';
+          if (empty) empty.textContent = 'Your favourite songs will appear here';
         }
       } catch {
         if (requestId !== genreRequestId || activeGenre !== 'you-like') return;

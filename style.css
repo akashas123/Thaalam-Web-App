@@ -632,6 +632,16 @@ body.view-rises-from-mini.view-now-playing .player-view {
     text-align: center;
   }
 
+  body.view-home .site-page.home-page {
+    /* Anchor the Browse-music column to the top padding. Centering made the
+       header float to mid-screen whenever the grid was short (first paint,
+       "Choose a genre", empty or error states) and snap back up once album
+       cards rendered. The section now holds its position and only the inner
+       scroll area changes with card count. Horizontal centring is unchanged
+       (justify-items stays centre from place-items above). */
+    align-items: start;
+  }
+
   body.view-home .player-view,
   body.view-about .player-view,
   body.view-home .site-page.about-page,

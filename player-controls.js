@@ -1423,7 +1423,7 @@ function refreshSleepTimerStatus() {
     )}`;
 
   sleepTimerStatus.textContent =
-    `Playback will pause in ${formatted}.`;
+    `Playback will pause in ${formatted}`;
 
   sleepTimerButton.title =
     `Sleep timer: ${formatted} remaining`;
