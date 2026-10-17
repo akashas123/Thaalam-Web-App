@@ -846,7 +846,7 @@
     const catalogArtistBackground = document.getElementById('catalogArtistBackground');
     // Genre tabs query the JioSaavn search proxy with the language/region term
     // on the right. The value doubles as the chart's cache key check and the
-    // search string sent to /api/jiosaavn-search.
+    // search string sent to /api/music-search.
     const genreFeedIds = {
       international: ['ed sheeran', 'taylor swift', 'the weeknd'],
       hindi: ['hindi'],
@@ -1485,10 +1485,10 @@
       genreResults.appendChild(placeholders);
     }
 
-    // JioSaavn search is proxied through /api/jiosaavn-search (same-origin),
+    // JioSaavn search is proxied through /api/music-search (same-origin),
     // since JioSaavn blocks browser CORS on its internal API.
     function searchGenre(term, requestId, limit = 200) {
-      const url = new URL('/api/jiosaavn-search', window.location.origin);
+      const url = new URL('/api/music-search', window.location.origin);
       url.searchParams.set('q', term);
       url.searchParams.set('limit', String(Math.min(25, limit)));
       return fetch(url, { cache: 'no-store' })
@@ -1507,7 +1507,7 @@
             trackViewUrl: song.permalink,
             streamUrl: song.streamUrl,
             trackTimeMillis: song.durationSeconds ? song.durationSeconds * 1000 : 0,
-            jiosaavnId: song.id
+            providerTrackId: song.id
           }));
         });
     }
@@ -1520,7 +1520,7 @@
       const label = Array.isArray(genreId) ? genreId.join(' / ') : genreId;
       const perQuery = Math.min(25, limit + 4);
       return Promise.all(queries.map((query) => {
-        const url = new URL('/api/jiosaavn-search', window.location.origin);
+        const url = new URL('/api/music-search', window.location.origin);
         url.searchParams.set('q', query);
         // Ask for a few rows above the grid size: JioSaavn returns many
         // alternate uploads of the same hit (e.g. the same song eight times),

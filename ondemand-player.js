@@ -1,5 +1,5 @@
 /* On-demand playback for Thaalam: searches JioSaavn through the same-origin
-   /api/jiosaavn-* routes and streams the resolved CDN audio through a plain
+   /api/music-* routes and streams the resolved CDN audio through a plain
    HTML5 <audio> element (no YouTube IFrame involved). */
 const onDemandArtwork = document.getElementById('albumArtImg');
 const onDemandStation = document.getElementById('stationName');
@@ -81,8 +81,8 @@ function updateNowPlayingSubtitle(isOnDemand) {
    was bumped and stale v1/v2-era payloads are dropped on read. */
 const ON_DEMAND_STORAGE_KEY = 'thaalam-on-demand-session-v2';
 const LEGACY_ON_DEMAND_STORAGE_KEYS = ['thaalam-on-demand-session-v1'];
-const JIOSAAVN_SEARCH_CACHE_PREFIX = 'thaalam-jiosaavn-search-v1:';
-const JIOSAAVN_SEARCH_CACHE_TTL = 6 * 60 * 60 * 1000;
+const MUSIC_SEARCH_CACHE_PREFIX = 'thaalam-jiosaavn-search-v1:';
+const MUSIC_SEARCH_CACHE_TTL = 6 * 60 * 60 * 1000;
 const NON_CATALOG_TITLE = /\b(?:official\s+)?music\s+video\b|\b(?:official\s+)?video\b|\bvisuali[sz]er\b|\blyrics?\b|\blive\b|\bkaraoke\b|\bcover\b|\bperformance\b|\breaction\b/i;
 const UNOFFICIAL_MIX_TITLE = /\b(?:unofficial|remix(?:es)?|mix(?:es)?|mash[ -]?up|medley|compilation|playlist|slowed(?:\s+\+?\s+reverb)?|sped\s*up|nightcore|bootleg|fan[ -]?made|edit|1\s*hour|extended|instrumental|8d(?:\s+audio)?|bass\s+boosted|reverb)\b/i;
 
@@ -93,10 +93,10 @@ const logOnDemand = (...parts) => {
   if (ON_DEMAND_DEBUG) console.log('[on-demand]', ...parts);
 };
 
-function getJioSaavnSearchCache(query) {
+function getMusicSearchCache(query) {
   try {
     const cached = JSON.parse(localStorage.getItem(
-      `${JIOSAAVN_SEARCH_CACHE_PREFIX}${query}`
+      `${MUSIC_SEARCH_CACHE_PREFIX}${query}`
     ) || 'null');
     if (cached?.expiresAt > Date.now() && Array.isArray(cached.items)) {
       return cached.items;
@@ -106,24 +106,24 @@ function getJioSaavnSearchCache(query) {
   return null;
 }
 
-function setJioSaavnSearchCache(query, items) {
+function setMusicSearchCache(query, items) {
   try {
-    localStorage.setItem(`${JIOSAAVN_SEARCH_CACHE_PREFIX}${query}`, JSON.stringify({
-      expiresAt: Date.now() + JIOSAAVN_SEARCH_CACHE_TTL,
+    localStorage.setItem(`${MUSIC_SEARCH_CACHE_PREFIX}${query}`, JSON.stringify({
+      expiresAt: Date.now() + MUSIC_SEARCH_CACHE_TTL,
       items
     }));
   } catch {
   }
 }
 
-async function searchJioSaavnSongs(query, maxResults = 10) {
+async function searchSongs(query, maxResults = 10) {
   const normalizedQuery = String(query || '').trim().replace(/\s+/g, ' ');
   if (!normalizedQuery) return [];
   const cacheKey = `${normalizedQuery.toLowerCase()}|${maxResults}`;
-  const cached = getJioSaavnSearchCache(cacheKey);
+  const cached = getMusicSearchCache(cacheKey);
   if (cached) return cached;
 
-  const url = new URL('/api/jiosaavn-search', window.location.origin);
+  const url = new URL('/api/music-search', window.location.origin);
   url.searchParams.set('q', normalizedQuery);
   url.searchParams.set('limit', String(Math.max(1, Math.min(25, maxResults))));
   const response = await fetch(url, { cache: 'no-store' });
@@ -146,15 +146,15 @@ async function searchJioSaavnSongs(query, maxResults = 10) {
 
   const items = payload.results || [];
 
-  setJioSaavnSearchCache(cacheKey, items);
+  setMusicSearchCache(cacheKey, items);
   return items;
 }
 
 /* The continuation queue for a playing track (album remainder + artist top
    songs). JioSaavn has no radio/next-queue endpoint, so the server composes
    it from catalogue sources. */
-async function fetchJioSaavnAutoplayQueue(trackId) {
-  const url = new URL('/api/jiosaavn-autoplay', window.location.origin);
+async function fetchAutoplayQueue(trackId) {
+  const url = new URL('/api/music-autoplay', window.location.origin);
   url.searchParams.set('id', trackId);
   const response = await fetch(url, { cache: 'no-store' });
   const payload = await response.json().catch(() => null);
@@ -167,9 +167,9 @@ async function fetchJioSaavnAutoplayQueue(trackId) {
 
 /* Fetches one song's fresh metadata (including a freshly decrypted stream
    URL) — used when a stored/cached stream URL stops working. */
-async function resolveJioSaavnSong(trackId) {
+async function resolveSong(trackId) {
   if (!trackId) return null;
-  const url = new URL('/api/jiosaavn-song', window.location.origin);
+  const url = new URL('/api/music-song', window.location.origin);
   url.searchParams.set('id', trackId);
   const response = await fetch(url, { cache: 'no-store' });
   const payload = await response.json().catch(() => null);
@@ -202,7 +202,7 @@ async function lookupAlbumArtwork(title, artist) {
 
   const promise = new Promise(async (resolve) => {
     try {
-      const url = new URL('/api/jiosaavn-search', window.location.origin);
+      const url = new URL('/api/music-search', window.location.origin);
       url.searchParams.set('q', query);
       url.searchParams.set('limit', '8');
       const response = await fetch(url, { cache: 'no-store' });
@@ -278,7 +278,7 @@ async function findOnDemandSong(song) {
   // the other results are still ranked and used.
   const settled = await Promise.allSettled(
     queries.map(({ query, albumFirst }) =>
-      searchJioSaavnSongs(query, 25).then((items) => ({ items, albumFirst }))
+      searchSongs(query, 25).then((items) => ({ items, albumFirst }))
     )
   );
   settled.forEach((result) => {
@@ -668,7 +668,7 @@ async function handlePlaybackError() {
     rerresolvedTrackId = trackId;
     onDemandModeLabel.textContent = 'RETRYING STREAM';
     try {
-      const fresh = await resolveJioSaavnSong(trackId);
+      const fresh = await resolveSong(trackId);
       if (!window.onDemandPlaybackActive || currentOnDemandTrackId !== trackId) return;
       if (fresh?.streamUrl) {
         trackCandidates = [{ id: trackId, streamUrl: fresh.streamUrl }];
@@ -755,8 +755,8 @@ function updateOnDemandMetadata(song, track) {
   const catalogArtwork = song?.artworkUrl100
     ?.replace(/^http:/, 'https:')
     .replace(/\d+x\d+bb\./, '600x600bb.') || '';
-  const jiosaavnArtwork = String(track.thumbnail || '').replace(/^http:/, 'https:');
-  const artwork = catalogArtwork || jiosaavnArtwork;
+  const providerArtwork = String(track.thumbnail || '').replace(/^http:/, 'https:');
+  const artwork = catalogArtwork || providerArtwork;
   const nowPlaying = {
     title,
     artist,
@@ -796,7 +796,7 @@ function updateOnDemandMetadata(song, track) {
 
   // Prefer the pick's own artwork (catalog or JioSaavn); the iTunes lookup is
   // the last resort when neither image loads.
-  const candidates = [...new Set([catalogArtwork, jiosaavnArtwork]
+  const candidates = [...new Set([catalogArtwork, providerArtwork]
     .filter(Boolean)
     .map((url) => String(url).replace(/^http:/, 'https:')))];
   const tryArtwork = (index) => {
@@ -918,7 +918,7 @@ onDemandNextButton?.addEventListener('click', () => skipOnDemandSong(1));
 async function fetchRelatedTracks(trackId) {
   if (!trackId) return [];
   try {
-    const queue = await fetchJioSaavnAutoplayQueue(trackId);
+    const queue = await fetchAutoplayQueue(trackId);
     if (queue.stationid) radioStationId = queue.stationid;
     return queue.tracks
       .filter((track) => track.id &&
@@ -963,7 +963,7 @@ function relatedTrackToSong(track) {
     primaryGenreName: track.primaryGenreName || '',
     artworkUrl100: track.thumbnail || '',
     trackTimeMillis: (track.durationSeconds || parseDurationString(track.duration) || 0) * 1000,
-    jiosaavnId: track.id,
+    providerTrackId: track.id,
     streamUrl: track.streamUrl || ''
   };
 }
@@ -1153,9 +1153,9 @@ async function startOnDemandSong(song, { preserveQueue = false, openNowPlaying =
     // and stream URL — reuse them so navigating back skips the search. Legacy
     // rows that only hold an old YouTube video id intentionally fall through to
     // a fresh JioSaavn search: this player has no YouTube sources left.
-    const track = song.jiosaavnId && song.streamUrl
+    const track = song.providerTrackId && song.streamUrl
       ? {
-        id: song.jiosaavnId,
+        id: song.providerTrackId,
         streamUrl: song.streamUrl,
         durationSeconds: Number(song.trackTimeMillis) / 1000 || 0,
         thumbnail: song.artworkUrl100,
@@ -1174,7 +1174,7 @@ async function startOnDemandSong(song, { preserveQueue = false, openNowPlaying =
     selectedDuration = track.durationSeconds
       || parseDurationString(track.duration)
       || selectedDuration;
-    song.jiosaavnId = track.id;
+    song.providerTrackId = track.id;
     song.streamUrl = track.streamUrl;
     setCurrentOnDemandTrack(song, track.id);
     persistCurrentOnDemandSession();
@@ -1242,11 +1242,11 @@ async function restoreOnDemandSession() {
     onDemandQueue = savedQueue;
     onDemandQueueIndex = savedIndex;
     // The session song/track are authoritative for the currently loaded item.
-    onDemandQueue[onDemandQueueIndex] = { ...song, jiosaavnId: stored.trackId };
+    onDemandQueue[onDemandQueueIndex] = { ...song, providerTrackId: stored.trackId };
   } else {
     onDemandQueue = [];
     onDemandQueueIndex = -1;
-    enqueueOnDemandSong({ ...song, jiosaavnId: stored.trackId });
+    enqueueOnDemandSong({ ...song, providerTrackId: stored.trackId });
   }
   // Enter the same on-demand state a fresh selection would, before any live
   // radio UI can repaint itself over the restored track.
@@ -1270,7 +1270,7 @@ async function restoreOnDemandSession() {
     // fall back to a fresh server-side resolution when it is missing.
     let streamUrl = String(song.streamUrl || '');
     if (!streamUrl) {
-      const fresh = await resolveJioSaavnSong(stored.trackId);
+      const fresh = await resolveSong(stored.trackId);
       streamUrl = fresh?.streamUrl || '';
       if (streamUrl) {
         song.streamUrl = streamUrl;

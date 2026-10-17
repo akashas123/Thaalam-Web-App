@@ -1107,7 +1107,7 @@ if (window.latestNowPlayingData?.now_playing?.song) {
 }
 
 async function searchItunes(term, limit = 15) {
-  const url = new URL('/api/jiosaavn-search', window.location.origin);
+  const url = new URL('/api/music-search', window.location.origin);
   url.searchParams.set('q', term);
   url.searchParams.set('limit', String(Math.min(25, limit)));
   const response = await fetch(url, { cache: 'no-store' });
@@ -1126,7 +1126,7 @@ async function searchItunes(term, limit = 15) {
         collectionName: song.album,
         artworkUrl100: song.thumbnail,
         trackTimeMillis: song.durationSeconds ? Math.round(song.durationSeconds * 1000) : 0,
-        jiosaavnId: song.id
+        providerTrackId: song.id
       };
     })
   };

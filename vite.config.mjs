@@ -1,17 +1,17 @@
 import { defineConfig } from 'vite';
-import { handleJioSaavnAlbum, handleJioSaavnAutoplay, handleJioSaavnSearch, handleJioSaavnSong } from './jiosaavn-search.mjs';
+import { handleAlbum, handleAutoplay, handleSearch, handleSong } from './music-api.mjs';
 
 export default defineConfig({
   plugins: [{
-    name: 'local-jiosaavn',
+    name: 'local-music-provider',
     configureServer(server) {
       server.middlewares.use(async (request, response, next) => {
         const pathname = request.url?.split('?')[0];
         const handlers = {
-          '/api/jiosaavn-search': handleJioSaavnSearch,
-          '/api/jiosaavn-album': handleJioSaavnAlbum,
-          '/api/jiosaavn-autoplay': handleJioSaavnAutoplay,
-          '/api/jiosaavn-song': handleJioSaavnSong
+          '/api/music-search': handleSearch,
+          '/api/music-album': handleAlbum,
+          '/api/music-autoplay': handleAutoplay,
+          '/api/music-song': handleSong
         };
         const handler = handlers[pathname];
         if (!handler) {
