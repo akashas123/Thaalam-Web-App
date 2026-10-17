@@ -731,7 +731,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=55"></script>
-  <script src="ondemand-player.js?v=3"></script>
+  <script src="ondemand-player.js?v=4"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=8"></script>
@@ -849,9 +849,9 @@
     // search string sent to /api/music-search.
     const genreFeedIds = {
       international: ['ed sheeran', 'taylor swift', 'the weeknd'],
-      hindi: ['arijit singh', 'shreya ghoshal', 'ar rahman'],
-      malayalam: ['vineeth sreenivasan', 'sushin shyam', 'k j yesudas'],
-      tamil: ['anirudh ravichander', 'sid sriram', 'ar rahman']
+      hindi: ['arijit singh', 'shreya ghoshal', 'sonu nigam'],
+      malayalam: ['vineeth sreenivasan', 'sushin shyam', 'k s chithra'],
+      tamil: ['anirudh ravichander', 'sid sriram', 'harris jayaraj']
     };
     const genreResultCache = new Map();
     // Recently fetched suggestions keyed by normalized term. Repeat searches
@@ -868,7 +868,7 @@
     const artistInfoRequests = new Map();
     // Version the genre cache separately so changes to feed filtering replace
     // previously cached broad search matches.
-    const GENRE_CACHE_KEY = 'thaalam-music-genre-cache-v3';
+    const GENRE_CACHE_KEY = 'thaalam-music-genre-cache-v4';
     const GENRE_CHART_LIMIT = 21;
     // One small ranked search request feeds both the suggestion dropdown and
     // the results grid: fetch 20, rank by relevance, show the top 20.
@@ -1518,6 +1518,19 @@
       const queries = Array.isArray(genreId) ? genreId : [genreId];
       const label = Array.isArray(genreId) ? genreId.join(' / ') : genreId;
       const perQuery = Math.min(12, Math.ceil(limit / queries.length) + 4);
+      const artistKey = (value) => String(value || '')
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '');
+      const filterArtist = (results, query) => {
+        if (!Array.isArray(genreId)) return results;
+        const requestedArtist = artistKey(query);
+        return results.filter((song) =>
+          String(song.artist || '').split(/,|&|\bfeat(?:uring)?\b|\bwith\b/i)
+            .some((artist) => artistKey(artist) === requestedArtist)
+        );
+      };
       return Promise.all(queries.map((query) => {
         const url = new URL('/api/music-search', window.location.origin);
         url.searchParams.set('q', query);
@@ -1532,26 +1545,13 @@
           })
           .then((data) => {
             const results = data?.results || [];
-            if (!Array.isArray(genreId) || genreId !== genreFeedIds.international) return results;
-            const artistKey = (value) => String(value || '')
-              .normalize('NFKD')
-              .replace(/[\u0300-\u036f]/g, '')
-              .toLowerCase()
-              .replace(/[^a-z0-9]/g, '');
-            const requestedArtist = artistKey(query);
-            return results.filter((song) =>
-              String(song.artist || '').split(',').some((artist) =>
-                artistKey(artist) === requestedArtist
-              )
-            );
+            return filterArtist(results, query);
           })
           .catch(() => []);
       }))
         .then((pages) => {
           if (!pages.some((page) => page.length)) {
-            const fallbackQuery = genreId === genreFeedIds.international
-              ? 'english songs'
-              : `${queries[0]} songs`;
+            const fallbackQuery = `${queries[0]} songs`;
             const fallbackUrl = new URL('/api/music-search', window.location.origin);
             fallbackUrl.searchParams.set('q', fallbackQuery);
             fallbackUrl.searchParams.set('limit', String(perQuery));
@@ -1561,7 +1561,10 @@
                 return response.json();
               })
               .then((data) => {
-                const fallbackResults = Array.isArray(data?.results) ? data.results : [];
+                const fallbackResults = filterArtist(
+                  Array.isArray(data?.results) ? data.results : [],
+                  queries[0]
+                );
                 if (!fallbackResults.length) throw new Error('The song chart failed (empty).');
                 return [fallbackResults];
               });

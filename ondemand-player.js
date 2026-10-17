@@ -914,18 +914,12 @@ onDemandNextButton?.addEventListener('click', () => skipOnDemandSong(1));
 
 const autoplayKey = (value) => normalizeText(value || '');
 
-/* Fetch recommendations from song radio. If radio is unavailable, search a
-   broad provider chart and keep distinct artists so playback can continue. */
+/* Fetch recommendations from song radio, skipping the playing artist/album
+   and keeping only one track per artist and album per batch. */
 async function fetchRelatedTracks(trackId) {
   if (!trackId) return [];
   try {
-    let queue;
-    try {
-      queue = await fetchAutoplayQueue(trackId);
-    } catch (error) {
-      console.warn('Autoplay radio unavailable; using catalogue fallback.', error);
-      queue = { tracks: [], stationid: '' };
-    }
+    const queue = await fetchAutoplayQueue(trackId);
     if (queue.stationid) radioStationId = queue.stationid;
     const currentSong = currentOnDemandSong || {};
     const currentArtistIds = new Set((currentSong.providerArtistIds || []).map(String));
@@ -956,19 +950,7 @@ async function fetchRelatedTracks(trackId) {
       });
     };
 
-    let recommendations = filterTracks(queue.tracks);
-    if (!recommendations.length) {
-      for (const fallbackQuery of ['top songs', 'popular songs', 'new songs']) {
-        try {
-          const fallbackTracks = await searchSongs(fallbackQuery, 25);
-          recommendations = filterTracks(fallbackTracks);
-          if (recommendations.length) break;
-        } catch {
-          // Try another broad catalogue query if this one is unavailable.
-        }
-      }
-    }
-    return recommendations;
+    return filterTracks(queue.tracks);
   } catch (error) {
     console.warn('Autoplay: Failed.', error);
     return [];
