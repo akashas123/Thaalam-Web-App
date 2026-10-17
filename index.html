@@ -866,10 +866,9 @@
     let suggestionRenderScore = -1;
     const artistInfoCache = new Map();
     const artistInfoRequests = new Map();
-    // Genre tabs use Apple's genre charts. Versioned separately from the old
-    // text-search and filtered result caches.
-    // v9 keeps only the first 21 chart tracks (7 columns x 3 rows).
-    const GENRE_CACHE_KEY = 'thaalam-jiosaavn-genre-cache-v1';
+    // Version the genre cache separately so changes to feed filtering replace
+    // previously cached broad search matches.
+    const GENRE_CACHE_KEY = 'thaalam-music-genre-cache-v2';
     const GENRE_CHART_LIMIT = 21;
     // One small ranked search request feeds both the suggestion dropdown and
     // the results grid: fetch 20, rank by relevance, show the top 20.
@@ -1531,7 +1530,21 @@
             if (!response.ok) throw new Error(`The song chart failed (${response.status}).`);
             return response.json();
           })
-          .then((data) => data?.results || [])
+          .then((data) => {
+            const results = data?.results || [];
+            if (!Array.isArray(genreId)) return results;
+            const artistKey = (value) => String(value || '')
+              .normalize('NFKD')
+              .replace(/[\u0300-\u036f]/g, '')
+              .toLowerCase()
+              .replace(/[^a-z0-9]/g, '');
+            const requestedArtist = artistKey(query);
+            return results.filter((song) =>
+              String(song.artist || '').split(',').some((artist) =>
+                artistKey(artist) === requestedArtist
+              )
+            );
+          })
           .catch(() => []);
       }))
         .then((pages) => {
