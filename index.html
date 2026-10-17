@@ -730,7 +730,7 @@
   </aside>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
-  <script src="script.js?v=55"></script>
+  <script src="script.js?v=56"></script>
   <script src="ondemand-player.js?v=6"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
@@ -844,10 +844,10 @@
     const catalogSongInfoDetails = document.getElementById('catalogSongInfoDetails');
     const catalogArtistPortrait = document.getElementById('catalogArtistPortrait');
     const catalogArtistBackground = document.getElementById('catalogArtistBackground');
-    // Genre tabs use language-specific catalogue terms; the API filters every
-    // returned track by its provider language metadata.
+    // International is served by Apple's US Pop chart. The other tabs use
+    // language-specific catalogue terms filtered by their provider language.
     const genreFeedIds = {
-      international: 'english trending songs',
+      international: 'itunes-us-pop',
       hindi: ['hindi songs'],
       malayalam: ['malayalam songs'],
       tamil: ['tamil songs']
@@ -867,13 +867,14 @@
     const artistInfoRequests = new Map();
     // Version the genre cache separately so changes to feed filtering replace
     // previously cached broad search matches.
-    const GENRE_CACHE_KEY = 'thaalam-music-genre-cache-v8';
+    const GENRE_CACHE_KEY = 'thaalam-music-genre-cache-v9';
     const GENRE_CHART_LIMIT = 21;
     // One small ranked search request feeds both the suggestion dropdown and
     // the results grid: fetch 20, rank by relevance, show the top 20.
     const SEARCH_FETCH_LIMIT = 20;
     const SEARCH_RESULT_LIMIT = 20;
     const GENRE_CACHE_TTL = 12 * 60 * 60 * 1000;
+    const INTERNATIONAL_CHART_CACHE_TTL = 60 * 60 * 1000;
     const ARTIST_INFO_STORAGE_KEY = 'thaalam-catalog-artist-info-v4';
     const ARTIST_INFO_CACHE_LIMIT = 600;
     const ARTIST_INFO_PREFETCH_CONCURRENCY = 3;
@@ -1511,9 +1512,11 @@
     }
 
     function searchGenreChart(genreId, requestId, language, limit = GENRE_CHART_LIMIT) {
-      // International uses the JioSaavn International: India Superhits Top 50 chart.
+      // International uses Apple's current US Pop chart; the other feeds use JioSaavn.
       const queries = Array.isArray(genreId) ? genreId : [genreId];
-      const label = Array.isArray(genreId) ? genreId.join(' / ') : genreId;
+      const label = language === 'english'
+        ? 'Pop'
+        : Array.isArray(genreId) ? genreId.join(' / ') : genreId;
       const perQuery = Math.min(25, Math.ceil(limit / queries.length) + 4);
       const filterLanguage = (results) => results.filter((song) =>
         String(song.language || '').trim().toLowerCase() === language
@@ -1637,7 +1640,9 @@
       const storedEntry = storedCache[cacheKey];
       if (
         storedEntry?.savedAt &&
-        Date.now() - storedEntry.savedAt < GENRE_CACHE_TTL &&
+        Date.now() - storedEntry.savedAt < (cacheKey === 'international'
+          ? INTERNATIONAL_CHART_CACHE_TTL
+          : GENRE_CACHE_TTL) &&
         Array.isArray(storedEntry.songs)
       ) {
         // Only the four language/region chart tabs trim to 21 — searches rank

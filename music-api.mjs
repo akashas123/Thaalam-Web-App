@@ -422,37 +422,44 @@ async function handleGenreSearch(url) {
 
 async function handleInternationalGenreSearch() {
   try {
-    // Use the chart's stable JioSaavn playlist ID directly. webapi.get can
-    // return only playlist metadata in Workers, while playlist.getDetails
-    // returns the same list[] shape used by the language genre feeds.
-    const payload = await callProviderApi('playlist.getDetails', {
-      listid: '1134595537', n: '50', p: '1'
-    });
-    const playlist = payload?.data?.data || payload?.data || payload;
-    const readPlaylistSongs = (value) => Array.isArray(value?.list) ? value.list
-      : Array.isArray(value?.songs) ? value.songs
-        : Array.isArray(value?.results) ? value.results : [];
-    let rawSongs = readPlaylistSongs(playlist);
-    const results = rawSongs
-      // This JioSaavn editorial chart is English, but playlist entries may omit
-      // their language field. Trust the chart for missing tags; reject explicit
-      // non-English tags if JioSaavn adds mixed-language entries later.
-      .filter((song) => {
-        const language = String(song?.language || '').trim().toLowerCase();
-        return !language || language === 'english';
-      })
-      .slice(0, 21)
-      .map((song) => {
-        const mapped = mapProviderSong(song);
-        return mapped ? { ...mapped, language: 'english' } : null;
-      })
-      .filter(Boolean);
-    if (!results.length) return providerErrorResponse('No English tracks were found in JioSaavn’s trending chart.');
+    // Apple’s US Pop top songs RSS feed supplies the International chart.
+    // Playback still resolves through the existing on-demand song search.
+    const response = await fetch(
+      'https://itunes.apple.com/us/rss/topsongs/limit=100/genre=14/json',
+      { headers: { Accept: 'application/json' } }
+    );
+    if (!response.ok) return providerErrorResponse('Apple’s Pop chart is temporarily unavailable.');
+    const payload = await response.json();
+    const entries = payload?.feed?.entry;
+    const results = (Array.isArray(entries) ? entries : []).map((entry) => {
+      const title = String(entry?.['im:name']?.label || '').trim();
+      const artist = String(entry?.['im:artist']?.label || '').trim();
+      const album = String(entry?.['im:collection']?.['im:name']?.label || '').trim();
+      const images = Array.isArray(entry?.['im:image']) ? entry['im:image'] : [];
+      const artwork = String(images.at(-1)?.label || '')
+        .replace(/\d+x\d+bb\./i, '600x600bb.');
+      const trackId = String(entry?.id?.attributes?.['im:id'] || '');
+      const link = String(entry?.link?.attributes?.href || '');
+      if (!title || !artist || !trackId) return null;
+      return {
+        id: `itunes-${trackId}`,
+        title,
+        artist,
+        album,
+        thumbnail: artwork,
+        permalink: link,
+        streamUrl: '',
+        durationSeconds: 0,
+        language: 'english',
+        provider: 'itunes'
+      };
+    }).filter(Boolean).slice(0, 50);
+    if (!results.length) return providerErrorResponse('Apple’s Pop chart returned no songs.');
     return Response.json({ results }, {
-      headers: { 'Cache-Control': 'public, max-age=300, s-maxage=900' }
+      headers: { 'Cache-Control': 'public, max-age=900, s-maxage=900' }
     });
   } catch {
-    return providerErrorResponse('JioSaavn English trending chart is temporarily unavailable.');
+    return providerErrorResponse('Apple’s Pop chart is temporarily unavailable.');
   }
 }
 
