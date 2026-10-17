@@ -972,8 +972,12 @@ async function fetchRelatedTracks(trackId) {
 }
 
 /* Kicks off a background queue lookup as soon as the current track starts. */
-function prefetchRelatedTracks(trackId) {
-  if (!trackId) return;
+function prefetchRelatedTracks(trackId, { force = false } = {}) {
+  if (!trackId || isFetchingRelated) return;
+  const queuedCount = relatedTrackCache.length - relatedTrackCursor;
+  // Keep the current recommendation batch alive; only ask JioSaavn for more
+  // when the listener is close to exhausting the unplayed tracks.
+  if (!force && queuedCount > 3) return;
 
   const token = ++prefetchToken;
   isFetchingRelated = true;
@@ -982,8 +986,27 @@ function prefetchRelatedTracks(trackId) {
     .then((tracks) => {
       // Ignore a response for a track the listener has already moved past.
       if (token !== prefetchToken) return;
-      relatedTrackCache = tracks.filter((track) => !playedTrackIds.has(track.id));
-      relatedTrackCursor = 0;
+      const unplayedQueue = relatedTrackCache.slice(relatedTrackCursor);
+      const queuedIds = new Set(unplayedQueue.map((track) => track.id));
+      const queuedArtists = new Set(unplayedQueue
+        .flatMap((track) => [...(track.artistIds || []), autoplayKey(track.artist)])
+        .filter(Boolean));
+      const queuedAlbums = new Set(unplayedQueue
+        .map((track) => String(track.albumId || '')).filter(Boolean));
+      for (const track of tracks) {
+        if (!track.id || playedTrackIds.has(track.id) || queuedIds.has(track.id)) continue;
+        const artistIds = (track.artistIds || []).map(String);
+        const artistName = autoplayKey(track.artist);
+        const albumId = String(track.albumId || '');
+        if (artistIds.some((id) => queuedArtists.has(id)) ||
+            (artistName && queuedArtists.has(artistName)) ||
+            (albumId && queuedAlbums.has(albumId))) continue;
+        relatedTrackCache.push(track);
+        queuedIds.add(track.id);
+        artistIds.forEach((id) => queuedArtists.add(id));
+        if (artistName) queuedArtists.add(artistName);
+        if (albumId) queuedAlbums.add(albumId);
+      }
       prefetchUpcomingTrackArtwork();
       updateTransportButtonState();
     })
@@ -1069,7 +1092,9 @@ function advanceToSimilarSong() {
       onDemandModeLabel.textContent = 'FINDING NEXT SONG';
       // Providers can briefly return an empty radio station. Recreate it and
       // keep checking instead of leaving the audio ended for good.
-      if (currentOnDemandTrackId) prefetchRelatedTracks(currentOnDemandTrackId);
+      if (currentOnDemandTrackId) {
+        prefetchRelatedTracks(currentOnDemandTrackId, { force: true });
+      }
     }
   }, 250);
 }
