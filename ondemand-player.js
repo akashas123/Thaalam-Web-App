@@ -150,9 +150,7 @@ async function searchSongs(query, maxResults = 10) {
   return items;
 }
 
-/* The continuation queue for a playing track (album remainder + artist top
-   songs). JioSaavn has no radio/next-queue endpoint, so the server composes
-   it from catalogue sources. */
+/* The continuation queue comes from the provider's song radio station. */
 async function fetchAutoplayQueue(trackId) {
   const url = new URL('/api/music-autoplay', window.location.origin);
   url.searchParams.set('id', trackId);
@@ -916,40 +914,61 @@ onDemandNextButton?.addEventListener('click', () => skipOnDemandSong(1));
 
 const autoplayKey = (value) => normalizeText(value || '');
 
-/* Fetch recommendations from a fresh radio station, skipping the playing
-   artist/album and keeping only one track per artist and album per batch. */
+/* Fetch recommendations from song radio. If radio is unavailable, search a
+   broad provider chart and keep distinct artists so playback can continue. */
 async function fetchRelatedTracks(trackId) {
   if (!trackId) return [];
   try {
-    const queue = await fetchAutoplayQueue(trackId);
+    let queue;
+    try {
+      queue = await fetchAutoplayQueue(trackId);
+    } catch (error) {
+      console.warn('Autoplay radio unavailable; using catalogue fallback.', error);
+      queue = { tracks: [], stationid: '' };
+    }
     if (queue.stationid) radioStationId = queue.stationid;
     const currentSong = currentOnDemandSong || {};
     const currentArtistIds = new Set((currentSong.providerArtistIds || []).map(String));
     const currentArtistName = autoplayKey(currentSong.artistName);
     const currentAlbumId = String(currentSong.providerAlbumId || '');
     const currentAlbumName = autoplayKey(currentSong.collectionName);
-    const seenArtists = new Set(currentArtistIds);
-    const seenAlbums = new Set(currentAlbumId ? [currentAlbumId] : []);
-    if (currentArtistName) seenArtists.add(currentArtistName);
-    if (currentAlbumName) seenAlbums.add(currentAlbumName);
+    const filterTracks = (tracks) => {
+      const seenArtists = new Set(currentArtistIds);
+      const seenAlbums = new Set(currentAlbumId ? [currentAlbumId] : []);
+      if (currentArtistName) seenArtists.add(currentArtistName);
+      if (currentAlbumName) seenAlbums.add(currentAlbumName);
+      return tracks.filter((track) => {
+        if (!track.id || playedTrackIds.has(track.id) ||
+            NON_CATALOG_TITLE.test(track.title) || UNOFFICIAL_MIX_TITLE.test(track.title)) return false;
+        const artistIds = (track.artistIds || []).map(String);
+        const artistName = autoplayKey(track.artist);
+        const albumId = String(track.albumId || '');
+        const albumName = autoplayKey(track.album);
+        if (artistIds.some((id) => seenArtists.has(id)) ||
+            (artistName && seenArtists.has(artistName)) ||
+            (albumId && seenAlbums.has(albumId)) ||
+            (albumName && seenAlbums.has(albumName))) return false;
+        artistIds.forEach((id) => seenArtists.add(id));
+        if (artistName) seenArtists.add(artistName);
+        if (albumId) seenAlbums.add(albumId);
+        if (albumName) seenAlbums.add(albumName);
+        return true;
+      });
+    };
 
-    return queue.tracks.filter((track) => {
-      if (!track.id || playedTrackIds.has(track.id) ||
-          NON_CATALOG_TITLE.test(track.title) || UNOFFICIAL_MIX_TITLE.test(track.title)) return false;
-      const artistIds = (track.artistIds || []).map(String);
-      const artistName = autoplayKey(track.artist);
-      const albumId = String(track.albumId || '');
-      const albumName = autoplayKey(track.album);
-      if (artistIds.some((id) => seenArtists.has(id)) ||
-          (artistName && seenArtists.has(artistName)) ||
-          (albumId && seenAlbums.has(albumId)) ||
-          (albumName && seenAlbums.has(albumName))) return false;
-      artistIds.forEach((id) => seenArtists.add(id));
-      if (artistName) seenArtists.add(artistName);
-      if (albumId) seenAlbums.add(albumId);
-      if (albumName) seenAlbums.add(albumName);
-      return true;
-    });
+    let recommendations = filterTracks(queue.tracks);
+    if (!recommendations.length) {
+      for (const fallbackQuery of ['top songs', 'popular songs', 'new songs']) {
+        try {
+          const fallbackTracks = await searchSongs(fallbackQuery, 25);
+          recommendations = filterTracks(fallbackTracks);
+          if (recommendations.length) break;
+        } catch {
+          // Try another broad catalogue query if this one is unavailable.
+        }
+      }
+    }
+    return recommendations;
   } catch (error) {
     console.warn('Autoplay: Failed.', error);
     return [];
