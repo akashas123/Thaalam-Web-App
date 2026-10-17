@@ -478,30 +478,26 @@ async function fetchProviderRadioSongs(id, k) {
   }
   if (!songPayload) return { stationid, songs: [] };
 
-  /* web-radio responses are shaped as either
-     { stationid, song } (single) or
-     { stationid, 0: { song }, 1: { song }, ... } (multiple). */
-  const collectSongs = (obj, out, seen) => {
-    if (!obj || typeof obj !== 'object') return;
-    const visit = (song) => {
-      if (!song || !song.id) return;
-      const mapped = mapProviderSong(song);
-      if (mapped && mapped.streamUrl && !seen.has(mapped.id)) {
-        seen.add(mapped.id);
-        out.push(mapped);
-      }
-    };
-    if (obj.song) visit(obj.song);
-    for (const key of Object.keys(obj)) {
-      if (key === 'stationid' || key === 'error') continue;
-      const value = obj[key];
-      if (value && typeof value === 'object' && value.song) visit(value.song);
-    }
-  };
-
   const songs = [];
   const seen = new Set();
-  collectSongs(songPayload, songs, seen);
+  const visited = new Set();
+  const collectSongs = (value) => {
+    if (!value || typeof value !== 'object' || visited.has(value)) return;
+    visited.add(value);
+    if (value.id && (value.title || value.name)) {
+      const mapped = mapProviderSong(value);
+      if (mapped?.streamUrl && !seen.has(mapped.id)) {
+        seen.add(mapped.id);
+        songs.push(mapped);
+      }
+      return;
+    }
+    for (const [key, nested] of Object.entries(value)) {
+      if (key === 'stationid' || key === 'error') continue;
+      collectSongs(nested);
+    }
+  };
+  collectSongs(songPayload);
   return { stationid, songs: songs.slice(0, k) };
 }
 
