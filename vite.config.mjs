@@ -6,6 +6,7 @@ import { handleAlbum, handleAutoplay, handleSearch, handleSong } from './music-a
 
 const projectRoot = dirname(fileURLToPath(import.meta.url));
 const classicAppFiles = [
+  '_worker.js',
   'style.css',
   'script.js',
   'audio-recovery.js',
