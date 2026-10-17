@@ -37,6 +37,11 @@ On-demand search, stream resolution, and autoplay use JioSaavn's undocumented we
 
 ## Cloudflare Pages
 
+For Git integration, set the production branch to `main`, the build command to
+`npm run build`, and the build output directory to `dist`. The Vite build keeps
+the app's ordered classic scripts as separate files and copies them into `dist`;
+the Pages Functions remain in the repository's root `functions/api/` directory.
+
 For Git integration or a Wrangler deployment, Cloudflare Pages discovers the files in `functions/api/` and serves `/api/music-search`, `/api/music-song`, `/api/music-autoplay`, and `/api/ratings`.
 
 For dashboard drag-and-drop Direct Upload, include the root `_worker.js` file with the static assets. It handles `/api/music-search`, `/api/music-song`, `/api/music-autoplay`, and `/api/ratings`, then forwards all other requests to Pages static assets. Cloudflare supports `_worker.js` with Direct Upload; it does not compile a `/functions` directory in drag-and-drop uploads.
