@@ -378,6 +378,9 @@ export async function handleSearch(request) {
 /* Genre feeds use a language-specific query and reject every result whose
    provider language does not match the selected tab. */
 async function handleGenreSearch(url) {
+  if (url.searchParams.get('strategy') === 'artist') {
+    return handleArtistGenreSearch(url);
+  }
   const query = (url.searchParams.get('q') || '').trim().replace(/\s+/g, ' ');
   if (!query || query.length > 200) {
     return Response.json({ error: 'Enter an artist to load the genre.' }, { status: 400 });
@@ -411,6 +414,38 @@ async function handleGenreSearch(url) {
       if (items.length < 10) break;
     }
     if (!results.length) return providerErrorResponse('No tracks were found for this language.');
+    return Response.json({ results }, {
+      headers: { 'Cache-Control': 'public, max-age=300, s-maxage=600' }
+    });
+  } catch {
+    return providerErrorResponse('JioSaavn artist search is temporarily unavailable.');
+  }
+}
+
+async function handleArtistGenreSearch(url) {
+  const artist = (url.searchParams.get('q') || '').trim().replace(/\s+/g, ' ');
+  if (!artist || artist.length > 200) {
+    return Response.json({ error: 'Enter an artist to load the genre.' }, { status: 400 });
+  }
+  const limit = Math.max(1, Math.min(25, Number(url.searchParams.get('limit')) || 10));
+  const artistKey = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  try {
+    const payload = await callProviderApi('autocomplete.get', { query: artist });
+    const raw = payload?.songs?.data || payload?.data?.songs || [];
+    const ids = [...new Set((Array.isArray(raw) ? raw : [])
+      .map((song) => String(song?.id || ''))
+      .filter((id) => SONG_ID_PATTERN.test(id)))].slice(0, Math.min(25, limit * 2));
+    if (!ids.length) return providerErrorResponse('No artist tracks were found.');
+
+    const detailPayload = await callProviderApi('song.getDetails', { pids: ids.join(',') });
+    const detailedSongs = detailPayload?.songs || detailPayload?.data?.songs || [];
+    const results = (Array.isArray(detailedSongs) ? detailedSongs : [])
+      .map(mapProviderSong)
+      .filter((song) => song?.streamUrl && song.language === 'english' &&
+        song.artist.split(/,|&|\bfeat(?:uring)?\b|\bwith\b/i)
+          .some((name) => artistKey(name) === artistKey(artist)))
+      .slice(0, limit);
+    if (!results.length) return providerErrorResponse('No English tracks were found for this artist.');
     return Response.json({ results }, {
       headers: { 'Cache-Control': 'public, max-age=300, s-maxage=600' }
     });
