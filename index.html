@@ -847,10 +847,7 @@
     // Genre tabs use language-specific catalogue terms; the API filters every
     // returned track by its provider language metadata.
     const genreFeedIds = {
-      international: [
-        'ed sheeran', 'taylor swift', 'the weeknd', 'bruno mars',
-        'adele', 'harry styles', 'billie eilish'
-      ],
+      international: 'english trending songs',
       hindi: ['hindi songs'],
       malayalam: ['malayalam songs'],
       tamil: ['tamil songs']
@@ -870,7 +867,7 @@
     const artistInfoRequests = new Map();
     // Version the genre cache separately so changes to feed filtering replace
     // previously cached broad search matches.
-    const GENRE_CACHE_KEY = 'thaalam-music-genre-cache-v6';
+    const GENRE_CACHE_KEY = 'thaalam-music-genre-cache-v7';
     const GENRE_CHART_LIMIT = 21;
     // One small ranked search request feeds both the suggestion dropdown and
     // the results grid: fetch 20, rank by relevance, show the top 20.
@@ -1514,30 +1511,18 @@
     }
 
     function searchGenreChart(genreId, requestId, language, limit = GENRE_CHART_LIMIT) {
-      // A feed may combine several queries (the International tab mixes a few
-      // big English artists). Fan the queries out, then merge by rank so the
-      // grid mixes artists instead of showing one query's block first.
+      // The International feed is the maintained JioSaavn English viral chart.
       const queries = Array.isArray(genreId) ? genreId : [genreId];
       const label = Array.isArray(genreId) ? genreId.join(' / ') : genreId;
       const perQuery = Math.min(25, Math.ceil(limit / queries.length) + 4);
       const filterLanguage = (results) => results.filter((song) =>
         String(song.language || '').trim().toLowerCase() === language
       );
-      const artistKey = (value) => String(value || '')
-        .normalize('NFKD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, '');
-      const filterArtist = (results, query) => results.filter((song) =>
-        String(song.artist || '').split(/,|&|\bfeat(?:uring)?\b|\bwith\b/i)
-          .some((artist) => artistKey(artist) === artistKey(query))
-      );
       return Promise.all(queries.map((query) => {
         const url = new URL('/api/music-search', window.location.origin);
         url.searchParams.set('q', query);
         url.searchParams.set('mode', 'genre');
         url.searchParams.set('lang', language);
-        if (language === 'english') url.searchParams.set('strategy', 'artist');
         // Ask for a few rows above the grid size: JioSaavn returns many
         // alternate uploads of the same hit (e.g. the same song eight times),
         // so the headroom lets de-duplication still fill every chart card.
@@ -1549,9 +1534,7 @@
           })
           .then((data) => {
             const results = data?.results || [];
-            return language === 'english'
-              ? filterArtist(filterLanguage(results), query)
-              : filterLanguage(results);
+            return filterLanguage(results);
           })
           .catch(() => []);
       }))

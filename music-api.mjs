@@ -11,15 +11,7 @@ const UPSTREAM_REQUEST_HEADERS = {
   accept: 'application/json, text/plain, */*'
 };
 const SONG_ID_PATTERN = /^[A-Za-z0-9_-]{4,32}$/;
-const INTERNATIONAL_POP_TRACK_IDS = {
-  'ed sheeran': ['icJam_5l', '6o8JoQ8b', 'szuGlu5K', 'l7D4VKW1'],
-  'taylor swift': ['cI09igfS', 'WOvsziSC', 'vc6iNp0N', '4SQmljgZ'],
-  'the weeknd': ['TcDP-KUl', 'fW-Mxsnu', 'tvxo4Jm0', 'AG7ER2zH'],
-  'bruno mars': ['EpKOk9yo', 'Vfs5WLX-'],
-  'harry styles': ['It96yG1r', 'N34NxTO9'],
-  'billie eilish': ['v0OogPk7', 'JR8ew5Yw', 'vXGLrsk-'],
-  coldplay: ['kxQttW9E', 'DYBuG4Ko']
-};
+const INTERNATIONAL_CHART_QUERY = 'english trending songs';
 
 /* ------------------------------------------------------------------ *
  * DES-ECB decryption (key 38346591) for encrypted_media_url.
@@ -387,15 +379,13 @@ export async function handleSearch(request) {
 /* Genre feeds use a language-specific query and reject every result whose
    provider language does not match the selected tab. */
 async function handleGenreSearch(url) {
-  if (url.searchParams.get('strategy') === 'artist') {
-    return handleArtistGenreSearch(url);
-  }
+  const language = (url.searchParams.get('lang') || '').trim().toLowerCase();
+  if (language === 'english') return handleInternationalGenreSearch();
   const query = (url.searchParams.get('q') || '').trim().replace(/\s+/g, ' ');
   if (!query || query.length > 200) {
     return Response.json({ error: 'Enter an artist to load the genre.' }, { status: 400 });
   }
   const limit = Math.max(1, Math.min(25, Number(url.searchParams.get('limit')) || 10));
-  const language = (url.searchParams.get('lang') || '').trim().toLowerCase();
   const allowedLanguages = new Set(['english', 'hindi', 'malayalam', 'tamil']);
   if (!allowedLanguages.has(language)) {
     return Response.json({ error: 'A supported genre language is required.' }, { status: 400 });
@@ -431,30 +421,27 @@ async function handleGenreSearch(url) {
   }
 }
 
-async function handleArtistGenreSearch(url) {
-  const artist = (url.searchParams.get('q') || '').trim().replace(/\s+/g, ' ');
-  if (!artist || artist.length > 200) {
-    return Response.json({ error: 'Enter an artist to load the genre.' }, { status: 400 });
-  }
-  const limit = Math.max(1, Math.min(25, Number(url.searchParams.get('limit')) || 10));
-  const artistKey = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  const trackIds = INTERNATIONAL_POP_TRACK_IDS[artistKey(artist)];
-  if (!trackIds) return Response.json({ error: 'Artist is not in the International pop catalog.' }, { status: 400 });
+async function handleInternationalGenreSearch() {
   try {
-    const detailPayload = await callProviderApi('song.getDetails', { pids: trackIds.join(',') });
-    const detailedSongs = detailPayload?.songs || detailPayload?.data?.songs || [];
-    const results = (Array.isArray(detailedSongs) ? detailedSongs : [])
-      .map(mapProviderSong)
-      .filter((song) => song?.streamUrl && song.language === 'english' &&
-        song.artist.split(/,|&|\bfeat(?:uring)?\b|\bwith\b/i)
-          .some((name) => artistKey(name) === artistKey(artist)))
-      .slice(0, limit);
-    if (!results.length) return providerErrorResponse('No English tracks were found for this artist.');
+    const chartPage = await callProviderApi('search.getPlaylistResults', {
+      q: INTERNATIONAL_CHART_QUERY, n: '20', p: '1'
+    });
+    const chart = (chartPage?.results || [])
+      .find((item) => /english viral hits/i.test(sanitizeText(item.title)));
+    if (!chart?.id) return providerErrorResponse('JioSaavn English trending chart is unavailable.');
+    const playlist = await callProviderApi('playlist.getDetails', {
+      listid: String(chart.id), n: '50', p: '1'
+    });
+    const rawSongs = Array.isArray(playlist?.list) ? playlist.list : [];
+    const results = rawSongs.map(mapProviderSong)
+      .filter((song) => song?.streamUrl && song.language === 'english')
+      .slice(0, 25);
+    if (!results.length) return providerErrorResponse('No English tracks were found in JioSaavn’s trending chart.');
     return Response.json({ results }, {
-      headers: { 'Cache-Control': 'public, max-age=300, s-maxage=600' }
+      headers: { 'Cache-Control': 'public, max-age=300, s-maxage=900' }
     });
   } catch {
-    return providerErrorResponse('JioSaavn artist search is temporarily unavailable.');
+    return providerErrorResponse('JioSaavn English trending chart is temporarily unavailable.');
   }
 }
 
