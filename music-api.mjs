@@ -308,6 +308,9 @@ function readSongId(url) {
    Shape: { results: [...songs], albums: [...albums] }. */
 export async function handleSearch(request) {
   const url = new URL(request.url);
+  if (url.searchParams.get('mode') === 'genre') {
+    return handleGenreSearch(url);
+  }
   const query = (url.searchParams.get('q') || '').trim().replace(/\s+/g, ' ');
   if (!query || query.length > 200) {
     return Response.json({ error: 'Enter a song title to search.' }, { status: 400 });
@@ -369,6 +372,39 @@ export async function handleSearch(request) {
   return Response.json({ results: results.slice(0, 25), albums: albums.slice(0, 6) }, {
     headers: { 'Cache-Control': 'public, max-age=300, s-maxage=600' }
   });
+}
+
+/* Genre feeds search for an artist name, where search.getResults can rank
+   unrelated tracks whose title merely contains that name. Use Saavn's
+   autocomplete song matches, then hydrate their IDs to get playable streams
+   and canonical primary-artist credits before returning them to the client. */
+async function handleGenreSearch(url) {
+  const query = (url.searchParams.get('q') || '').trim().replace(/\s+/g, ' ');
+  if (!query || query.length > 200) {
+    return Response.json({ error: 'Enter an artist to load the genre.' }, { status: 400 });
+  }
+  const limit = Math.max(1, Math.min(25, Number(url.searchParams.get('limit')) || 10));
+  try {
+    const payload = await callProviderApi('autocomplete.get', { query });
+    const raw = payload?.songs?.data || payload?.data?.songs || [];
+    const ids = [...new Set((Array.isArray(raw) ? raw : [])
+      .map((song) => String(song?.id || ''))
+      .filter((id) => SONG_ID_PATTERN.test(id)))].slice(0, Math.min(25, limit * 2));
+    if (!ids.length) return providerErrorResponse('No playable artist tracks were found.');
+
+    const detailPayload = await callProviderApi('song.getDetails', { pids: ids.join(',') });
+    const detailedSongs = detailPayload?.songs || detailPayload?.data?.songs || [];
+    const results = (Array.isArray(detailedSongs) ? detailedSongs : [])
+      .map(mapProviderSong)
+      .filter((song) => song?.streamUrl)
+      .slice(0, limit);
+    if (!results.length) return providerErrorResponse('No playable artist tracks were found.');
+    return Response.json({ results }, {
+      headers: { 'Cache-Control': 'public, max-age=300, s-maxage=600' }
+    });
+  } catch {
+    return providerErrorResponse('JioSaavn artist search is temporarily unavailable.');
+  }
 }
 
 /* GET /api/music-album?id=<albumId>

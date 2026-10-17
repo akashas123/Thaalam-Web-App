@@ -1534,6 +1534,7 @@
       return Promise.all(queries.map((query) => {
         const url = new URL('/api/music-search', window.location.origin);
         url.searchParams.set('q', query);
+        url.searchParams.set('mode', 'genre');
         // Ask for a few rows above the grid size: JioSaavn returns many
         // alternate uploads of the same hit (e.g. the same song eight times),
         // so the headroom lets de-duplication still fill every chart card.
@@ -1554,6 +1555,7 @@
             const fallbackQuery = `${queries[0]} songs`;
             const fallbackUrl = new URL('/api/music-search', window.location.origin);
             fallbackUrl.searchParams.set('q', fallbackQuery);
+            fallbackUrl.searchParams.set('mode', 'genre');
             fallbackUrl.searchParams.set('limit', String(perQuery));
             return fetch(fallbackUrl, { cache: 'no-store' })
               .then((response) => {
