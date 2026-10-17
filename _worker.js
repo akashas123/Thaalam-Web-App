@@ -203,7 +203,7 @@ function formatDuration(totalSeconds) {
 
 /* Normalises any JioSaavn song-shaped payload (search results, song details,
    album lists, artist top songs) into the single client-facing shape. */
-function mapProviderSong(raw) {
+function mapProviderSong(raw, includeStream = true) {
   if (!raw || typeof raw !== 'object') return null;
   const id = String(raw.id || '');
   const title = sanitizeText(raw.title);
@@ -227,7 +227,7 @@ function mapProviderSong(raw) {
   const thumbnail = String(raw.image || '')
     .replace(/^http:/, 'https:')
     .replace(/150x150|50x50/, '500x500');
-  const streamUrl = decryptMediaUrl(info.encrypted_media_url);
+  const streamUrl = includeStream ? decryptMediaUrl(info.encrypted_media_url) : '';
 
   return {
     id,
@@ -358,8 +358,10 @@ async function handleInternationalGenreSearch() {
       listid: INTERNATIONAL_CHART_PLAYLIST_ID, n: '50', p: '1'
     });
     const rawSongs = Array.isArray(playlist?.list) ? playlist.list : [];
-    const results = rawSongs.map(mapProviderSong)
-      .filter((song) => song?.streamUrl && song.language === 'english')
+    const results = rawSongs
+      .filter((song) => String(song?.language || '').trim().toLowerCase() === 'english')
+      .map((song) => mapProviderSong(song, false))
+      .filter(Boolean)
       .slice(0, 25);
     if (!results.length) return providerErrorResponse('No English tracks were found in JioSaavn’s trending chart.');
     return Response.json({ results }, {

@@ -1195,7 +1195,9 @@ async function startOnDemandSong(song, { preserveQueue = false, openNowPlaying =
         album: song.collectionName,
         alternatives: []
       }
-      : await findOnDemandSong(song);
+      : song.providerTrackId
+        ? await resolveSong(song.providerTrackId)
+        : await findOnDemandSong(song);
     if (requestId !== songRequestId) return;
 
     trackCandidates = [track, ...(track.alternatives || [])]
