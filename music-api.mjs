@@ -260,6 +260,9 @@ function mapProviderSong(raw) {
   const artistNames = (info.artistMap?.primary_artists || [])
     .map((artist) => sanitizeText(artist.name))
     .filter(Boolean);
+  const artistIds = (info.artistMap?.primary_artists || [])
+    .map((artist) => String(artist.id || ''))
+    .filter(Boolean);
   const artist = artistNames.join(', ') ||
     (separator !== -1 ? subtitle.slice(0, separator) : subtitle);
 
@@ -273,7 +276,9 @@ function mapProviderSong(raw) {
     id,
     title,
     artist,
+    artistIds,
     album,
+    albumId: String(info.album_id || ''),
     duration: formatDuration(durationSeconds),
     durationSeconds,
     thumbnail,
@@ -500,60 +505,10 @@ async function fetchProviderRadioSongs(id, k) {
   return { stationid, songs: songs.slice(0, k) };
 }
 
-/* Fall back to the catalogue-composed queue when the song radio is
-   unavailable or returns nothing playable. */
-async function fetchProviderAutoplayFallback(id) {
-  let payload = null;
-  try {
-    payload = await callProviderApi('song.getDetails', { cc: '1', pids: id });
-  } catch {
-    return null;
-  }
-  const current = mapProviderSong(payload?.songs?.[0]);
-  if (!current) return null;
-
-  const info = payload.songs[0].more_info || {};
-  const albumId = String(info.album_id || '');
-  const artistId = String(info.artistMap?.primary_artists?.[0]?.id || '');
-
-  const [albumResult, artistResult] = await Promise.allSettled([
-    albumId ? callProviderApi('content.getAlbumDetails', { albumid: albumId }) : Promise.resolve(null),
-    artistId ? callProviderApi('artist.getArtistPageDetails', { artistId }) : Promise.resolve(null)
-  ]);
-
-  const albumSongs = albumResult.status === 'fulfilled' && albumResult.value
-    ? (albumResult.value.list || [])
-    : [];
-  const artistSongs = artistResult.status === 'fulfilled' && artistResult.value
-    ? (artistResult.value.topSongs || [])
-    : [];
-
-  // Play the remainder of the album in track order, circle back to its start,
-  // then extend with the artist's top songs.
-  const currentIndex = albumSongs.findIndex((song) => song?.id === id);
-  const orderedAlbum = currentIndex >= 0
-    ? [...albumSongs.slice(currentIndex + 1), ...albumSongs.slice(0, currentIndex)]
-    : albumSongs;
-  const ordered = [...orderedAlbum, ...artistSongs];
-
-  const seen = new Set([id]);
-  const results = [];
-  for (const item of ordered) {
-    const mapped = mapProviderSong(item);
-    if (mapped && mapped.streamUrl && !seen.has(mapped.id)) {
-      seen.add(mapped.id);
-      results.push(mapped);
-    }
-    if (results.length >= 50) break;
-  }
-  return results;
-}
-
 /* GET /api/music-autoplay?id=<songId>&k=<1-50>
-   JioSaavn song radio: similar songs to the given track, built from
-   webradio.createEntityStation + webradio.getSong. Falls back to the
-   catalogue-composed queue (rest of album + artist top songs) when radio
-   is unavailable. */
+   Build each continuation from a fresh provider radio station. The client
+   requests another station around each played track, so the queue can keep
+   growing while it filters out the current artist and album. */
 export async function handleAutoplay(request) {
   const url = new URL(request.url);
   const id = readSongId(url);
@@ -563,16 +518,8 @@ export async function handleAutoplay(request) {
   const k = Math.max(1, Math.min(50, Number(url.searchParams.get('k')) || 30));
 
   const radio = await fetchProviderRadioSongs(id, k);
-  let results = radio.songs;
-  const stationid = radio.stationid;
-
-  if (!results.length) {
-    const fallback = await fetchProviderAutoplayFallback(id);
-    results = fallback || [];
-  }
-
   return Response.json(
-    { results, stationid: stationid || undefined },
+    { results: radio.songs, stationid: radio.stationid || undefined },
     { headers: { 'Cache-Control': 'no-store' } }
   );
 }

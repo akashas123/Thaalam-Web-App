@@ -51,8 +51,8 @@ let isScrubbing = false;
 let scrubTargetSeconds = 0;
 let scrubbingBar = null;
 
-/* The continuation queue (rest of the album + artist top songs), fetched as
-   soon as a track starts so the next track is ready when playback ends. */
+/* Radio recommendations for the playing track, fetched ahead so autoplay
+   can continue without waiting for the current song to end. */
 let relatedTrackCache = [];
 let relatedTrackCursor = 0;
 let isFetchingRelated = false;
@@ -156,6 +156,7 @@ async function searchSongs(query, maxResults = 10) {
 async function fetchAutoplayQueue(trackId) {
   const url = new URL('/api/music-autoplay', window.location.origin);
   url.searchParams.set('id', trackId);
+  url.searchParams.set('k', '50');
   const response = await fetch(url, { cache: 'no-store' });
   const payload = await response.json().catch(() => null);
   if (!response.ok) throw new Error(payload?.error || `Autoplay failed (${response.status}).`);
@@ -913,18 +914,42 @@ function skipOnDemandSong(offset) {
 onDemandPrevButton?.addEventListener('click', () => skipOnDemandSong(-1));
 onDemandNextButton?.addEventListener('click', () => skipOnDemandSong(1));
 
-/* Fetches the continuation queue (album remainder + artist top songs) for a
-   track. */
+const autoplayKey = (value) => normalizeText(value || '');
+
+/* Fetch recommendations from a fresh radio station, skipping the playing
+   artist/album and keeping only one track per artist and album per batch. */
 async function fetchRelatedTracks(trackId) {
   if (!trackId) return [];
   try {
     const queue = await fetchAutoplayQueue(trackId);
     if (queue.stationid) radioStationId = queue.stationid;
-    return queue.tracks
-      .filter((track) => track.id &&
-        !playedTrackIds.has(track.id) &&
-        !NON_CATALOG_TITLE.test(track.title) &&
-        !UNOFFICIAL_MIX_TITLE.test(track.title));
+    const currentSong = currentOnDemandSong || {};
+    const currentArtistIds = new Set((currentSong.providerArtistIds || []).map(String));
+    const currentArtistName = autoplayKey(currentSong.artistName);
+    const currentAlbumId = String(currentSong.providerAlbumId || '');
+    const currentAlbumName = autoplayKey(currentSong.collectionName);
+    const seenArtists = new Set(currentArtistIds);
+    const seenAlbums = new Set(currentAlbumId ? [currentAlbumId] : []);
+    if (currentArtistName) seenArtists.add(currentArtistName);
+    if (currentAlbumName) seenAlbums.add(currentAlbumName);
+
+    return queue.tracks.filter((track) => {
+      if (!track.id || playedTrackIds.has(track.id) ||
+          NON_CATALOG_TITLE.test(track.title) || UNOFFICIAL_MIX_TITLE.test(track.title)) return false;
+      const artistIds = (track.artistIds || []).map(String);
+      const artistName = autoplayKey(track.artist);
+      const albumId = String(track.albumId || '');
+      const albumName = autoplayKey(track.album);
+      if (artistIds.some((id) => seenArtists.has(id)) ||
+          (artistName && seenArtists.has(artistName)) ||
+          (albumId && seenAlbums.has(albumId)) ||
+          (albumName && seenAlbums.has(albumName))) return false;
+      artistIds.forEach((id) => seenArtists.add(id));
+      if (artistName) seenArtists.add(artistName);
+      if (albumId) seenAlbums.add(albumId);
+      if (albumName) seenAlbums.add(albumName);
+      return true;
+    });
   } catch (error) {
     console.warn('Autoplay: Failed.', error);
     return [];
@@ -964,6 +989,8 @@ function relatedTrackToSong(track) {
     artworkUrl100: track.thumbnail || '',
     trackTimeMillis: (track.durationSeconds || parseDurationString(track.duration) || 0) * 1000,
     providerTrackId: track.id,
+    providerArtistIds: track.artistIds || [],
+    providerAlbumId: track.albumId || '',
     streamUrl: track.streamUrl || ''
   };
 }
@@ -1053,6 +1080,8 @@ async function playRelatedTrack(track) {
   rerresolvedTrackId = '';
 
   // Record the track before it loads, so a refresh mid-load still restores.
+  song.providerArtistIds = track.artistIds || [];
+  song.providerAlbumId = track.albumId || '';
   setCurrentOnDemandTrack(song, track.id);
   persistCurrentOnDemandSession();
 
@@ -1095,6 +1124,7 @@ async function startOnDemandSong(song, { preserveQueue = false, openNowPlaying =
       // added afterward can still be played next and navigated back to.
       onDemandQueue = [];
       onDemandQueueIndex = -1;
+      playedTrackIds.clear();
       relatedTrackCache = [];
       relatedTrackCursor = 0;
       isFetchingRelated = false;
@@ -1175,6 +1205,8 @@ async function startOnDemandSong(song, { preserveQueue = false, openNowPlaying =
       || parseDurationString(track.duration)
       || selectedDuration;
     song.providerTrackId = track.id;
+    song.providerArtistIds = track.artistIds || song.providerArtistIds || [];
+    song.providerAlbumId = track.albumId || song.providerAlbumId || '';
     song.streamUrl = track.streamUrl;
     setCurrentOnDemandTrack(song, track.id);
     persistCurrentOnDemandSession();
@@ -1241,6 +1273,10 @@ async function restoreOnDemandSession() {
   if (savedQueue.length && savedIndex >= 0 && savedIndex < savedQueue.length) {
     onDemandQueue = savedQueue;
     onDemandQueueIndex = savedIndex;
+    playedTrackIds.clear();
+    savedQueue.forEach((entry) => {
+      if (entry?.providerTrackId) playedTrackIds.add(entry.providerTrackId);
+    });
     // The session song/track are authoritative for the currently loaded item.
     onDemandQueue[onDemandQueueIndex] = { ...song, providerTrackId: stored.trackId };
   } else {
