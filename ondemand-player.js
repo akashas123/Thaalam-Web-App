@@ -1,5 +1,6 @@
-const onDemandMount = document.getElementById('onDemandPlayerMount');
-const onDemandFrame = document.getElementById('onDemandPlayerFrame');
+/* On-demand playback for Thaalam: searches JioSaavn through the same-origin
+   /api/jiosaavn-* routes and streams the resolved CDN audio through a plain
+   HTML5 <audio> element (no YouTube IFrame involved). */
 const onDemandArtwork = document.getElementById('albumArtImg');
 const onDemandStation = document.getElementById('stationName');
 const onDemandTrack = document.getElementById('nowPlaying');
@@ -19,16 +20,26 @@ const playbackProgressThumb = document.getElementById('progressThumb');
 const onDemandPrevButton = document.getElementById('onDemandPrevButton');
 const onDemandNextButton = document.getElementById('onDemandNextButton');
 
-let youtubeApiPromise = null;
-let youtubePlayerPromise = null;
-let youtubePlayer = null;
-let youtubePlayerReady = false;
-let requestedVideoId = '';
+/* The playback engine. One element serves every on-demand track: setting its
+   src swaps songs, its native events drive the transport UI, and it supports
+   byte-accurate seeking because the JioSaavn CDN answers Range requests. */
+const onDemandAudio = new Audio();
+onDemandAudio.preload = 'auto';
+
+let requestedTrackId = '';
+let requestedStreamUrl = '';
 let requestedStartSeconds = 0;
+/* Seek/play intent recorded by loadTrack() and applied once metadata lands
+   (currentTime cannot be set before the duration is known). */
+let pendingStartSeconds = -1;
+let pendingShouldPlay = false;
 let selectedDuration = 0;
 let songRequestId = 0;
-let videoCandidates = [];
-let videoCandidateIndex = 0;
+/* Playable candidates for the current pick ({ id, streamUrl }), so a bad
+   stream can fall through to the next search result. */
+let trackCandidates = [];
+let trackCandidateIndex = 0;
+let rerresolvedTrackId = '';
 let onDemandArtworkRequestId = 0;
 const albumArtworkCache = new Map();
 
@@ -40,17 +51,21 @@ let isScrubbing = false;
 let scrubTargetSeconds = 0;
 let scrubbingBar = null;
 
-/* YouTube Music's generated next queue, fetched as soon as a track starts so
-   the next eligible Topic audio track is ready when playback ends. */
+/* The continuation queue (rest of the album + artist top songs), fetched as
+   soon as a track starts so the next track is ready when playback ends. */
 let relatedTrackCache = [];
 let relatedTrackCursor = 0;
 let isFetchingRelated = false;
 let prefetchToken = 0;
 let autoplayRetryTimer = 0;
+/* The JioSaavn song-radio station currently driving the continuation queue.
+   Each autoplay response builds a fresh station around the playing track, so
+   this is informational and keeps the client aligned with the server. */
+let radioStationId = '';
 
-/* VideoIds already played this session, so a radio playlist that circles back
-   to an earlier track does not replay it. */
-const playedVideoIds = new Set();
+/* Track ids already played this session, so an autoplay queue that circles
+   back to an earlier track does not replay it. */
+const playedTrackIds = new Set();
 
 function updateNowPlayingSubtitle(isOnDemand) {
   if (nowPlayingSubtitle) {
@@ -61,11 +76,14 @@ function updateNowPlayingSubtitle(isOnDemand) {
 }
 
 /* On-demand state survives refreshes and closed tabs. The saved track and
-   queue are restored paused; only "Back to Live" clears the saved session. */
-const ON_DEMAND_STORAGE_KEY = 'thaalam-on-demand-session-v1';
-const YOUTUBE_SEARCH_CACHE_PREFIX = 'thaalam-youtube-search-v16:';
-const YOUTUBE_SEARCH_CACHE_TTL = 6 * 60 * 60 * 1000;
-const NON_YOUTUBE_MUSIC_TITLE = /\b(?:official\s+)?music\s+video\b|\b(?:official\s+)?video\b|\bvisuali[sz]er\b|\blyrics?\b|\blive\b|\bkaraoke\b|\bcover\b|\bperformance\b|\breaction\b/i;
+   queue are restored paused; only "Back to Live" clears the saved session.
+   v1 held YouTube video ids that this player can no longer play, so the key
+   was bumped and stale v1/v2-era payloads are dropped on read. */
+const ON_DEMAND_STORAGE_KEY = 'thaalam-on-demand-session-v2';
+const LEGACY_ON_DEMAND_STORAGE_KEYS = ['thaalam-on-demand-session-v1'];
+const JIOSAAVN_SEARCH_CACHE_PREFIX = 'thaalam-jiosaavn-search-v1:';
+const JIOSAAVN_SEARCH_CACHE_TTL = 6 * 60 * 60 * 1000;
+const NON_CATALOG_TITLE = /\b(?:official\s+)?music\s+video\b|\b(?:official\s+)?video\b|\bvisuali[sz]er\b|\blyrics?\b|\blive\b|\bkaraoke\b|\bcover\b|\bperformance\b|\breaction\b/i;
 const UNOFFICIAL_MIX_TITLE = /\b(?:unofficial|remix(?:es)?|mix(?:es)?|mash[ -]?up|medley|compilation|playlist|slowed(?:\s+\+?\s+reverb)?|sped\s*up|nightcore|bootleg|fan[ -]?made|edit|1\s*hour|extended|instrumental|8d(?:\s+audio)?|bass\s+boosted|reverb)\b/i;
 
 /* TEMPORARY DIAGNOSTIC: set to false to silence. Reports what is written, what
@@ -75,10 +93,10 @@ const logOnDemand = (...parts) => {
   if (ON_DEMAND_DEBUG) console.log('[on-demand]', ...parts);
 };
 
-function getYouTubeSearchCache(query) {
+function getJioSaavnSearchCache(query) {
   try {
     const cached = JSON.parse(localStorage.getItem(
-      `${YOUTUBE_SEARCH_CACHE_PREFIX}${query}`
+      `${JIOSAAVN_SEARCH_CACHE_PREFIX}${query}`
     ) || 'null');
     if (cached?.expiresAt > Date.now() && Array.isArray(cached.items)) {
       return cached.items;
@@ -88,24 +106,24 @@ function getYouTubeSearchCache(query) {
   return null;
 }
 
-function setYouTubeSearchCache(query, items) {
+function setJioSaavnSearchCache(query, items) {
   try {
-    localStorage.setItem(`${YOUTUBE_SEARCH_CACHE_PREFIX}${query}`, JSON.stringify({
-      expiresAt: Date.now() + YOUTUBE_SEARCH_CACHE_TTL,
+    localStorage.setItem(`${JIOSAAVN_SEARCH_CACHE_PREFIX}${query}`, JSON.stringify({
+      expiresAt: Date.now() + JIOSAAVN_SEARCH_CACHE_TTL,
       items
     }));
   } catch {
   }
 }
 
-async function searchYouTubeVideos(query, maxResults = 10) {
+async function searchJioSaavnSongs(query, maxResults = 10) {
   const normalizedQuery = String(query || '').trim().replace(/\s+/g, ' ');
   if (!normalizedQuery) return [];
   const cacheKey = `${normalizedQuery.toLowerCase()}|${maxResults}`;
-  const cached = getYouTubeSearchCache(cacheKey);
+  const cached = getJioSaavnSearchCache(cacheKey);
   if (cached) return cached;
 
-  const url = new URL('/api/youtube-search', window.location.origin);
+  const url = new URL('/api/jiosaavn-search', window.location.origin);
   url.searchParams.set('q', normalizedQuery);
   url.searchParams.set('limit', String(Math.max(1, Math.min(25, maxResults))));
   const response = await fetch(url, { cache: 'no-store' });
@@ -128,24 +146,38 @@ async function searchYouTubeVideos(query, maxResults = 10) {
 
   const items = payload.results || [];
 
-  setYouTubeSearchCache(cacheKey, items);
+  setJioSaavnSearchCache(cacheKey, items);
   return items;
 }
 
-async function fetchYouTubeAutoplayQueue(videoId, playlistId = '') {
-  const url = new URL('/api/youtube-autoplay', window.location.origin);
-  url.searchParams.set('videoId', videoId);
-  if (playlistId) url.searchParams.set('playlistId', playlistId);
+/* The continuation queue for a playing track (album remainder + artist top
+   songs). JioSaavn has no radio/next-queue endpoint, so the server composes
+   it from catalogue sources. */
+async function fetchJioSaavnAutoplayQueue(trackId) {
+  const url = new URL('/api/jiosaavn-autoplay', window.location.origin);
+  url.searchParams.set('id', trackId);
   const response = await fetch(url, { cache: 'no-store' });
   const payload = await response.json().catch(() => null);
   if (!response.ok) throw new Error(payload?.error || `Autoplay failed (${response.status}).`);
   return {
-    playlistId: payload?.playlistId || playlistId,
-    tracks: Array.isArray(payload?.results) ? payload.results : []
+    tracks: Array.isArray(payload?.results) ? payload.results : [],
+    stationid: typeof payload?.stationid === 'string' ? payload.stationid : ''
   };
 }
 
-function normalizeYouTubeText(value) {
+/* Fetches one song's fresh metadata (including a freshly decrypted stream
+   URL) — used when a stored/cached stream URL stops working. */
+async function resolveJioSaavnSong(trackId) {
+  if (!trackId) return null;
+  const url = new URL('/api/jiosaavn-song', window.location.origin);
+  url.searchParams.set('id', trackId);
+  const response = await fetch(url, { cache: 'no-store' });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(payload?.error || `Playback failed (${response.status}).`);
+  return Array.isArray(payload?.results) ? payload.results[0] || null : null;
+}
+
+function normalizeText(value) {
   return String(value || '')
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -153,70 +185,71 @@ function normalizeYouTubeText(value) {
     .replace(/[^a-z0-9]/g, '');
 }
 
-function normalizeYouTubeSongTitle(value) {
-  return normalizeYouTubeText(String(value || '')
+function normalizeSongTitle(value) {
+  return normalizeText(String(value || '')
     .replace(/\s*\((?:with|feat(?:uring)?|ft\.?)\s+[^)]*\)/gi, '')
     .replace(/\s+(?:with|feat(?:uring)?|ft\.?)\s+.+$/i, '')
     .replace(/\s*\[(?:official\s+)?audio\]/gi, ''));
 }
 
-function lookupAlbumArtwork(title, artist) {
-  const query = `${title || ''} ${artist || ''}`.trim();
-  if (!query) return Promise.resolve('');
-  const key = query.toLowerCase();
-  if (albumArtworkCache.has(key)) return albumArtworkCache.get(key);
-  const promise = new Promise((resolve) => {
-    const callbackName = `thaalamArtwork${Date.now()}${Math.random().toString(36).slice(2)}`;
-    const request = document.createElement('script');
-    const timeout = window.setTimeout(() => finish(''), 10000);
-    let settled = false;
-    function finish(url) {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(timeout);
-      delete window[callbackName];
-      request.remove();
-      resolve(url || '');
-    }
-    window[callbackName] = (data) => {
+async function lookupAlbumArtwork(title, artist) {
+  const cleanArtist = String(artist || '').replace(/\s-\sTopic$/i, '').trim();
+  if (!title || !cleanArtist) return '';
+  const query = `${cleanArtist} ${title}`;
+  const cacheKey = `lookupAlbumArtwork:${query.toLowerCase()}`;
+  const cached = albumArtworkCache.get(cacheKey);
+  if (cached) return cached;
+
+  const promise = new Promise(async (resolve) => {
+    try {
+      const url = new URL('/api/jiosaavn-search', window.location.origin);
+      url.searchParams.set('q', query);
+      url.searchParams.set('limit', '8');
+      const response = await fetch(url, { cache: 'no-store' });
+      if (!response.ok) { resolve(''); return; }
+      const data = await response.json();
       const result = (data?.results || []).find((item) => item.artworkUrl100);
-      finish(result?.artworkUrl100?.replace(/^http:/, 'https:').replace(/\d+x\d+bb\./, '600x600bb.') || '');
-    };
-    request.onerror = () => finish('');
-    const params = new URLSearchParams({ term: query, entity: 'song', media: 'music', limit: '8', callback: callbackName });
-    request.src = `https://itunes.apple.com/search?${params}`;
-    document.head.appendChild(request);
+      resolve(result?.artworkUrl100?.replace(/^http:/, 'https:').replace(/\d+x\d+bb\./, '600x600bb.') || '');
+    } catch {
+      resolve('');
+    }
   });
-  albumArtworkCache.set(key, promise);
+
+  albumArtworkCache.set(cacheKey, promise);
   return promise;
 }
 window.lookupAlbumArtwork = lookupAlbumArtwork;
 
-async function findYouTubeSong(song) {
+/* Ranks JioSaavn search results for a concrete song pick. JioSaavn's catalogue
+   is official-label audio (no Topic-vs-video distinction like YouTube), so the
+   filter drops mixes/karaoke/reaction titles outright while merely demoting
+   "live"/"cover"-style words — an exact match should still win when it is the
+   only result. */
+async function findOnDemandSong(song) {
   const title = song.trackName || '';
   const artist = song.artistName || '';
   const album = song.collectionName || '';
-  const normalizedTitle = normalizeYouTubeSongTitle(title);
+  const normalizedTitle = normalizeSongTitle(title);
   const sourceArtists = artist.split(/,|&|\bfeat(?:uring)?\b|\bwith\b/i)
-    .map(normalizeYouTubeText).filter(Boolean);
-  const normalizedAlbum = normalizeYouTubeText(album);
+    .map(normalizeText).filter(Boolean);
+  const normalizedAlbum = normalizeText(album);
 
   const rankResults = (items, albumFirst) => items
     .map((item, index) => {
-      const candidateTitle = normalizeYouTubeSongTitle(item.title);
-      const candidateArtist = normalizeYouTubeText(item.artist);
-      const candidateAlbum = normalizeYouTubeText(item.album);
+      const candidateTitle = normalizeSongTitle(item.title);
+      const candidateArtist = normalizeText(item.artist);
+      const candidateAlbum = normalizeText(item.album);
       const exactTitle = candidateTitle === normalizedTitle;
       const titleMatch = exactTitle ||
         (normalizedTitle.length > 3 && candidateTitle.includes(normalizedTitle)) ||
         (candidateTitle.length > 3 && normalizedTitle.includes(candidateTitle));
       const artistMatch = sourceArtists.some((name) => candidateArtist.includes(name));
       const featuredArtistMatch = sourceArtists.some((name) =>
-        name !== normalizeYouTubeText(artist) && candidateTitle.includes(name));
+        name !== normalizeText(artist) && candidateTitle.includes(name));
       const albumMatch = Boolean(normalizedAlbum && candidateAlbum &&
         (candidateAlbum.includes(normalizedAlbum) || normalizedAlbum.includes(candidateAlbum)));
-      const rejectedTitle = NON_YOUTUBE_MUSIC_TITLE.test(item.title) ||
-        UNOFFICIAL_MIX_TITLE.test(item.title);
+      const rejectedTitle = UNOFFICIAL_MIX_TITLE.test(item.title);
+      const nonCatalogTitle = NON_CATALOG_TITLE.test(item.title);
       const officialAudio = /\b(?:official\s+)?(?:original\s+)?audio\b/i.test(item.title);
       return {
         ...item,
@@ -224,51 +257,54 @@ async function findYouTubeSong(song) {
           (artistMatch ? 30 : 0) + (featuredArtistMatch ? 8 : 0) +
           (albumFirst && albumMatch ? 24 : albumMatch ? 12 : 0) +
           (officialAudio ? 15 : 0) + Math.max(0, 20 - index) -
-          (rejectedTitle ? 1000 : 0)
+          (rejectedTitle ? 1000 : 0) - (nonCatalogTitle ? 400 : 0)
       };
-    }).filter((item) => item.videoId && item.topicAudio === true &&
-      !NON_YOUTUBE_MUSIC_TITLE.test(item.title) &&
+    }).filter((item) => item.id && item.streamUrl &&
       !UNOFFICIAL_MIX_TITLE.test(item.title))
       .sort((a, b) => b.score - a.score);
 
   // Search the named album first, then retry with exact-title variants. Keep
-  // the best Songs-filtered result across all queries instead of failing just
-  // because YouTube formats a title or featured-artist credit differently.
+  // the best result across all queries instead of failing just because
+  // JioSaavn formats a title or featured-artist credit differently.
   const queries = [
     album && { query: `${title} ${artist} ${album}`, albumFirst: true },
     { query: `${title} ${artist}`, albumFirst: false },
-    { query: `${normalizeYouTubeSongTitle(title)} ${artist}`, albumFirst: false }
+    { query: `${normalizeSongTitle(title)} ${artist}`, albumFirst: false }
   ].filter((entry) => String(entry?.query || '').trim());
   const candidates = new Map();
   // Fire every query at once instead of waiting on each in turn. The three
   // searches are independent, so running them together turns ~3 sequential
   // round-trips into one. A single query failing no longer aborts the lookup —
-  // the other results are still ranked and used — so this is also more
-  // resilient than the old sequential loop.
+  // the other results are still ranked and used.
   const settled = await Promise.allSettled(
     queries.map(({ query, albumFirst }) =>
-      searchYouTubeVideos(query, 25).then((items) => ({ items, albumFirst }))
+      searchJioSaavnSongs(query, 25).then((items) => ({ items, albumFirst }))
     )
   );
   settled.forEach((result) => {
     if (result.status !== 'fulfilled') return;
     rankResults(result.value.items, result.value.albumFirst).forEach((item) => {
-      const current = candidates.get(item.videoId);
-      if (!current || item.score > current.score) candidates.set(item.videoId, item);
+      const current = candidates.get(item.id);
+      if (!current || item.score > current.score) candidates.set(item.id, item);
     });
   });
 
   const ranked = [...candidates.values()].sort((a, b) => b.score - a.score);
   const best = ranked[0];
   if (!best) throw new Error('Song Not playable');
-  return { ...best, alternatives: ranked.slice(1).map((item) => item.videoId) };
+  return {
+    ...best,
+    alternatives: ranked.slice(1)
+      .map((item) => ({ id: item.id, streamUrl: item.streamUrl }))
+      .filter((item) => item.streamUrl)
+  };
 }
 
-function saveOnDemandSession(song, videoId, position = 0) {
+function saveOnDemandSession(song, trackId, position = 0) {
   try {
     const payload = JSON.stringify({
       song,
-      videoId,
+      trackId,
       position: Math.max(0, Number(position) || 0),
       queue: onDemandQueue,
       queueIndex: onDemandQueueIndex,
@@ -279,7 +315,7 @@ function saveOnDemandSession(song, videoId, position = 0) {
     localStorage.setItem(ON_DEMAND_STORAGE_KEY, payload);
     logOnDemand('saved', {
       trackName: song?.trackName,
-      videoId,
+      trackId,
       playing: window.onDemandPlaying === true,
       bytes: payload.length
     });
@@ -290,6 +326,12 @@ function saveOnDemandSession(song, videoId, position = 0) {
 }
 
 function readOnDemandSession() {
+  // Sessions saved by earlier releases point at YouTube video ids this player
+  // cannot play; clear them so they do not linger in storage.
+  try {
+    LEGACY_ON_DEMAND_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
+  } catch {
+  }
   let raw = null;
   try {
     raw = localStorage.getItem(ON_DEMAND_STORAGE_KEY);
@@ -299,16 +341,16 @@ function readOnDemandSession() {
       logOnDemand('no usable session (absent or unparseable)');
       return null;
     }
-    if (!stored?.song?.trackName || !stored?.videoId) {
+    if (!stored?.song?.trackName || !stored?.trackId) {
       logOnDemand('session present but incomplete', {
         hasSong: Boolean(stored?.song),
         hasTrackName: Boolean(stored?.song?.trackName),
-        hasVideoId: Boolean(stored?.videoId),
+        hasTrackId: Boolean(stored?.trackId),
         keys: Object.keys(stored)
       });
       return null;
     }
-    logOnDemand('session restored from storage', stored.song.trackName, stored.videoId);
+    logOnDemand('session restored from storage', stored.song.trackName, stored.trackId);
     return stored;
   } catch (error) {
     console.error('[on-demand] read failed:', error);
@@ -323,24 +365,25 @@ function clearOnDemandSession() {
   }
 }
 
-/* The song and videoId currently loaded in the iframe. Kept as module state so
-   pause/play changes can rewrite the stored session without re-running a search. */
+/* The song and track id currently loaded in the audio element. Kept as module
+   state so pause/play changes can rewrite the stored session without
+   re-running a search. */
 let currentOnDemandSong = null;
-let currentOnDemandVideoId = '';
+let currentOnDemandTrackId = '';
 let currentOnDemandPosition = 0;
 
-function setCurrentOnDemandTrack(song, videoId, position = 0) {
+function setCurrentOnDemandTrack(song, trackId, position = 0) {
   currentOnDemandSong = song;
-  currentOnDemandVideoId = videoId || '';
+  currentOnDemandTrackId = trackId || '';
   currentOnDemandPosition = Math.max(0, Number(position) || 0);
 }
 
 function persistCurrentOnDemandSession() {
-  if (!currentOnDemandSong?.trackName || !currentOnDemandVideoId) return;
-  if (youtubePlayerReady && window.onDemandPlaybackActive) {
-    currentOnDemandPosition = youtubePlayer.getCurrentTime() || currentOnDemandPosition;
+  if (!currentOnDemandSong?.trackName || !currentOnDemandTrackId) return;
+  if (window.onDemandPlaybackActive && onDemandAudio.getAttribute('src')) {
+    currentOnDemandPosition = onDemandAudio.currentTime || currentOnDemandPosition;
   }
-  saveOnDemandSession(currentOnDemandSong, currentOnDemandVideoId, currentOnDemandPosition);
+  saveOnDemandSession(currentOnDemandSong, currentOnDemandTrackId, currentOnDemandPosition);
 }
 
 function formatOnDemandTime(seconds) {
@@ -349,69 +392,18 @@ function formatOnDemandTime(seconds) {
   return `${minutes}:${String(safeSeconds % 60).padStart(2, '0')}`;
 }
 
-function parseVideoDuration(duration) {
+function parseDurationString(duration) {
   if (!duration) return 0;
   return duration.split(':').reduce((total, part) => total * 60 + Number(part), 0);
-}
-
-function loadYouTubeApi() {
-  if (window.YT?.Player) return Promise.resolve();
-  if (youtubeApiPromise) return youtubeApiPromise;
-
-  youtubeApiPromise = new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = 'https://www.youtube.com/iframe_api';
-    script.async = true;
-
-    // The API script can vanish without ever firing onerror: blocked by an
-    // extension, throttled, or swallowed by a captive portal. With no deadline
-    // the promise simply never settles, so the restore await below waited
-    // forever and left the player stuck on "Resuming on demand" instead of
-    // falling back. Fail fast and let the caller recover.
-    const timeoutId = window.setTimeout(() => {
-      youtubeApiPromise = null;
-      script.remove();
-      reject(new Error('player timed out loading.'));
-    }, 12000);
-
-    window.onYouTubeIframeAPIReady = () => {
-      window.clearTimeout(timeoutId);
-      resolve();
-    };
-
-    script.onerror = () => {
-      window.clearTimeout(timeoutId);
-      youtubeApiPromise = null;
-      reject(new Error('Player failed to load.'));
-    };
-
-    document.head.appendChild(script);
-  });
-
-  return youtubeApiPromise;
-}
-
-function setPlaybackProgress(elapsed, duration) {
-  if (!playbackProgressBar || !playbackProgressFill) return;
-
-  const safeDuration = Number(duration) || 0;
-  const safeElapsed = Math.max(0, Number(elapsed) || 0);
-  const percent = safeDuration > 0
-    ? Math.min(100, (safeElapsed / safeDuration) * 100)
-    : 0;
-
-  playbackProgressFill.style.width = `${percent}%`;
-  if (playbackProgressThumb) playbackProgressThumb.style.left = `${percent}%`;
-  playbackProgressBar.setAttribute('aria-valuenow', String(Math.round(percent)));
 }
 
 function updatePlaybackProgress() {
   if (window.onDemandPlaybackActive) {
     let elapsed = 0;
     let duration = selectedDuration;
-    if (youtubePlayerReady) {
-      elapsed = youtubePlayer.getCurrentTime() || 0;
-      duration = youtubePlayer.getDuration() || duration;
+    if (onDemandAudio.getAttribute('src')) {
+      elapsed = onDemandAudio.currentTime || 0;
+      duration = onDemandAudio.duration || duration;
     }
 
     // While dragging, report the pointer's target instead of the player's
@@ -436,14 +428,28 @@ function updatePlaybackProgress() {
   }
 }
 
+function setPlaybackProgress(elapsed, duration) {
+  if (!playbackProgressBar || !playbackProgressFill) return;
+
+  const safeDuration = Number(duration) || 0;
+  const safeElapsed = Math.max(0, Number(elapsed) || 0);
+  const percent = safeDuration > 0
+    ? Math.min(100, (safeElapsed / safeDuration) * 100)
+    : 0;
+
+  playbackProgressFill.style.width = `${percent}%`;
+  if (playbackProgressThumb) playbackProgressThumb.style.left = `${percent}%`;
+  playbackProgressBar.setAttribute('aria-valuenow', String(Math.round(percent)));
+}
+
 /* Resolves the seconds a pointer x-position maps to, clamped to the track. */
 function getScrubSecondsFromPointer(clientX, bar) {
-  if (!bar || !youtubePlayerReady) return null;
+  if (!bar || !onDemandAudio.getAttribute('src')) return null;
 
   const rect = bar.getBoundingClientRect();
   if (!rect.width) return null;
 
-  const duration = youtubePlayer.getDuration() || selectedDuration;
+  const duration = onDemandAudio.duration || selectedDuration;
   if (!(duration > 0)) return null;
 
   const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
@@ -459,7 +465,7 @@ function repaintScrub() {
 
 /* On-demand only: live radio is not seekable, so pointerdown is ignored there. */
 function beginScrub(event, bar) {
-  if (!window.onDemandPlaybackActive || !youtubePlayerReady) return;
+  if (!window.onDemandPlaybackActive || !onDemandAudio.getAttribute('src')) return;
 
   const seconds = getScrubSecondsFromPointer(event.clientX, bar);
   if (seconds === null) return;
@@ -495,19 +501,23 @@ function resetScrub() {
 window.getDemandScrubSeconds = () => (isScrubbing ? scrubTargetSeconds : NaN);
 
 function commitScrub() {
-  if (!isScrubbing || !youtubePlayerReady) return;
+  if (!isScrubbing || !onDemandAudio.getAttribute('src')) return;
   isScrubbing = false;
   scrubbingBar?.classList.remove('is-scrubbing');
   scrubbingBar = null;
 
-  // Nudge a few milliseconds past the target: the YouTube API can ignore a
-  // seek to the exact position it is already reporting.
+  // Nudge a few milliseconds past the target so the readout is not off by a
+  // rounding step once the seek lands.
   const target = Math.min(
-    (youtubePlayer.getDuration() || selectedDuration || 0),
+    (onDemandAudio.duration || selectedDuration || 0),
     Math.max(0, scrubTargetSeconds + 0.05)
   );
   if (target > 0 || scrubTargetSeconds <= 0) {
-    youtubePlayer.seekTo(target, true);
+    try {
+      onDemandAudio.currentTime = target;
+    } catch {
+      // Metadata not ready yet; the next progress tick picks the position up.
+    }
   }
 }
 
@@ -541,76 +551,139 @@ function setOnDemandPlaying(isPlaying) {
   onDemandMiniToggle?.classList.remove('is-loading');
 }
 
-function handleYouTubeState(event) {
-  logOnDemand('player state ->', event.data,
-    '(active =', window.onDemandPlaybackActive, ')');
-  if (!window.onDemandPlaybackActive) return;
-
-  const states = window.YT.PlayerState;
-  if (event.data === states.PLAYING) {
-    onDemandModeLabel.textContent = 'ON DEMAND';
-    // Re-pin the level in case this video came up at the player's default.
-    syncYouTubeVolumeToStored();
-    setOnDemandPlaying(true);
-  } else if (event.data === states.BUFFERING) {
-    onDemandModeLabel.textContent = 'BUFFERING';
-    onDemandPlayButton?.classList.add('is-loading');
-    onDemandMiniToggle?.classList.add('is-loading');
-  } else if (event.data === states.ENDED) {
-    onDemandModeLabel.textContent = 'ON DEMAND';
-    setOnDemandPlaying(false);
-    // Autoplay continues into a similar song; the label is updated by
-    // advanceToSimilarSong() while the related list is being fetched.
-    advanceToSimilarSong();
-  } else if (
-    event.data === states.PAUSED ||
-    event.data === states.CUED
-  ) {
-    onDemandModeLabel.textContent = 'ON DEMAND';
-    setOnDemandPlaying(false);
-  }
-}
-
-/* Re-assert the listener's stored volume level + mute flag on the YouTube
-   player. The level is only pushed once in onReady today, so a later
-   loadVideoById (track change, autoplay advance, error fallback) can come up
-   at the player's own default (loud) while the slider visibly stays put.
-   Calling this right after every load and again on PLAYING keeps the audible
-   level pinned to what the slider shows. True loudness differences between
-   uploads (mastering) can't be normalized from here: the iframe is
-   cross-origin, so WebAudio metering/gain is unavailable. */
-function syncYouTubeVolumeToStored() {
-  if (!youtubePlayerReady || !youtubePlayer) return;
+/* Re-assert the listener's stored volume level + mute flag on the audio
+   element. Called after every load and again on 'playing' so a track change
+   can never come up at a level the slider does not show. */
+function syncOnDemandVolumeToStored() {
   try {
     const storedLevel = typeof window.getStoredVolumeLevel === 'function'
       ? window.getStoredVolumeLevel()
       : NaN;
     if (Number.isFinite(storedLevel)) {
-      youtubePlayer.setVolume(Math.max(0, Math.min(100, Math.round(storedLevel))));
+      onDemandAudio.volume = Math.max(0, Math.min(100, Math.round(storedLevel))) / 100;
     }
-    let muted = false;
     try {
-      muted = localStorage.getItem('thaalam-muted-v1') === '1';
+      onDemandAudio.muted = localStorage.getItem('thaalam-muted-v1') === '1';
     } catch (_) { /* storage unavailable; leave mute state alone */ }
-    if (muted) youtubePlayer.mute();
-    else if (typeof youtubePlayer.unMute === 'function') youtubePlayer.unMute();
-  } catch (_) { /* player not controllable yet */ }
+  } catch (_) { /* storage unavailable; default to audible */ }
 }
 
-function handleYouTubeError(event) {
-  logOnDemand('player ERROR code =', event?.data,
-    '(active =', window.onDemandPlaybackActive,
-    ', candidates =', videoCandidates.length, ')');
+/* Applies the seek/auto-play intent recorded by loadTrack() once the element
+   knows its duration. currentTime cannot be set reliably before then. */
+function applyPendingMediaIntent() {
   if (!window.onDemandPlaybackActive) return;
-  if (videoCandidateIndex + 1 < videoCandidates.length) {
-    videoCandidateIndex += 1;
+  if (pendingStartSeconds >= 0) {
+    const target = pendingStartSeconds;
+    pendingStartSeconds = -1;
+    try {
+      if (target > 0) onDemandAudio.currentTime = target;
+    } catch {
+      logOnDemand('seek to', target, 'rejected; starting from the top');
+    }
+  }
+  if (pendingShouldPlay) {
+    pendingShouldPlay = false;
+    const playPromise = onDemandAudio.play();
+    if (playPromise) {
+      playPromise.catch((error) => {
+        // Autoplay policy or a transient rejection: stay visibly paused so the
+        // listener can press Play (their gesture always succeeds).
+        logOnDemand('play() rejected:', error?.name || error);
+        if (window.onDemandPlaybackActive) setOnDemandPlaying(false);
+      });
+    }
+  }
+}
+
+onDemandAudio.addEventListener('loadedmetadata', applyPendingMediaIntent);
+
+onDemandAudio.addEventListener('playing', () => {
+  if (!window.onDemandPlaybackActive) return;
+  logOnDemand('playing', onDemandAudio.currentTime.toFixed(1), 's');
+  onDemandModeLabel.textContent = 'ON DEMAND';
+  syncOnDemandVolumeToStored();
+  setOnDemandPlaying(true);
+});
+
+onDemandAudio.addEventListener('pause', () => {
+  // Fires for track swaps, src teardown and listener-initiated pauses alike.
+  // By the time a queued pause event lands, returnToLive() has usually already
+  // cleared the active flag — this guard keeps teardown from repainting state.
+  if (!window.onDemandPlaybackActive || onDemandAudio.ended) return;
+  onDemandModeLabel.textContent = 'ON DEMAND';
+  setOnDemandPlaying(false);
+});
+
+onDemandAudio.addEventListener('waiting', () => {
+  if (!window.onDemandPlaybackActive) return;
+  onDemandModeLabel.textContent = 'BUFFERING';
+  onDemandPlayButton?.classList.add('is-loading');
+  onDemandMiniToggle?.classList.add('is-loading');
+});
+
+onDemandAudio.addEventListener('stalled', () => {
+  if (!window.onDemandPlaybackActive) return;
+  onDemandModeLabel.textContent = 'BUFFERING';
+  onDemandPlayButton?.classList.add('is-loading');
+  onDemandMiniToggle?.classList.add('is-loading');
+});
+
+onDemandAudio.addEventListener('ended', () => {
+  if (!window.onDemandPlaybackActive) return;
+  onDemandModeLabel.textContent = 'ON DEMAND';
+  setOnDemandPlaying(false);
+  // Autoplay continues into the next queue item; the label is updated by
+  // advanceToSimilarSong() while the related list is being fetched.
+  advanceToSimilarSong();
+});
+
+onDemandAudio.addEventListener('error', () => {
+  logOnDemand('media ERROR', onDemandAudio.error?.code,
+    '(active =', window.onDemandPlaybackActive,
+    ', candidates =', trackCandidates.length, ')');
+  handlePlaybackError();
+});
+
+/* Called when a stream fails: fall through to the next search result first,
+   then ask the server for one fresh stream URL per track (expired CDN links),
+   and only then give up with the visible UNAVAILABLE state. */
+async function handlePlaybackError() {
+  if (!window.onDemandPlaybackActive) return;
+
+  if (trackCandidateIndex + 1 < trackCandidates.length) {
+    trackCandidateIndex += 1;
     onDemandModeLabel.textContent = 'TRYING ANOTHER RESULT';
-    event.target.loadVideoById(videoCandidates[videoCandidateIndex]);
-    syncYouTubeVolumeToStored();
+    const candidate = trackCandidates[trackCandidateIndex];
+    const resumeSeconds = pendingStartSeconds >= 0 ? pendingStartSeconds : 0;
+    const shouldPlay = pendingShouldPlay || window.onDemandPlaying === true;
+    await loadTrack(candidate, songRequestId, resumeSeconds, shouldPlay);
     return;
   }
-  console.error('Rejected every matching video:', event.data);
-  onDemandMount.hidden = true;
+
+  const trackId = currentOnDemandTrackId;
+  if (trackId && rerresolvedTrackId !== trackId) {
+    rerresolvedTrackId = trackId;
+    onDemandModeLabel.textContent = 'RETRYING STREAM';
+    try {
+      const fresh = await resolveJioSaavnSong(trackId);
+      if (!window.onDemandPlaybackActive || currentOnDemandTrackId !== trackId) return;
+      if (fresh?.streamUrl) {
+        trackCandidates = [{ id: trackId, streamUrl: fresh.streamUrl }];
+        trackCandidateIndex = 0;
+        if (currentOnDemandSong) {
+          currentOnDemandSong.streamUrl = fresh.streamUrl;
+          persistCurrentOnDemandSession();
+        }
+        await loadTrack(trackCandidates[0], songRequestId, 0, true);
+        return;
+      }
+    } catch (error) {
+      logOnDemand('stream re-resolve failed:', error?.message || error);
+      if (!window.onDemandPlaybackActive) return;
+    }
+  }
+
+  console.error('Rejected every stream for this track');
   onDemandArtwork.hidden = false;
   onDemandArtwork.style.opacity = '1';
   onDemandPlayButton.disabled = true;
@@ -621,108 +694,74 @@ function handleYouTubeError(event) {
   returnToLiveButton.hidden = false;
 }
 
-async function loadVideo(videoId, requestId, startSeconds = 0, shouldPlay = true) {
-  requestedVideoId = videoId;
-  requestedStartSeconds = Math.max(0, Number(startSeconds) || 0);
-  await loadYouTubeApi();
+/* Loads one { id, streamUrl } candidate into the audio element. Resolves once
+   metadata is known (or shortly after), so callers can update state without
+   waiting for the whole song to buffer; media errors are handled separately
+   by the 'error' listener above. */
+async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = true) {
   if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
-  onDemandMount.hidden = false;
-  // Keep the album artwork visible on top of the YouTube iframe so the
-  // embedded video player stays masked while its audio keeps playing.
-  onDemandArtwork.hidden = false;
-  onDemandArtwork.style.opacity = '1';
+  requestedTrackId = candidate.id || '';
+  requestedStreamUrl = candidate.streamUrl || '';
+  pendingStartSeconds = Math.max(0, Number(startSeconds) || 0);
+  pendingShouldPlay = shouldPlay;
+  syncOnDemandVolumeToStored();
 
-  if (youtubePlayerReady) {
-    const loadMethod = shouldPlay ? 'loadVideoById' : 'cueVideoById';
-    youtubePlayer[loadMethod]({ videoId, startSeconds: requestedStartSeconds });
-    syncYouTubeVolumeToStored();
+  const sameSource = requestedStreamUrl
+    && onDemandAudio.getAttribute('src') === requestedStreamUrl;
+  const alreadyLoaded = sameSource
+    && onDemandAudio.readyState >= 1 /* HAVE_METADATA */
+    && !onDemandAudio.error;
+
+  if (alreadyLoaded) {
+    applyPendingMediaIntent();
     return;
   }
 
-  if (!youtubePlayerPromise) {
-    youtubePlayerPromise = new Promise((resolve, reject) => {
-      const initialVideoId = requestedVideoId;
-      try {
-        youtubePlayer = new window.YT.Player('onDemandPlayerFrame', {
-          width: '100%',
-          height: '100%',
-          videoId: initialVideoId,
-          playerVars: {
-            autoplay: shouldPlay ? 1 : 0,
-            controls: 1,
-            enablejsapi: 1,
-            origin: window.location.origin,
-            playsinline: 1,
-            rel: 0,
-            start: Math.floor(requestedStartSeconds)
-          },
-          events: {
-            onReady(event) {
-              youtubePlayerReady = true;
-              // Honor the persisted volume/mute choices before any audio starts.
-              // The bridge in script.js guards the missing-key case (Number(null)
-              // === 0) and falls back to the shared default level.
-              try {
-                const storedLevel = typeof window.getStoredVolumeLevel === 'function'
-                  ? window.getStoredVolumeLevel()
-                  : NaN;
-                if (Number.isFinite(storedLevel)) {
-                  event.target.setVolume(storedLevel);
-                }
-                if (localStorage.getItem('thaalam-muted-v1') === '1') event.target.mute();
-              } catch (_) { /* storage unavailable; default to audible */ }
-              if (!window.onDemandPlaybackActive) {
-                event.target.pauseVideo();
-                resolve(event.target);
-                return;
-              }
-              if (requestedVideoId !== initialVideoId) {
-                event.target.loadVideoById({
-                  videoId: requestedVideoId,
-                  startSeconds: requestedStartSeconds
-                });
-                syncYouTubeVolumeToStored();
-              } else if (shouldPlay) {
-                event.target.playVideo();
-              } else {
-                event.target.cueVideoById({
-                  videoId: requestedVideoId,
-                  startSeconds: requestedStartSeconds
-                });
-              }
-              resolve(event.target);
-            },
-            onStateChange: handleYouTubeState,
-            onError: handleYouTubeError
-          }
-        });
-      } catch (error) {
-        reject(error);
-      }
-    });
-  }
+  if (!requestedStreamUrl) return;
 
-  await youtubePlayerPromise;
+  const metadataPromise = new Promise((resolve) => {
+    let settled = false;
+    let deadline = 0;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(deadline);
+      onDemandAudio.removeEventListener('loadedmetadata', finish);
+      onDemandAudio.removeEventListener('error', finish);
+      resolve();
+    };
+    // The deadline guarantees loadTrack() never hangs a caller indefinitely
+    // (the element can already know the file and fire nothing new).
+    deadline = window.setTimeout(finish, 12000);
+    onDemandAudio.addEventListener('loadedmetadata', finish, { once: true });
+    onDemandAudio.addEventListener('error', finish, { once: true });
+  });
+
+  if (!sameSource) onDemandAudio.src = requestedStreamUrl;
+  onDemandAudio.load();
+  await metadataPromise;
 }
 
-function updateOnDemandMetadata(song, video) {
-  video = video || {};
-  const title = song?.trackName || video.title || 'Unknown song';
-  const artist = String(song?.artistName || video.artist || 'Unknown artist')
+function updateOnDemandMetadata(song, track) {
+  track = track || {};
+  const title = song?.trackName || track.title || 'Unknown song';
+  const artist = String(song?.artistName || track.artist || 'Unknown artist')
     .replace(/\s-\sTopic$/i, '')
     .trim();
-  const album = song?.collectionName || '';
+  const album = song?.collectionName || track.album || '';
   const catalogArtwork = song?.artworkUrl100
     ?.replace(/^http:/, 'https:')
     .replace(/\d+x\d+bb\./, '600x600bb.') || '';
-  const youtubeArtwork = String(video.thumbnail || '').replace(/^http:/, 'https:');
-  const artwork = catalogArtwork || youtubeArtwork;
+  const jiosaavnArtwork = String(track.thumbnail || '').replace(/^http:/, 'https:');
+  const artwork = catalogArtwork || jiosaavnArtwork;
   const nowPlaying = {
     title,
     artist,
     album,
     art: artwork,
-    id: video.videoId
+    // Legacy `youtube:ID` liked rows keep their original rating identity while
+    // they are on screen; JioSaavn picks fall back to the title|artist key.
+    id: song?.youtubeVideoId || ''
   };
   const data = {
     now_playing: {
@@ -744,19 +783,17 @@ function updateOnDemandMetadata(song, video) {
   onDemandMiniArtist.textContent = artist;
   // Invalidate any live-radio image load as soon as on-demand metadata changes.
   // Preload before swapping so a failed/slow thumbnail cannot leave the prior
-  // track's artwork visible (a common case when the YouTube thumbnail is stale).
+  // track's artwork visible.
   const colorRequestId = window.bumpArtworkRequestId?.() ?? 0;
   const artworkRequestId = ++onDemandArtworkRequestId;
   onDemandArtwork.src = 'album-placeholder.svg?v=2';
-  onDemandArtwork.classList.remove('is-youtube-thumbnail');
+  onDemandArtwork.classList.remove('is-wide-thumbnail');
   onDemandMiniArtwork.src = 'album-placeholder.svg?v=2';
-  onDemandMiniArtwork.classList.remove('is-youtube-thumbnail');
+  onDemandMiniArtwork.classList.remove('is-wide-thumbnail');
 
-  // Prefer iTunes album art; use the Topic upload artwork if iTunes has none.
-  const videoIdArtwork = video.videoId
-    ? `https://i.ytimg.com/vi/${encodeURIComponent(video.videoId)}/hqdefault.jpg`
-    : '';
-  const candidates = [...new Set([catalogArtwork, youtubeArtwork, videoIdArtwork]
+  // Prefer the pick's own artwork (catalog or JioSaavn); the iTunes lookup is
+  // the last resort when neither image loads.
+  const candidates = [...new Set([catalogArtwork, jiosaavnArtwork]
     .filter(Boolean)
     .map((url) => String(url).replace(/^http:/, 'https:')))];
   const tryArtwork = (index) => {
@@ -778,12 +815,12 @@ function updateOnDemandMetadata(song, video) {
       if (artworkRequestId !== onDemandArtworkRequestId) return;
       onDemandArtwork.src = candidates[index];
       onDemandArtwork.classList.toggle(
-        'is-youtube-thumbnail',
+        'is-wide-thumbnail',
         image.naturalWidth / image.naturalHeight > 1.1
       );
       onDemandMiniArtwork.src = candidates[index];
       onDemandMiniArtwork.classList.toggle(
-        'is-youtube-thumbnail',
+        'is-wide-thumbnail',
         image.naturalWidth / image.naturalHeight > 1.1
       );
       window.updateAlbumColors?.(candidates[index], colorRequestId);
@@ -873,29 +910,18 @@ function skipOnDemandSong(offset) {
 onDemandPrevButton?.addEventListener('click', () => skipOnDemandSong(-1));
 onDemandNextButton?.addEventListener('click', () => skipOnDemandSong(1));
 
-/* Fetches YouTube Music's own next queue, retaining only Topic-style audio. */
-async function fetchRelatedTracks(videoId, song) {
-  if (!videoId && !song?.artistName) return [];
+/* Fetches the continuation queue (album remainder + artist top songs) for a
+   track. */
+async function fetchRelatedTracks(trackId) {
+  if (!trackId) return [];
   try {
-    // The first request starts a YouTube Music radio mix; later requests keep
-    // using the returned mix playlist so recommendations can span artists.
-    const queue = await fetchYouTubeAutoplayQueue(videoId, song?.youtubePlaylistId || '');
-    const tracks = queue.tracks;
-    return tracks
-      .filter((track) => track.topicAudio === true &&
-        !playedVideoIds.has(track.videoId) &&
-        !NON_YOUTUBE_MUSIC_TITLE.test(track.title) &&
-        !UNOFFICIAL_MIX_TITLE.test(track.title))
-      .map((track) => ({
-        videoId: track.videoId,
-        title: track.title,
-        artist: track.artist,
-        thumbnail: track.thumbnail,
-        topicAudio: track.topicAudio,
-        primaryGenreName: song?.primaryGenreName || '',
-        duration: track.duration || '',
-        playlistId: queue.playlistId || song?.youtubePlaylistId || ''
-      }));
+    const queue = await fetchJioSaavnAutoplayQueue(trackId);
+    if (queue.stationid) radioStationId = queue.stationid;
+    return queue.tracks
+      .filter((track) => track.id &&
+        !playedTrackIds.has(track.id) &&
+        !NON_CATALOG_TITLE.test(track.title) &&
+        !UNOFFICIAL_MIX_TITLE.test(track.title));
   } catch (error) {
     console.warn('Autoplay: Failed.', error);
     return [];
@@ -903,17 +929,17 @@ async function fetchRelatedTracks(videoId, song) {
 }
 
 /* Kicks off a background queue lookup as soon as the current track starts. */
-function prefetchRelatedTracks(videoId, song) {
-  if (!videoId && !song?.artistName) return;
+function prefetchRelatedTracks(trackId) {
+  if (!trackId) return;
 
   const token = ++prefetchToken;
   isFetchingRelated = true;
 
-  fetchRelatedTracks(videoId, song)
+  fetchRelatedTracks(trackId)
     .then((tracks) => {
       // Ignore a response for a track the listener has already moved past.
       if (token !== prefetchToken) return;
-      relatedTrackCache = tracks.filter((track) => !playedVideoIds.has(track.videoId));
+      relatedTrackCache = tracks.filter((track) => !playedTrackIds.has(track.id));
       relatedTrackCursor = 0;
       prefetchUpcomingTrackArtwork();
       updateTransportButtonState();
@@ -923,19 +949,19 @@ function prefetchRelatedTracks(videoId, song) {
     });
 }
 
-/* Normalises a related track into the song shape the rest of the module uses
+/* Normalises a queue track into the song shape the rest of the module uses
    (startOnDemandSong and updateOnDemandMetadata both expect trackName/
    artistName/artworkUrl100, matching the iTunes catalog shape). */
 function relatedTrackToSong(track) {
   return {
     trackName: track.title || 'Unknown song',
     artistName: (track.artist || '').replace(/\s-\sTopic$/i, '').trim(),
-    collectionName: '',
+    collectionName: track.album || '',
     primaryGenreName: track.primaryGenreName || '',
-    artworkUrl100: track.artworkUrl100 || '',
-    trackTimeMillis: (parseVideoDuration(track.duration) || 0) * 1000,
-    youtubeVideoId: track.videoId,
-    youtubePlaylistId: track.playlistId || ''
+    artworkUrl100: track.thumbnail || '',
+    trackTimeMillis: (track.durationSeconds || parseDurationString(track.duration) || 0) * 1000,
+    jiosaavnId: track.id,
+    streamUrl: track.streamUrl || ''
   };
 }
 
@@ -963,7 +989,7 @@ function prefetchUpcomingTrackArtwork() {
     .forEach((track) => { void prefetchTrackArtwork(track); });
 }
 
-/* Called when a track ends. Plays the next prefetched YouTube Music queue item. */
+/* Called when a track ends. Plays the next prefetched queue item. */
 function advanceToSimilarSong() {
   if (!window.onDemandPlaybackActive) return;
 
@@ -974,7 +1000,7 @@ function advanceToSimilarSong() {
     return;
   }
 
-  // The prefetch has not landed yet (or returned no eligible audio). Retry briefly rather
+  // The prefetch has not landed yet (or returned no eligible tracks). Retry briefly rather
   // than leaving the listener at a silent dead end, then say so on screen.
   let attempts = 0;
   window.clearInterval(autoplayRetryTimer);
@@ -1003,45 +1029,45 @@ function advanceToSimilarSong() {
   }, 250);
 }
 
-/* Starts a track that came from the related list. It already has a resolved
-   videoId, so it skips the search round-trip that startOnDemandSong performs. */
+/* Starts a track that came from the queue list. It already has a resolved
+   stream, so it skips the search round-trip that startOnDemandSong performs. */
 async function playRelatedTrack(track) {
   const artworkPromise = prefetchTrackArtwork(track);
   const song = relatedTrackToSong(track);
   const requestId = ++songRequestId;
 
-  selectedDuration = Number(song.trackTimeMillis) / 1000 || 0;
+  selectedDuration = track.durationSeconds || parseDurationString(track.duration) || 0;
   onDemandQueue.push(song);
   onDemandQueueIndex = onDemandQueue.length - 1;
   updateTransportButtonState();
 
   resetScrub();
 
-  // A related track may be a poor match for the iframe, so keep the same
-  // candidate fallback the search path uses.
-  videoCandidates = [track.videoId];
-  videoCandidateIndex = 0;
+  // Keep the same candidate-fallback the search path uses, even though this
+  // track arrives with its stream already resolved.
+  trackCandidates = [{ id: track.id, streamUrl: track.streamUrl }].filter((entry) => entry.streamUrl);
+  trackCandidateIndex = 0;
+  rerresolvedTrackId = '';
 
   // Record the track before it loads, so a refresh mid-load still restores.
-  song.youtubePlaylistId = track.playlistId || '';
-  setCurrentOnDemandTrack(song, track.videoId);
+  setCurrentOnDemandTrack(song, track.id);
   persistCurrentOnDemandSession();
 
-  updateOnDemandMetadata(song, { videoId: track.videoId });
+  updateOnDemandMetadata(song, { id: track.id, title: track.title, artist: track.artist, album: track.album, thumbnail: track.thumbnail });
   void artworkPromise.then((artworkUrl) => {
-    if (!artworkUrl || currentOnDemandVideoId !== track.videoId) return;
+    if (!artworkUrl || currentOnDemandTrackId !== track.id) return;
     song.artworkUrl100 = artworkUrl;
-    setCurrentOnDemandTrack(song, track.videoId);
+    setCurrentOnDemandTrack(song, track.id);
     persistCurrentOnDemandSession();
-    updateOnDemandMetadata(song, { videoId: track.videoId });
+    updateOnDemandMetadata(song, { id: track.id, title: track.title, artist: track.artist, album: track.album, thumbnail: track.thumbnail });
   });
   prefetchUpcomingTrackArtwork();
-  await loadVideo(track.videoId, requestId);
+  await loadTrack(trackCandidates[0] || { id: track.id, streamUrl: track.streamUrl }, requestId);
   if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
   updatePlaybackProgress();
-  // Chain: fetch the generated next queue for this track immediately.
-  playedVideoIds.add(track.videoId);
-  prefetchRelatedTracks(track.videoId, song);
+  // Chain: fetch the continuation queue for this track immediately.
+  playedTrackIds.add(track.id);
+  prefetchRelatedTracks(track.id);
 }
 
 async function startOnDemandSong(song, { preserveQueue = false, openNowPlaying = true } = {}) {
@@ -1080,7 +1106,7 @@ async function startOnDemandSong(song, { preserveQueue = false, openNowPlaying =
     song.artworkUrl100 = artworkUrl;
     if (currentOnDemandSong === song) {
       persistCurrentOnDemandSession();
-      updateOnDemandMetadata(song, { videoId: currentOnDemandVideoId });
+      updateOnDemandMetadata(song, { id: currentOnDemandTrackId });
     }
   });
   const requestId = ++songRequestId;
@@ -1096,10 +1122,10 @@ async function startOnDemandSong(song, { preserveQueue = false, openNowPlaying =
   returnToLiveButton.hidden = false;
 
   // Reveal the mini player and paint the title/artist/artwork the instant the
-  // listener picks a track. The YouTube search + iframe load below can take
-  // several seconds; previously the docked player stayed hidden until audio
-  // actually started, so nothing appeared to happen on tap. The audio keeps
-  // loading behind the now-visible mini player.
+  // listener picks a track. The search + stream load below can take a moment;
+  // previously the docked player stayed hidden until audio actually started,
+  // so nothing appeared to happen on tap. The audio keeps loading behind the
+  // now-visible mini player.
   window.revealMiniPlayer?.();
   updateOnDemandMetadata(song, {});
 
@@ -1120,35 +1146,41 @@ async function startOnDemandSong(song, { preserveQueue = false, openNowPlaying =
     }
     if (requestId !== songRequestId) return;
 
-    // Warm the YouTube IFrame API in parallel with the search so the CDN script
-    // download overlaps the (now parallel) search round-trips instead of running
-    // after them. loadVideo() awaits the same memoized promise, and a failed
-    // warm-up is harmless here because loadYouTubeApi() re-arms on error/timeout
-    // and loadVideo retries it. Swallow the rejection to avoid an unhandled one.
-    void loadYouTubeApi().catch(() => {});
-
-    // History entries created by autoplay already have a resolved video ID.
-    // Reuse it when navigating back so we don't run a fresh title search (which
-    // can fail or select a different upload).
-    const video = song.youtubeVideoId
-      ? { videoId: song.youtubeVideoId, duration: '' }
-      : await findYouTubeSong(song);
+    // History entries created by autoplay already carry a resolved JioSaavn id
+    // and stream URL — reuse them so navigating back skips the search. Legacy
+    // rows that only hold an old YouTube video id intentionally fall through to
+    // a fresh JioSaavn search: this player has no YouTube sources left.
+    const track = song.jiosaavnId && song.streamUrl
+      ? {
+        id: song.jiosaavnId,
+        streamUrl: song.streamUrl,
+        durationSeconds: Number(song.trackTimeMillis) / 1000 || 0,
+        thumbnail: song.artworkUrl100,
+        title: song.trackName,
+        artist: song.artistName,
+        album: song.collectionName,
+        alternatives: []
+      }
+      : await findOnDemandSong(song);
     if (requestId !== songRequestId) return;
 
-    videoCandidates = [...new Set([video.videoId, ...(video.alternatives || [])])];
-    videoCandidateIndex = 0;
-    selectedDuration = parseVideoDuration(video.duration) || selectedDuration;
-    // Begin a radio mix for this selected track, not the source album playlist.
-    song.youtubePlaylistId = song.youtubeVideoId ? (song.youtubePlaylistId || '') : '';
-    song.youtubeVideoId = video.videoId;
-    setCurrentOnDemandTrack(song, video.videoId);
+    trackCandidates = [track, ...(track.alternatives || [])]
+      .filter((candidate) => candidate?.streamUrl);
+    trackCandidateIndex = 0;
+    rerresolvedTrackId = '';
+    selectedDuration = track.durationSeconds
+      || parseDurationString(track.duration)
+      || selectedDuration;
+    song.jiosaavnId = track.id;
+    song.streamUrl = track.streamUrl;
+    setCurrentOnDemandTrack(song, track.id);
     persistCurrentOnDemandSession();
-    updateOnDemandMetadata(song, video);
-    await loadVideo(video.videoId, requestId);
+    updateOnDemandMetadata(song, track);
+    await loadTrack(trackCandidates[0] || { id: track.id, streamUrl: track.streamUrl }, requestId);
     if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
     updatePlaybackProgress();
-    playedVideoIds.add(video.videoId);
-    prefetchRelatedTracks(video.videoId, song);
+    playedTrackIds.add(track.id);
+    prefetchRelatedTracks(track.id);
   } catch (error) {
     if (requestId !== songRequestId) return;
     console.error('Unable to start on-demand playback:', error);
@@ -1163,12 +1195,19 @@ async function startOnDemandSong(song, { preserveQueue = false, openNowPlaying =
 }
 
 function toggleOnDemandPlayback(shouldPlay) {
-  if (!youtubePlayerReady) return;
-  const isPlaying = youtubePlayer.getPlayerState() === window.YT.PlayerState.PLAYING;
+  if (!onDemandAudio.getAttribute('src')) return;
+  const isPlaying = !onDemandAudio.paused && !onDemandAudio.ended;
   if (shouldPlay === false || (shouldPlay !== true && isPlaying)) {
-    youtubePlayer.pauseVideo();
+    pendingShouldPlay = false;
+    onDemandAudio.pause();
   } else {
-    youtubePlayer.playVideo();
+    const playPromise = onDemandAudio.play();
+    if (playPromise) {
+      playPromise.catch((error) => {
+        logOnDemand('toggle play() rejected:', error?.name || error);
+        if (window.onDemandPlaybackActive) setOnDemandPlaying(false);
+      });
+    }
   }
 }
 
@@ -1190,77 +1229,80 @@ async function restoreOnDemandSession() {
   }
 
   const song = stored.song;
-  // Keep the session's navigation history across refreshes. Older saved
-  // sessions contain only the current song, so they still restore as a
-  // one-entry queue.
+  // Keep the session's navigation history across refreshes. Entries without a
+  // track name are dropped; entries missing a resolved stream re-search on tap.
   const savedQueue = Array.isArray(stored.queue)
-    ? stored.queue.filter((entry) => entry?.trackName && entry?.youtubeVideoId)
+    ? stored.queue.filter((entry) => entry?.trackName)
     : [];
   const savedIndex = Number.isInteger(stored.queueIndex) ? stored.queueIndex : -1;
   if (savedQueue.length && savedIndex >= 0 && savedIndex < savedQueue.length) {
     onDemandQueue = savedQueue;
     onDemandQueueIndex = savedIndex;
-    // The session song/video are authoritative for the currently loaded item.
-    onDemandQueue[onDemandQueueIndex] = { ...song, youtubeVideoId: stored.videoId };
+    // The session song/track are authoritative for the currently loaded item.
+    onDemandQueue[onDemandQueueIndex] = { ...song, jiosaavnId: stored.trackId };
   } else {
     onDemandQueue = [];
     onDemandQueueIndex = -1;
-    enqueueOnDemandSong({ ...song, youtubeVideoId: stored.videoId });
+    enqueueOnDemandSong({ ...song, jiosaavnId: stored.trackId });
   }
   // Enter the same on-demand state a fresh selection would, before any live
-  // data arrives, so the radio cannot paint over the restored song.
+  // radio UI can repaint itself over the restored track.
   window.onDemandPlaybackActive = true;
   updateNowPlayingSubtitle(true);
   window.setOnDemandAudioQuality?.(true);
   document.body.classList.add('on-demand-active');
   window.pauseLiveStreamForOnDemand?.();
   returnToLiveButton.hidden = false;
-  // Show the docked player at once with the restored track's metadata rather
-  // than waiting for the cued video to finish loading.
-  window.revealMiniPlayer?.();
-  onDemandModeLabel.textContent = 'LOADING';
-  onDemandStation.textContent = 'Ready to resume';
   onDemandPlayButton.disabled = false;
   onDemandMiniToggle.disabled = false;
-
-  const requestId = ++songRequestId;
+  onDemandPlayButton?.classList.add('is-loading');
+  onDemandMiniToggle?.classList.add('is-loading');
   selectedDuration = Number(song.trackTimeMillis) / 1000 || 0;
   updateTransportButtonState();
-  setCurrentOnDemandTrack(song, stored.videoId, stored.position || 0);
+  const requestId = ++songRequestId;
+  setCurrentOnDemandTrack(song, stored.trackId, stored.position || 0);
 
   try {
-    // Deliberately no showView() call here. The listener's view (Home, About or
-    // Now Playing) has already been restored by restoreActiveView(), and forcing
-    // this module back to Now Playing would yank them out of the page they were
-    // on. On-demand surfaces in the mini player, which is visible from every
-    // view, so restoring the track itself is enough.
-    if (requestId !== songRequestId) return;
+    // Resolve a stream URL: the session may hold one, but it can be stale, so
+    // fall back to a fresh server-side resolution when it is missing.
+    let streamUrl = String(song.streamUrl || '');
+    if (!streamUrl) {
+      const fresh = await resolveJioSaavnSong(stored.trackId);
+      streamUrl = fresh?.streamUrl || '';
+      if (streamUrl) {
+        song.streamUrl = streamUrl;
+        if (fresh.thumbnail && !song.artworkUrl100) song.artworkUrl100 = fresh.thumbnail;
+        persistCurrentOnDemandSession();
+      }
+    }
+    if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
+    if (!streamUrl) throw new Error('Song Not playable');
 
-    // A resolved videoId is stored, so load it without searching for it again.
-    videoCandidates = [stored.videoId];
-    videoCandidateIndex = 0;
-    updateOnDemandMetadata(song, { videoId: stored.videoId });
-    await loadVideo(stored.videoId, requestId, stored.position || 0, false);
-    logOnDemand('loadVideo() resolved; playerReady =', youtubePlayerReady,
-      'state =', youtubePlayerReady ? youtubePlayer.getPlayerState() : 'n/a');
+    trackCandidates = [{ id: stored.trackId, streamUrl }];
+    trackCandidateIndex = 0;
+    rerresolvedTrackId = '';
+    updateOnDemandMetadata(song, { id: stored.trackId, thumbnail: song.artworkUrl100 || '' });
+    await loadTrack(trackCandidates[0], requestId, stored.position || 0, false);
+    logOnDemand('loadTrack() resolved; src =', Boolean(onDemandAudio.getAttribute('src')),
+      'state =', onDemandAudio.paused ? 'paused' : 'playing');
     if (requestId !== songRequestId || !window.onDemandPlaybackActive) {
-      logOnDemand('ABORT after loadVideo: superseded or no longer on-demand');
+      logOnDemand('ABORT after loadTrack: superseded or no longer on-demand');
       return;
     }
 
     updatePlaybackProgress();
-    playedVideoIds.add(stored.videoId);
-    prefetchRelatedTracks(stored.videoId, song);
+    playedTrackIds.add(stored.trackId);
+    prefetchRelatedTracks(stored.trackId);
     // A restored session is always cued. The Play button resumes from the
     // saved position and keeps the restored queue available for navigation.
     setOnDemandPlaying(false);
   } catch (error) {
     console.error('Unable to restore on-demand playback:', error);
-    // The YouTube script is third-party, so one blocked or flaky load must not
-    // silently drop the listener back to the radio: they would come back to a
-    // different station and no sign their track ever existed. Stay in on-demand
-    // mode, keep the artwork/title/Back to Live already on screen, and let the
-    // transport retry instead. returnToLive() runs only on an explicit press.
+    // A failed restore must not silently drop the listener back to the radio:
+    // they would come back to a different station and no sign their track ever
+    // existed. Stay in on-demand mode, keep the artwork/title/Back to Live
+    // already on screen, and let the transport retry instead. returnToLive()
+    // runs only on an explicit press.
     onDemandModeLabel.textContent = 'RETRY';
     onDemandStation.textContent = error.message || 'Playback unavailable';
     onDemandPlayButton?.classList.add('is-loading');
@@ -1278,7 +1320,12 @@ function returnToLive() {
     return;
   }
   songRequestId += 1;
-  if (youtubePlayerReady) youtubePlayer.pauseVideo();
+  // Stop and release the stream so nothing keeps buffering in the background.
+  pendingShouldPlay = false;
+  pendingStartSeconds = -1;
+  onDemandAudio.pause();
+  onDemandAudio.removeAttribute('src');
+  onDemandAudio.load();
   resetScrub();
   // Cancel any in-flight related-tracks lookup so a late response cannot
   // restart on-demand playback after the listener has gone back to live.
@@ -1296,10 +1343,9 @@ function returnToLive() {
   updateNowPlayingSubtitle(false);
   window.setOnDemandAudioQuality?.(false);
   document.body.classList.remove('on-demand-active');
-  onDemandMount.hidden = true;
   onDemandArtwork.hidden = false;
-  onDemandArtwork.classList.remove('is-youtube-thumbnail');
-  onDemandMiniArtwork.classList.remove('is-youtube-thumbnail');
+  onDemandArtwork.classList.remove('is-wide-thumbnail');
+  onDemandMiniArtwork.classList.remove('is-wide-thumbnail');
   returnToLiveButton.hidden = true;
   onDemandModeLabel.textContent = 'LIVE';
   onDemandStation.textContent = 'Thaalam 24x7';
@@ -1317,33 +1363,30 @@ function returnToLive() {
 window.startOnDemandSong = startOnDemandSong;
 window.toggleOnDemandPlayback = toggleOnDemandPlayback;
 window.returnToLive = returnToLive;
+// Legacy liked rows keep a `youtubeVideoId`; expose it so their rating key
+// stays `youtube:ID` while such a row is playing. JioSaavn picks have none.
 window.getCurrentOnDemandSong = () => currentOnDemandSong
-  ? { ...currentOnDemandSong, youtubeVideoId: currentOnDemandVideoId || currentOnDemandSong.youtubeVideoId || '' }
+  ? { ...currentOnDemandSong, youtubeVideoId: currentOnDemandSong.youtubeVideoId || '' }
   : null;
 
-/* Mute/unmute the on-demand YouTube player. No-op until the player is ready,
-   but the persisted state is re-applied in onReady so a reloaded session keeps
-   the listener's chosen volume. */
-window.setYouTubeMuted = (muted) => {
-  if (!youtubePlayerReady || !youtubePlayer) return;
+/* Mute/unmute the on-demand audio element. */
+window.setOnDemandMuted = (muted) => {
   try {
-    if (muted) youtubePlayer.mute();
-    else youtubePlayer.unMute();
-  } catch (_) { /* player not controllable yet */ }
+    onDemandAudio.muted = Boolean(muted);
+  } catch (_) { /* element not controllable yet */ }
 };
 
-/* Set the on-demand player's volume LEVEL (0-100). No-op until ready. */
-window.setYouTubeVolume = (level) => {
-  if (!youtubePlayerReady || !youtubePlayer) return;
+/* Set the on-demand player's volume LEVEL (0-100). */
+window.setOnDemandVolume = (level) => {
   try {
-    youtubePlayer.setVolume(Math.max(0, Math.min(100, Math.round(Number(level) || 0))));
-  } catch (_) { /* player not controllable yet */ }
+    onDemandAudio.volume = Math.max(0, Math.min(100, Math.round(Number(level) || 0))) / 100;
+  } catch (_) { /* element not controllable yet */ }
 };
 
 if (onDemandArtwork) {
   onDemandArtwork.setAttribute('role', 'button');
   onDemandArtwork.tabIndex = 0;
-  onDemandArtwork.setAttribute('aria-label', 'Find and play this song on YouTube');
+  onDemandArtwork.setAttribute('aria-label', 'Find and play this song on demand');
   const searchCurrentSong = () => {
     const liveSong = window.currentNowPlayingSong;
     const song = window.onDemandPlaybackActive && currentOnDemandSong
@@ -1365,9 +1408,10 @@ if (onDemandArtwork) {
 }
 window.getOnDemandTrackClock = () => {
   if (!window.onDemandPlaybackActive) return null;
+  const hasSource = Boolean(onDemandAudio.getAttribute('src'));
   return {
-    elapsed: youtubePlayerReady ? youtubePlayer.getCurrentTime() || 0 : 0,
-    duration: youtubePlayerReady ? youtubePlayer.getDuration() || selectedDuration : selectedDuration
+    elapsed: hasSource ? onDemandAudio.currentTime || 0 : 0,
+    duration: hasSource ? onDemandAudio.duration || selectedDuration : selectedDuration
   };
 };
 
@@ -1394,3 +1438,14 @@ if (document.readyState === 'loading') {
 } else {
   void restoreOnDemandSession();
 }
+
+
+
+
+
+
+
+
+
+
+

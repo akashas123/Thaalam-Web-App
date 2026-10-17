@@ -1,0 +1,35 @@
+q="ed sheeran" -> total 25 | unique songs 15 | unique thumbs 18 | status 200
+    Shape of You | Ed Sheeran
+    Shape of You | Ed Sheeran
+    Shape of You (Stormzy Remix) | Ed Sheeran
+    Perfect | Ed Sheeran
+    Sapphire | Ed Sheeran
+    Sapphire | Ed Sheeran
+q="taylor swift" -> total 25 | unique songs 13 | unique thumbs 16 | status 200
+    Delicate | Taylor Swift
+    The Fate of Ophelia | Taylor Swift
+    Love Story | Taylor Swift
+    The Fate of Ophelia | Taylor Swift
+    The Fate of Ophelia | Taylor Swift
+    The Fate of Ophelia | Taylor Swift
+q="the weeknd" -> total 25 | unique songs 15 | unique thumbs 15 | status 200
+    Starboy | The Weeknd
+    Starboy | The Weeknd
+    Blinding Lights | The Weeknd
+    Blinding Lights | The Weeknd
+    Blinding Lights | The Weeknd
+    São Paulo | The Weeknd, Anitta
+q="billboard hot 100" -> total 25 | unique songs 25 | unique thumbs 20 | status 200
+    Tonight You Belong To Me | Patience & Prudence
+    Whatever Will Be Will Be (Que Sera Sera) | Doris Day
+    Love Me Tender | Elvis Presley
+    Jamaica Farewell | Harry Belafonte
+    The Theme From 'A Summer Place' | Percy Faith, His Orchestra
+    Club Hit 100 Billboard | Putaliscious
+q="trending english songs" -> total 25 | unique songs 25 | unique thumbs 23 | status 200
+    Heat Waves | Glass Animals
+    Trending | TrendBeats
+    Arcade | Duncan Laurence
+    ily (i love you baby) | Surf Mesa
+    Trending | Jimmie A. Forrester
+    Kali Kali Zulfon Ke Phande Na Dalo | ZeeRhymes

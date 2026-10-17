@@ -417,7 +417,7 @@ function getStoredVolume() {
   return DEFAULT_VOLUME;
 }
 
-// Shared with youtube-player.js so the on-demand player starts at the same
+// Shared with ondemand-player.js so the on-demand player starts at the same
 // stored/default level as the live radio.
 window.getStoredVolumeLevel = getStoredVolume;
 
@@ -436,12 +436,13 @@ function updateVolumeVisual() {
 
 /* Push a 0-100 level to both audio sources and the slider, then refresh the
    icon so hitting zero flips it to the muted animation. The radio takes 0-1;
-   the YouTube player takes 0-100 via the bridge exposed in youtube-player.js. */
+   the on-demand <audio> element takes 0-100 via the bridge exposed in
+   ondemand-player.js. */
 function applyVolumeLevel(level, { persist = false } = {}) {
   const clamped = Math.max(0, Math.min(100, Math.round(Number(level) || 0)));
   currentVolumeLevel = clamped;
   if (radio) radio.volume = clamped / 100;
-  if (typeof window.setYouTubeVolume === 'function') window.setYouTubeVolume(clamped);
+  if (typeof window.setOnDemandVolume === 'function') window.setOnDemandVolume(clamped);
   if (miniVolumeSlider && Number(miniVolumeSlider.value) !== clamped) {
     miniVolumeSlider.value = String(clamped);
   }
@@ -456,8 +457,8 @@ function applyVolumeLevel(level, { persist = false } = {}) {
 function applyMuteState(muted) {
   // Live radio element.
   if (radio) radio.muted = muted;
-  // On-demand YouTube player (exposed by youtube-player.js).
-  if (typeof window.setYouTubeMuted === 'function') window.setYouTubeMuted(muted);
+  // On-demand <audio> element (exposed by ondemand-player.js).
+  if (typeof window.setOnDemandMuted === 'function') window.setOnDemandMuted(muted);
   updateVolumeVisual();
 }
 

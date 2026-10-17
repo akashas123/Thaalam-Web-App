@@ -897,7 +897,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
     transition: transform 0.25s ease;
   }
 
-  .mini-player-art img.is-youtube-thumbnail {
+  .mini-player-art img.is-wide-thumbnail {
     transform: scale(1.35);
   }
 
@@ -2049,28 +2049,10 @@ body.view-rises-from-mini.view-now-playing .player-view {
   position: relative;
 }
 
-.on-demand-player-mount {
-  position: absolute;
-  inset: 0;
-  z-index: 4;
-  background: #000;
-  /* The album artwork masks the player, so its controls must not be clickable. */
-  pointer-events: none;
-}
-
-.on-demand-player-frame,
-.on-demand-player-mount iframe {
-  width: 100%;
-  height: 100%;
-  border: 0;
-}
-
 [class~="album-art-card"] img {
   width: 100%;
   height: 100%;
 
-  /* Sit above the on-demand YouTube iframe so the album art masks the video
-     player while the audio stream keeps playing underneath. */
   position: relative;
   z-index: 5;
 
@@ -2086,7 +2068,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
   -webkit-user-select: none;
 }
 
-[class~="album-art-card"] img.is-youtube-thumbnail {
+[class~="album-art-card"] img.is-wide-thumbnail {
   transform: scale(1.35);
 }
 

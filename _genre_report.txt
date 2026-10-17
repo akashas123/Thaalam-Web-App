@@ -1,0 +1,20 @@
+international  q="english songs" ->  8/21 cards | unique ids 8 | art 8 | stream 8 | 320 YES
+      Shape of You | Ed Sheeran
+      Shape of You (Stormzy Remix) | Ed Sheeran
+      Attention | Charlie Puth
+      Starboy | The Weeknd
+hindi          q="hindi" -> 19/21 cards | unique ids 19 | art 19 | stream 19 | 320 YES
+      Casa Tupka Anthemo | Yo Yo Honey Singh
+      Gehra Hua (From "Dhurandhar") | Shashwat Sachdev, Arijit Singh
+      Gehra Hua | Irshad Kamil, Arijit Singh, Sh
+      Shree Hanuman Chalisa | Hariharan, Lalit Sen, Chander,
+malayalam      q="malayalam" -> 19/21 cards | unique ids 19 | art 19 | stream 19 | 320 YES
+      KALYANI (Remix) | ARJN, KDS, FIFTY4, Shreya Ghos
+      KALYANI | ARJN, KDS, FIFTY4, ronn
+      Periyavane (From "Khalifa") | Jakes Bejoy, Vijay Yesudas, Sa
+      Badass | Anirudh Ravichander, Sri Krish
+tamil          q="tamil" -> 21/21 cards | unique ids 21 | art 21 | stream 21 | 320 YES
+      Radhimaa (From "Think Indie") | Sai Abhyankkar, Nargis Teji, A
+      Pavazha Malli (From "Think Indie") | Vivek, Sai Abhyankkar, Shruti 
+      Ala Bolelo (From "Jailer 2") | Anirudh Ravichander, Arunraja 
+      One Sun One Moon (From "Jailer 2") | Anirudh Ravichander, Super Sub

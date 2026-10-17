@@ -33,14 +33,14 @@ Until the `DB` binding is configured, the API returns a setup error and ratings
 continue to work locally in that browser. Google access tokens last for a limited
 time; after expiry, sign in again to resume syncing.
 
-On-demand search and autoplay use YouTube Music's undocumented web endpoints through same-origin routes. Search returns public video IDs; playback uses YouTube's embedded IFrame player. Autoplay reads YouTube Music's generated next queue and keeps only Topic-style audio tracks. These endpoints avoid a project-owned YouTube Data API key and its daily search quota, but are unofficial and can change without notice.
+On-demand search, stream resolution, and autoplay use JioSaavn's undocumented web API through same-origin routes (`/api/jiosaavn-search`, `/api/jiosaavn-song`, `/api/jiosaavn-autoplay`). The API blocks browser CORS, so all calls are proxied server-side; song media URLs arrive DES-ECB encrypted (key `38346591`) and are decrypted in plain JS before being returned. Playback streams the direct CDN audio through an HTML5 `<audio>` element (the CDN answers Range requests, so seeking works). Autoplay queues the rest of the song's album followed by the primary artist's top songs, and a failed stream falls back to the next search result before asking the server for a fresh URL. These endpoints are undocumented and can change without notice.
 
 ## Cloudflare Pages
 
-For Git integration or a Wrangler deployment, Cloudflare Pages discovers the files in `functions/api/` and serves `/api/youtube-search`, `/api/youtube-autoplay`, and `/api/ratings`.
+For Git integration or a Wrangler deployment, Cloudflare Pages discovers the files in `functions/api/` and serves `/api/jiosaavn-search`, `/api/jiosaavn-song`, `/api/jiosaavn-autoplay`, and `/api/ratings`.
 
-For dashboard drag-and-drop Direct Upload, include the root `_worker.js` file with the static assets. It handles `/api/youtube-search`, `/api/youtube-autoplay`, and `/api/ratings`, then forwards all other requests to Pages static assets. Cloudflare supports `_worker.js` with Direct Upload; it does not compile a `/functions` directory in drag-and-drop uploads.
+For dashboard drag-and-drop Direct Upload, include the root `_worker.js` file with the static assets. It handles `/api/jiosaavn-search`, `/api/jiosaavn-song`, `/api/jiosaavn-autoplay`, and `/api/ratings`, then forwards all other requests to Pages static assets. Cloudflare supports `_worker.js` with Direct Upload; it does not compile a `/functions` directory in drag-and-drop uploads.
 
 ## Local development
 
-Run `npm run dev`. The Vite middleware in `vite.config.mjs` exposes the same `/api/youtube-search` route on the local origin, so the browser uses the same player flow at `http://localhost:5173` and in production.
+Run `npm run dev`. The Vite middleware in `vite.config.mjs` exposes the same `/api/jiosaavn-*` routes on the local origin, so the browser uses the same player flow at `http://localhost:5173` and in production.

@@ -1,13 +1,19 @@
 import { defineConfig } from 'vite';
-import { handleYouTubeMusicNext, handleYouTubeMusicSearch } from './youtube-music-search.mjs';
+import { handleJioSaavnAutoplay, handleJioSaavnSearch, handleJioSaavnSong } from './jiosaavn-search.mjs';
 
 export default defineConfig({
   plugins: [{
-    name: 'local-youtube-music-search',
+    name: 'local-jiosaavn',
     configureServer(server) {
       server.middlewares.use(async (request, response, next) => {
         const pathname = request.url?.split('?')[0];
-        if (pathname !== '/api/youtube-search' && pathname !== '/api/youtube-autoplay') {
+        const handlers = {
+          '/api/jiosaavn-search': handleJioSaavnSearch,
+          '/api/jiosaavn-autoplay': handleJioSaavnAutoplay,
+          '/api/jiosaavn-song': handleJioSaavnSong
+        };
+        const handler = handlers[pathname];
+        if (!handler) {
           next();
           return;
         }
@@ -17,9 +23,6 @@ export default defineConfig({
           return;
         }
         const url = new URL(request.url, 'http://localhost:5173');
-        const handler = pathname === '/api/youtube-autoplay'
-          ? handleYouTubeMusicNext
-          : handleYouTubeMusicSearch;
         const result = await handler(new Request(url));
         response.statusCode = result.status;
         result.headers.forEach((value, key) => response.setHeader(key, value));
