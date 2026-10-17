@@ -247,7 +247,8 @@ function updateTrackTime() {
     return;
   }
 
-  // On-demand playback owns the elapsed/duration readout (see youtube-player.js).
+  // On-demand playback owns the elapsed/duration readout (see
+  // ondemand-player.js).
   if (window.onDemandPlaybackActive) {
     return;
   }
@@ -707,7 +708,7 @@ async function fetchLyrics(nowPlayingData = null) {
         return;
       }
 
-      // On-demand metadata comes from the selected YouTube track.
+      // On-demand metadata comes from the selected catalogue track.
       lyricsLookupResult = '';
       updateLyrics(data);
       const lrclibLyrics = await fetchLrclibLyrics(song);
@@ -918,7 +919,7 @@ function setStreamPlaybackState(
       // the clock at its last value until the next now-playing snapshot lands
       // (updateLyrics re-syncs both trackElapsedSeconds and the sync time).
       // Ticking from the pre-pause position would show a time that is not
-      // audible. On-demand playback keeps its own clock in youtube-player.js.
+      // audible. On-demand playback keeps its own clock in ondemand-player.js.
       trackElapsedSyncTime = window.onDemandPlaybackActive
         ? performance.now() / 1000
         : 0;

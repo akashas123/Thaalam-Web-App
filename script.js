@@ -417,7 +417,7 @@ function getStoredVolume() {
   return DEFAULT_VOLUME;
 }
 
-// Shared with youtube-player.js so the on-demand player starts at the same
+// Shared with ondemand-player.js so the on-demand player starts at the same
 // stored/default level as the live radio.
 window.getStoredVolumeLevel = getStoredVolume;
 
@@ -436,12 +436,13 @@ function updateVolumeVisual() {
 
 /* Push a 0-100 level to both audio sources and the slider, then refresh the
    icon so hitting zero flips it to the muted animation. The radio takes 0-1;
-   the YouTube player takes 0-100 via the bridge exposed in youtube-player.js. */
+   the on-demand <audio> element takes 0-100 via the bridge exposed in
+   ondemand-player.js. */
 function applyVolumeLevel(level, { persist = false } = {}) {
   const clamped = Math.max(0, Math.min(100, Math.round(Number(level) || 0)));
   currentVolumeLevel = clamped;
   if (radio) radio.volume = clamped / 100;
-  if (typeof window.setYouTubeVolume === 'function') window.setYouTubeVolume(clamped);
+  if (typeof window.setOnDemandVolume === 'function') window.setOnDemandVolume(clamped);
   if (miniVolumeSlider && Number(miniVolumeSlider.value) !== clamped) {
     miniVolumeSlider.value = String(clamped);
   }
@@ -456,8 +457,8 @@ function applyVolumeLevel(level, { persist = false } = {}) {
 function applyMuteState(muted) {
   // Live radio element.
   if (radio) radio.muted = muted;
-  // On-demand YouTube player (exposed by youtube-player.js).
-  if (typeof window.setYouTubeMuted === 'function') window.setYouTubeMuted(muted);
+  // On-demand <audio> element (exposed by ondemand-player.js).
+  if (typeof window.setOnDemandMuted === 'function') window.setOnDemandMuted(muted);
   updateVolumeVisual();
 }
 
@@ -974,9 +975,9 @@ function updateAlbumArt(artworkUrl) {
 
   if (!artworkUrl) {
     lastArtwork = '';
-    albumArtImage.src = 'album-placeholder.svg?v=2';
+    albumArtImage.src = 'album-placeholder.svg?v=3';
     albumArtImage.style.opacity = '1';
-    if (miniPlayerArt) miniPlayerArt.src = 'album-placeholder.svg?v=2';
+    if (miniPlayerArt) miniPlayerArt.src = 'album-placeholder.svg?v=3';
     return;
   }
   lastArtwork = artworkUrl;
@@ -993,9 +994,9 @@ function updateAlbumArt(artworkUrl) {
   };
   image.onerror = () => {
     if (requestId !== artworkRequestId) return;
-    albumArtImage.src = 'album-placeholder.svg?v=2';
+    albumArtImage.src = 'album-placeholder.svg?v=3';
     albumArtImage.style.opacity = '1';
-    if (miniPlayerArt) miniPlayerArt.src = 'album-placeholder.svg?v=2';
+    if (miniPlayerArt) miniPlayerArt.src = 'album-placeholder.svg?v=3';
   };
   image.src = artworkUrl;
   updateAlbumColors(artworkUrl, requestId);
@@ -1083,12 +1084,12 @@ window.restoreLiveRadioUi = restoreLiveRadioUi;
 
 document.addEventListener('DOMContentLoaded', () => {
   if (radio) radio.preload = 'none';
-  if (albumArtImage) albumArtImage.src = 'album-placeholder.svg?v=2';
+  if (albumArtImage) albumArtImage.src = 'album-placeholder.svg?v=3';
 
   const favicon = document.createElement('link');
   favicon.rel = 'icon';
   favicon.type = 'image/png';
-  favicon.href = 'icon-512.png?v=3';
+  favicon.href = 'icon-512.png?v=4';
   document.head.prepend(favicon);
 
   const albumBackground = document.createElement('div');
@@ -1144,7 +1145,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js')
+    navigator.serviceWorker.register('./sw.js?v=215')
       .then((registration) => {
         // Poll for a newer worker so deployed versions reach open tabs without
         // the user having to close every tab + hard-refresh twice.

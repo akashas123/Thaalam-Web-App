@@ -1,0 +1,527 @@
+/* JioSaavn on-demand backend.
+   Proxies JioSaavn's internal web API (it blocks browser CORS), decrypts the
+   DES-ECB wrapped media URLs, and returns one stable song shape to the client:
+     { id, title, artist, album, duration, durationSeconds, thumbnail,
+       streamUrl, permalink }
+   The endpoints are undocumented and can change without notice. */
+
+const UPSTREAM_API_URL = 'https://www.jiosaavn.com/api.php';
+const UPSTREAM_REQUEST_HEADERS = {
+  'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  accept: 'application/json, text/plain, */*'
+};
+const SONG_ID_PATTERN = /^[A-Za-z0-9_-]{4,32}$/;
+
+/* ------------------------------------------------------------------ *
+ * DES-ECB decryption (key 38346591) for encrypted_media_url.
+ * Implemented in plain JS because neither Cloudflare Workers nor the
+ * Vite dev server expose DES through their crypto APIs.
+ * ------------------------------------------------------------------ */
+const DES_PC1 = [57,49,41,33,25,17,9,1,58,50,42,34,26,18,10,2,59,51,43,35,27,19,11,3,60,52,44,36,63,55,47,39,31,23,15,7,62,54,46,38,30,22,14,6,61,53,45,37,29,21,13,5,28,20,12,4];
+const DES_PC2 = [14,17,11,24,1,5,3,28,15,6,21,10,23,19,12,4,26,8,16,7,27,20,13,2,41,52,31,37,47,55,30,40,51,45,33,48,44,49,39,56,34,53,46,42,50,36,29,32];
+const DES_SHIFTS = [1,1,2,2,2,2,2,2,1,2,2,2,2,2,2,1];
+const DES_IP = [58,50,42,34,26,18,10,2,60,52,44,36,28,20,12,4,62,54,46,38,30,22,14,6,64,56,48,40,32,24,16,8,57,49,41,33,25,17,9,1,59,51,43,35,27,19,11,3,61,53,45,37,29,21,13,5,63,55,47,39,31,23,15,7];
+const DES_FP = [40,8,48,16,56,24,64,32,39,7,47,15,55,23,63,31,38,6,46,14,54,22,62,30,37,5,45,13,53,21,61,29,36,4,44,12,52,20,60,28,35,3,43,11,51,19,59,27,34,2,42,10,50,18,58,26,33,1,41,9,49,17,57,25];
+const DES_E = [32,1,2,3,4,5,4,5,6,7,8,9,8,9,10,11,12,13,12,13,14,15,16,17,16,17,18,19,20,21,20,21,22,23,24,25,24,25,26,27,28,29,28,29,30,31,32,1];
+const DES_P = [16,7,20,21,29,12,28,17,1,15,23,26,5,18,31,10,2,8,24,14,32,27,3,9,19,13,30,6,22,11,4,25];
+const DES_SBOX = [
+  [[14,4,13,1,2,15,11,8,3,10,6,12,5,9,0,7],[0,15,7,4,14,2,13,1,10,6,12,11,9,5,3,8],[4,1,14,8,13,6,2,11,15,12,9,7,3,10,5,0],[15,12,8,2,4,9,1,7,5,11,3,14,10,0,6,13]],
+  [[15,1,8,14,6,11,3,4,9,7,2,13,12,0,5,10],[3,13,4,7,15,2,8,14,12,0,1,10,6,9,11,5],[0,14,7,11,10,4,13,1,5,8,12,6,9,3,2,15],[13,8,10,1,3,15,4,2,11,6,7,12,0,5,14,9]],
+  [[10,0,9,14,6,3,15,5,1,13,12,7,11,4,2,8],[13,7,0,9,3,4,6,10,2,8,5,14,12,11,15,1],[13,6,4,9,8,15,3,0,11,1,2,12,5,10,14,7],[1,10,13,0,6,9,8,7,4,15,14,3,11,5,2,12]],
+  [[7,13,14,3,0,6,9,10,1,2,8,5,11,12,4,15],[13,8,11,5,6,15,0,3,4,7,2,12,1,10,14,9],[10,6,9,0,12,11,7,13,15,1,3,14,5,2,8,4],[3,15,0,6,10,1,13,8,9,4,5,11,12,7,2,14]],
+  [[2,12,4,1,7,10,11,6,8,5,3,15,13,0,14,9],[14,11,2,12,4,7,13,1,5,0,15,10,3,9,8,6],[4,2,1,11,10,13,7,8,15,9,12,5,6,3,0,14],[11,8,12,7,1,14,2,13,6,15,0,9,10,4,5,3]],
+  [[12,1,10,15,9,2,6,8,0,13,3,4,14,7,5,11],[10,15,4,2,7,12,9,5,6,1,13,14,0,11,3,8],[9,14,15,5,2,8,12,3,7,0,4,10,1,13,11,6],[4,3,2,12,9,5,15,10,11,14,1,7,6,0,8,13]],
+  [[4,11,2,14,15,0,8,13,3,12,9,7,5,10,6,1],[13,0,11,7,4,9,1,10,14,3,5,12,2,15,8,6],[1,4,11,13,12,3,7,14,10,15,6,8,0,5,9,2],[6,11,13,8,1,4,10,7,9,5,0,15,14,2,3,12]],
+  [[13,2,8,4,6,15,11,1,10,9,3,14,5,0,12,7],[1,15,13,8,10,3,7,4,12,5,6,11,0,14,9,2],[7,11,4,1,9,12,14,2,0,6,10,13,15,3,5,8],[2,1,14,7,4,10,8,13,15,12,9,0,3,5,6,11]]
+];
+
+function desBitsOf(bytes) {
+  const bits = [];
+  for (const byte of bytes) {
+    for (let bit = 7; bit >= 0; bit -= 1) bits.push((byte >> bit) & 1);
+  }
+  return bits;
+}
+
+function desBytesOf(bits) {
+  const out = [];
+  for (let i = 0; i < bits.length; i += 8) {
+    let byte = 0;
+    for (let j = 0; j < 8; j += 1) byte = (byte << 1) | bits[i + j];
+    out.push(byte);
+  }
+  return out;
+}
+
+function desPermute(bits, table) {
+  return table.map((index) => bits[index - 1]);
+}
+
+function desRotateLeft(bits, count) {
+  return bits.slice(count).concat(bits.slice(0, count));
+}
+
+function desKeyRounds(keyBytes) {
+  const key = desPermute(desBitsOf(keyBytes), DES_PC1);
+  let left = key.slice(0, 28);
+  let right = key.slice(28, 56);
+  const rounds = [];
+  for (let round = 0; round < 16; round += 1) {
+    left = desRotateLeft(left, DES_SHIFTS[round]);
+    right = desRotateLeft(right, DES_SHIFTS[round]);
+    rounds.push(desPermute(left.concat(right), DES_PC2));
+  }
+  return rounds;
+}
+
+function desProcessBlock(block, rounds) {
+  let bits = desPermute(desBitsOf(block), DES_IP);
+  let left = bits.slice(0, 32);
+  let right = bits.slice(32, 64);
+  for (let round = 0; round < 16; round += 1) {
+    const expanded = desPermute(right, DES_E).map((bit, index) => bit ^ rounds[round][index]);
+    const substituted = [];
+    for (let box = 0; box < 8; box += 1) {
+      const chunk = expanded.slice(box * 6, box * 6 + 6);
+      const row = (chunk[0] << 1) | chunk[5];
+      const col = (chunk[1] << 3) | (chunk[2] << 2) | (chunk[3] << 1) | chunk[4];
+      const value = DES_SBOX[box][row][col];
+      substituted.push((value >> 3) & 1, (value >> 2) & 1, (value >> 1) & 1, value & 1);
+    }
+    const permuted = desPermute(substituted, DES_P);
+    const nextRight = left.map((bit, index) => bit ^ permuted[index]);
+    left = right;
+    right = nextRight;
+  }
+  return Uint8Array.from(desBytesOf(desPermute(right.concat(left), DES_FP)));
+}
+
+/* Decrypts a JioSaavn encrypted_media_url and pulls the absolute URL out of
+   the plaintext (which can carry trailing PKCS padding). Uses only web APIs
+   (atob/String.fromCharCode) so the same code runs in Workers and Node. */
+function decryptMediaUrl(encrypted) {
+  if (typeof encrypted !== 'string' || !encrypted) return '';
+  let data;
+  try {
+    const normalized = encrypted.replace(/-/g, '+').replace(/_/g, '/');
+    const binary = globalThis.atob(normalized);
+    data = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  } catch {
+    return '';
+  }
+  if (!data.length || data.length % 8 !== 0) return '';
+  const key = Uint8Array.from('38346591', (char) => char.charCodeAt(0));
+  // ECB decryption is the Feistel cipher with the key schedule reversed.
+  const rounds = desKeyRounds(key).reverse();
+  const out = [];
+  for (let offset = 0; offset < data.length; offset += 8) {
+    out.push(...desProcessBlock(data.slice(offset, offset + 8), rounds));
+  }
+  let plaintext = '';
+  for (let offset = 0; offset < out.length; offset += 4096) {
+    plaintext += String.fromCharCode(...out.slice(offset, offset + 4096));
+  }
+  // PKCS padding bytes (all below 0x20) trail the URL; strip them off.
+  return selectMediaUrl(plaintext);
+}
+
+/* Picks the playback URL out of the decrypted plaintext.
+   JioSaavn hands back a single CDN URL pinned to a low rendition, e.g.
+   https://aac.saavncdn.com/450/<hash>_96.mp4, but the CDN keeps every quality
+   under the same hash, so bump the bitrate to 320 kbps for high-quality
+   playback instead of the 96 kbps stream. Only the trailing _<bitrate> right
+   before the media extension is rewritten, leaving the hash itself untouched.
+ */
+function selectMediaUrl(plaintext) {
+  if (!plaintext) return '';
+
+  const match = plaintext.match(/https?:\/\/[^\s"'\\;]+/);
+  if (!match) return '';
+
+  // PKCS padding bytes (all below 0x20) trail the URL; strip them off.
+  const url = match[0].replace(/[\u0000-\u001f]+$/g, '');
+  if (!url) return '';
+
+  // Upgrade _96/_128/_160/... to _320; an already-320 URL is returned as-is.
+  return url.replace(/_(\d{2,3})(\.(?:mp4|m4a|mp3))$/i, (whole, bitrate, ext) =>
+    Number(bitrate) >= 320 ? whole : `_320${ext}`);
+}
+
+
+/* JioSaavn answers api.php with plain JSON (or a marker-prefixed blob), never
+   reliably parseable as-is. */
+function parseProviderPayload(text) {
+  const objectIndex = text.indexOf('{');
+  const arrayIndex = text.indexOf('[');
+  const start = objectIndex === -1 ? arrayIndex
+    : arrayIndex === -1 ? objectIndex
+      : Math.min(objectIndex, arrayIndex);
+  if (start === -1) return null;
+  try {
+    return JSON.parse(text.slice(start));
+  } catch {
+    return null;
+  }
+}
+
+async function callProviderApi(call, params, ctx = 'web6dot0') {
+  const url = new URL(UPSTREAM_API_URL);
+  url.searchParams.set('__call', call);
+  for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
+  url.searchParams.set('_format', 'json');
+  url.searchParams.set('_marker', '0');
+  url.searchParams.set('ctx', ctx);
+  url.searchParams.set('api_version', '4');
+  const response = await fetch(url, { headers: UPSTREAM_REQUEST_HEADERS });
+  if (!response.ok) return null;
+  return parseProviderPayload(await response.text());
+}
+
+/* Titles occasionally arrive with markup/entities; keep plain text only. */
+function sanitizeText(value) {
+  return String(value || '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;|&apos;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function formatDuration(totalSeconds) {
+  const seconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  if (!seconds) return '';
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const rest = seconds % 60;
+  const pad = (value) => String(value).padStart(2, '0');
+  return hours
+    ? `${hours}:${pad(minutes)}:${pad(rest)}`
+    : `${minutes}:${pad(rest)}`;
+}
+
+/* Normalises any JioSaavn album-shaped payload (album search results) into
+   the single client-facing shape. Album ids are numeric, so they use their
+   own pattern. */
+const ALBUM_ID_PATTERN = /^[0-9]{4,16}$/;
+
+function mapProviderAlbum(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const id = String(raw.id || raw.album_id || '');
+  const title = sanitizeText(raw.title || raw.album_name);
+  if (!ALBUM_ID_PATTERN.test(id) || !title) return null;
+
+  const info = raw.more_info || {};
+  const artistNames = (info.artistMap?.primary_artists || [])
+    .map((artist) => sanitizeText(artist.name))
+    .filter(Boolean);
+  const artist = artistNames.join(', ') ||
+    sanitizeText(raw.subtitle) ||
+    sanitizeText(info.music) ||
+    sanitizeText(raw.album_artist);
+  const songCount = Math.max(0, Number(info.song_count) || 0);
+  const year = String(raw.year || '').trim();
+  const language = String(raw.language || '').trim();
+  const thumbnail = String(raw.image || raw.album_image || '')
+    .replace(/^http:/, 'https:')
+    .replace(/150x150|50x50/, '500x500');
+
+  return {
+    id,
+    title,
+    artist,
+    year,
+    language,
+    songCount,
+    thumbnail,
+    permalink: String(raw.perma_url || raw.album_link || '')
+  };
+}
+
+/* GET /api/music-album?id=<albumId>
+   Album tracklist via content.getAlbumDetails (list[] holds song payloads
+   shaped exactly like search results, so they map through mapProviderSong). */
+/* Normalises any JioSaavn song-shaped payload (search results, song details,
+   album lists, artist top songs) into the single client-facing shape. */
+function mapProviderSong(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const id = String(raw.id || '');
+  const title = sanitizeText(raw.title);
+  if (!SONG_ID_PATTERN.test(id) || !title) return null;
+
+  const info = raw.more_info || {};
+  const subtitle = sanitizeText(raw.subtitle);
+  const separator = subtitle.lastIndexOf(' - ');
+  const album = sanitizeText(info.album) ||
+    (separator !== -1 ? subtitle.slice(separator + 3) : '');
+  const artistNames = (info.artistMap?.primary_artists || [])
+    .map((artist) => sanitizeText(artist.name))
+    .filter(Boolean);
+  const artistIds = (info.artistMap?.primary_artists || [])
+    .map((artist) => String(artist.id || ''))
+    .filter(Boolean);
+  const artist = artistNames.join(', ') ||
+    (separator !== -1 ? subtitle.slice(0, separator) : subtitle);
+
+  const durationSeconds = Math.max(0, Math.floor(Number(info.duration) || 0));
+  const thumbnail = String(raw.image || '')
+    .replace(/^http:/, 'https:')
+    .replace(/150x150|50x50/, '500x500');
+  const streamUrl = decryptMediaUrl(info.encrypted_media_url);
+
+  return {
+    id,
+    title,
+    artist,
+    artistIds,
+    album,
+    albumId: String(info.album_id || ''),
+    duration: formatDuration(durationSeconds),
+    durationSeconds,
+    thumbnail,
+    streamUrl,
+    permalink: String(raw.perma_url || '')
+  };
+}
+
+function providerErrorResponse(message, status = 502) {
+  return Response.json({ error: message }, { status });
+}
+
+function isValidSongId(id) {
+  return typeof id === 'string' && SONG_ID_PATTERN.test(id);
+}
+
+function readSongId(url) {
+  return (url.searchParams.get('id') || '').trim();
+}
+
+/* GET /api/music-search?q=<query>&limit=<1-25>
+   Returns ranked-by-relevance catalogue songs with resolved stream URLs,
+   plus matching albums (title, artist, artwork) when the query names one.
+   Pages through JioSaavn song result pages (p=1, 2, ...) so the caller
+   actually receives up to `limit` playable songs instead of one thin page;
+   albums come from a single search.getAlbumResults page (no pagination).
+   Shape: { results: [...songs], albums: [...albums] }. */
+export async function handleSearch(request) {
+  const url = new URL(request.url);
+  const query = (url.searchParams.get('q') || '').trim().replace(/\s+/g, ' ');
+  if (!query || query.length > 200) {
+    return Response.json({ error: 'Enter a song title to search.' }, { status: 400 });
+  }
+  const limit = Math.max(1, Math.min(25, Number(url.searchParams.get('limit')) || 10));
+
+  const seen = new Set();
+  const results = [];
+  const seenAlbums = new Set();
+  const albums = [];
+  try {
+    const songPages = (async () => {
+      // JioSaavn rarely honours n=25 on page one; walk pages until the grid is
+      // full (or pages run dry) so genre tabs fill all 21 cards.
+      for (let page = 1; page <= 5 && results.length < limit; page += 1) {
+        const payload = await callProviderApi('search.getResults', { q: query, n: String(Math.max(limit, 10)), p: String(page) });
+        const raw = payload?.data?.results || payload?.results || [];
+        const items = Array.isArray(raw) ? raw : [];
+        if (!items.length) break;
+        for (const item of items) {
+          const mapped = mapProviderSong(item);
+          // A song without a decryptable stream URL is unplayable; skip it rather
+          // than letting the client rank it and fail at play time.
+          if (mapped && mapped.streamUrl && !seen.has(mapped.id)) {
+            seen.add(mapped.id);
+            results.push(mapped);
+            if (results.length >= limit) break;
+          }
+        }
+        // Last page: fewer fresh songs than requested means nothing more to fetch.
+        if (items.length < 10) break;
+      }
+    })();
+    const albumPage = (async () => {
+      try {
+        const payload = await callProviderApi('search.getAlbumResults', { q: query, p: '1', n: '10' });
+        const raw = payload?.data?.results || payload?.results || [];
+        const items = Array.isArray(raw) ? raw : [];
+        for (const item of items) {
+          const mapped = mapProviderAlbum(item);
+          if (mapped && !seenAlbums.has(mapped.id)) {
+            seenAlbums.add(mapped.id);
+            albums.push(mapped);
+            if (albums.length >= 6) break;
+          }
+        }
+      } catch {
+        // Albums are additive — a failed album lookup must never fail search.
+      }
+    })();
+    await Promise.all([songPages, albumPage]);
+  } catch {
+    return providerErrorResponse('JioSaavn search is temporarily unavailable.');
+  }
+  if (!results.length && !albums.length) {
+    return providerErrorResponse('JioSaavn search is temporarily unavailable.');
+  }
+
+  return Response.json({ results: results.slice(0, 25), albums: albums.slice(0, 6) }, {
+    headers: { 'Cache-Control': 'public, max-age=300, s-maxage=600' }
+  });
+}
+
+/* GET /api/music-album?id=<albumId>
+   Album details + tracklist. content.getAlbumDetails returns the header
+   (title/artist/artwork) plus list[] of song payloads shaped like search
+   results, so tracks map through mapProviderSong with stream URLs.
+   Shape: { album, songs: [...] }. */
+export async function handleAlbum(request) {
+  const url = new URL(request.url);
+  const id = (url.searchParams.get('id') || '').trim();
+  if (!ALBUM_ID_PATTERN.test(id)) {
+    return Response.json({ error: 'A valid album is required.' }, { status: 400 });
+  }
+
+  let payload = null;
+  try {
+    payload = await callProviderApi('content.getAlbumDetails', { albumid: id });
+  } catch {
+    return providerErrorResponse('JioSaavn album details are temporarily unavailable.');
+  }
+  if (!payload) {
+    return providerErrorResponse('JioSaavn album details are temporarily unavailable.');
+  }
+  const album = mapProviderAlbum(payload);
+  const list = Array.isArray(payload.list) ? payload.list : [];
+  const seen = new Set();
+  const songs = [];
+  for (const item of list) {
+    const mapped = mapProviderSong(item);
+    if (mapped && mapped.streamUrl && !seen.has(mapped.id)) {
+      seen.add(mapped.id);
+      songs.push({
+        trackId: mapped.id,
+        trackName: mapped.title,
+        artistName: mapped.artist,
+        collectionName: mapped.album || album?.title || '',
+        artworkUrl100: mapped.thumbnail || album?.thumbnail || '',
+        trackViewUrl: mapped.permalink,
+        streamUrl: mapped.streamUrl,
+        trackTimeMillis: mapped.durationSeconds ? mapped.durationSeconds * 1000 : 0,
+        providerTrackId: mapped.id
+      });
+      if (songs.length >= 50) break;
+    }
+  }
+  if (!album && !songs.length) {
+    return providerErrorResponse('JioSaavn album details are temporarily unavailable.');
+  }
+  return Response.json({ album: album || null, songs }, {
+    headers: { 'Cache-Control': 'public, max-age=600, s-maxage=600' }
+  });
+}
+
+/* GET /api/music-song?id=<songId>
+   Fresh stream resolution for a known song (used to recover expired URLs). */
+export async function handleSong(request) {
+  const url = new URL(request.url);
+  const id = readSongId(url);
+  if (!isValidSongId(id)) {
+    return Response.json({ error: 'A valid song is required.' }, { status: 400 });
+  }
+
+  let payload = null;
+  try {
+    payload = await callProviderApi('song.getDetails', { cc: '1', pids: id });
+  } catch {
+    return providerErrorResponse('JioSaavn song details are temporarily unavailable.');
+  }
+  const song = mapProviderSong(payload?.songs?.[0]);
+  if (!song || !song.streamUrl) {
+    return providerErrorResponse('JioSaavn song details are temporarily unavailable.');
+  }
+  return Response.json({ results: [song] }, {
+    headers: { 'Cache-Control': 'public, max-age=600, s-maxage=600' }
+  });
+}
+
+/* JioSaavn song radio: create a station for the given song, then return the
+   next batch of similar songs from that station. JioSaavn's web-radio endpoint
+   is stateless (repeated getSong calls return the same first batch), so each
+   autoplay request builds a fresh station around the requested song. The
+   client de-duplicates against playedTrackIds, so chained stations keep the
+   radio moving without repeating the session's played tracks. */
+async function fetchProviderRadioSongs(id, k) {
+  let stationid = null;
+  try {
+    const stationPayload = await callProviderApi(
+      'webradio.createEntityStation',
+      { entity_type: 'queue', entity_id: JSON.stringify([id]) },
+      'android'
+    );
+    stationid = (stationPayload && stationPayload.stationid) || null;
+  } catch {
+    stationid = null;
+  }
+  if (!stationid) return { stationid: null, songs: [] };
+
+  let songPayload = null;
+  try {
+    songPayload = await callProviderApi(
+      'webradio.getSong',
+      { stationid, k: String(k) },
+      'android'
+    );
+  } catch {
+    songPayload = null;
+  }
+  if (!songPayload) return { stationid, songs: [] };
+
+  /* web-radio responses are shaped as either
+     { stationid, song } (single) or
+     { stationid, 0: { song }, 1: { song }, ... } (multiple). */
+  const collectSongs = (obj, out, seen) => {
+    if (!obj || typeof obj !== 'object') return;
+    const visit = (song) => {
+      if (!song || !song.id) return;
+      const mapped = mapProviderSong(song);
+      if (mapped && mapped.streamUrl && !seen.has(mapped.id)) {
+        seen.add(mapped.id);
+        out.push(mapped);
+      }
+    };
+    if (obj.song) visit(obj.song);
+    for (const key of Object.keys(obj)) {
+      if (key === 'stationid' || key === 'error') continue;
+      const value = obj[key];
+      if (value && typeof value === 'object' && value.song) visit(value.song);
+    }
+  };
+
+  const songs = [];
+  const seen = new Set();
+  collectSongs(songPayload, songs, seen);
+  return { stationid, songs: songs.slice(0, k) };
+}
+
+/* GET /api/music-autoplay?id=<songId>&k=<1-50>
+   Build each continuation from a fresh provider radio station. The client
+   requests another station around each played track, so the queue can keep
+   growing while it filters out the current artist and album. */
+export async function handleAutoplay(request) {
+  const url = new URL(request.url);
+  const id = readSongId(url);
+  if (!isValidSongId(id)) {
+    return Response.json({ error: 'A valid song is required for autoplay.' }, { status: 400 });
+  }
+  const k = Math.max(1, Math.min(50, Number(url.searchParams.get('k')) || 30));
+
+  const radio = await fetchProviderRadioSongs(id, k);
+  return Response.json(
+    { results: radio.songs, stationid: radio.stationid || undefined },
+    { headers: { 'Cache-Control': 'no-store' } }
+  );
+}
+
+

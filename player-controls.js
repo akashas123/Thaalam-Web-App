@@ -43,15 +43,11 @@ const onDemandLikeButton =
 let sleepTimerDeadline = 0;
 let sleepTimerInterval = 0;
 let sleepTimerDuration = 0;
-let itunesRequestId = 0;
 let currentRatingTrackKey = '';
 let feedbackTimeout = 0;
 
 let likeFeedbackShown = false;
 let dislikeFeedbackShown = false;
-
-const itunesTrackCache =
-  new Map();
 
 const prefetchingSongInfo =
   new Set();
@@ -1019,7 +1015,12 @@ async function prefetchSongInfo(song) {
       .replace(/[^a-z0-9]/g, '') || '';
 
     const requestedTitle = normalize(song.title);
-    const requestedArtist = normalize(song.artist.split(',')[0]);
+    const requestedArtist = normalize((() => {
+      const sections = (song.artist || '').split(/,|&|\bfeat(?:uring)?\b|\bwith\b/i).map((part) => part.trim()).filter(Boolean);
+      let primary = sections[0] || '';
+      if (primary === 'Background Vocalist' && sections.length > 1) primary = sections[1];
+      return primary;
+    })());
     const exactTitleMatches = musicData.results?.filter((track) =>
       normalize(track.trackName) === requestedTitle
     ) || [];
@@ -1105,116 +1106,30 @@ if (window.latestNowPlayingData?.now_playing?.song) {
   updateStoredRatingForCurrentSong(null);
 }
 
-function searchItunes(
-  term
-) {
-  const cacheKey =
-    term.toLowerCase();
-
-  if (
-    itunesTrackCache.has(
-      cacheKey
-    )
-  ) {
-    return Promise.resolve(
-      itunesTrackCache.get(
-        cacheKey
-      )
-    );
-  }
-
-  return new Promise(
-    (
-      resolve,
-      reject
-    ) => {
-      const callbackName =
-        `thaalamItunesCallback${++itunesRequestId}`;
-
-      const query =
-        new URLSearchParams({
-          term,
-          entity: 'song',
-          limit: '15',
-          callback: callbackName
-        });
-
-      const script =
-        document.createElement(
-          'script'
-        );
-
-      let finished =
-        false;
-
-      const timeout =
-        window.setTimeout(
-          () => {
-            finish(
-              new Error(
-                'iTunes lookup timed out.'
-              )
-            );
-          },
-          8000
-        );
-
-      function finish(
-        error,
-        data
-      ) {
-        if (finished) {
-          return;
-        }
-
-        finished = true;
-
-        window.clearTimeout(
-          timeout
-        );
-
-        delete window[
-          callbackName
-        ];
-
-        script.remove();
-
-        if (error) {
-          reject(error);
-          return;
-        }
-
-        itunesTrackCache.set(
-          cacheKey,
-          data
-        );
-
-        resolve(data);
+async function searchItunes(term, limit = 15) {
+  const url = new URL('/api/music-search', window.location.origin);
+  url.searchParams.set('q', term);
+  url.searchParams.set('limit', String(Math.min(25, limit)));
+  const response = await fetch(url, { cache: 'no-store' });
+  if (!response.ok) throw new Error(`The song search failed (${response.status}).`);
+  const data = await response.json();
+  return {
+    results: (data?.results || []).map((song) => {
+      const sections = (song.artist || '').split(/,|&|\bfeat(?:uring)?\b|\bwith\b/i).map((part) => part.trim()).filter(Boolean);
+      let primaryArtist = sections[0] || '';
+      if (primaryArtist === 'Background Vocalist' && sections.length > 1) {
+        primaryArtist = sections[1];
       }
-
-      window[callbackName] =
-        (data) =>
-          finish(
-            null,
-            data
-          );
-
-      script.onerror =
-        () =>
-          finish(
-            new Error(
-              'iTunes track details are unavailable.'
-            )
-          );
-
-      script.src =
-        `https://itunes.apple.com/search?${query}`;
-
-      document.head.appendChild(
-        script
-      );
-    }
-  );
+      return {
+        trackName: song.title,
+        artistName: primaryArtist,
+        collectionName: song.album,
+        artworkUrl100: song.thumbnail,
+        trackTimeMillis: song.durationSeconds ? Math.round(song.durationSeconds * 1000) : 0,
+        providerTrackId: song.id
+      };
+    })
+  };
 }
 
 window.lookupAlbumArtwork = async function (title, artist) {

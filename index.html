@@ -11,11 +11,9 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=167">
-  <link rel="icon" type="image/png" href="icon-512.png?v=3">
-  <link rel="apple-touch-icon" href="icon-192.png?v=3">
-  <!-- Warm the iTunes DNS/TLS handshake ahead of the first search request. -->
-  <link rel="preconnect" href="https://itunes.apple.com">
+  <link rel="stylesheet" href="style.css?v=169">
+  <link rel="icon" type="image/png" href="icon-512.png?v=4">
+  <link rel="apple-touch-icon" href="icon-192.png?v=4">
 
   <style>
     .tagline[class~="marquee"] span {
@@ -234,9 +232,10 @@
         </form>
       </header>
       <div class="genre-tabs" role="tablist" aria-label="Music genres">
-        <button class="genre-tab is-selected" type="button" role="tab" aria-selected="true" aria-controls="genreResults" tabindex="0" data-genre="pop">Pop</button>
-        <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="rock">Rock</button>
-        <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="hip-hop">Hip-Hop</button>
+        <button class="genre-tab is-selected" type="button" role="tab" aria-selected="true" aria-controls="genreResults" tabindex="0" data-genre="international">International</button>
+        <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="hindi">Hindi</button>
+        <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="malayalam">Malayalam</button>
+        <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="tamil">Tamil</button>
         <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="you-like">Favourites</button>
       </div>
       <div class="genre-results" id="genreResults" role="tabpanel" aria-live="polite">
@@ -320,7 +319,7 @@
     <div class="mini-player-center">
       <div class="mini-player-now">
         <button class="mini-player-art" type="button" data-view="now-playing" aria-label="Open Now Playing">
-          <img id="miniPlayerArt" src="album-placeholder.svg?v=2" alt="">
+          <img id="miniPlayerArt" src="album-placeholder.svg?v=3" alt="">
         </button>
         <div class="mini-player-meta">
           <button class="mini-player-track" type="button" data-view="now-playing" aria-label="Open Now Playing">
@@ -360,7 +359,7 @@
     <form method="dialog">
       <button class="dialog-close" aria-label="Close install prompt">&times;</button>
     </form>
-    <img class="install-app-mark" src="icon-192.png?v=3" alt="">
+    <img class="install-app-mark" src="icon-192.png?v=4" alt="">
     <p class="site-page-eyebrow">Non-Stop 24x7</p>
     <h2 id="installAppTitle">Install Thaalam 24x7</h2>
     <p class="install-app-description" id="installAppDescription"></p>
@@ -381,10 +380,7 @@
   <div class="app player-view" id="playerView">
 
     <div class="album-art-card">
-      <img id="albumArtImg" src="album-placeholder.svg?v=2" alt="Album artwork placeholder">
-      <div class="on-demand-player-mount" id="onDemandPlayerMount" hidden>
-        <div class="on-demand-player-frame" id="onDemandPlayerFrame"></div>
-      </div>
+      <img id="albumArtImg" src="album-placeholder.svg?v=3" alt="Album artwork placeholder">
     </div>
 
     <div class="station-row" id="stationRow">
@@ -604,7 +600,7 @@
     </form>
     <h2 id="catalogSongInfoTitle">Song information</h2>
     <div class="catalog-song-layout">
-      <img class="song-info-art" id="catalogSongInfoArt" src="album-placeholder.svg?v=2" alt="Album artwork">
+      <img class="song-info-art" id="catalogSongInfoArt" src="album-placeholder.svg?v=3" alt="Album artwork">
       <div class="catalog-song-copy">
         <p class="song-info-track" id="catalogSongInfoTrack"></p>
         <p class="song-info-details" id="catalogSongInfoDetails"></p>
@@ -734,13 +730,13 @@
   </aside>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
-  <script src="script.js?v=52"></script>
-  <script src="youtube-player.js?v=61"></script>
-  <script src="audio-recovery.js?v=2"></script>
-  <script src="marquee.js?v=3"></script>
-  <script src="media-metadata.js?v=7"></script>
-  <script src="player-controls.js?v=35"></script>
-  <script src="lyrics.js?v=36"></script>
+  <script src="script.js?v=54"></script>
+  <script src="ondemand-player.js?v=2"></script>
+  <script src="audio-recovery.js?v=3"></script>
+  <script src="marquee.js?v=4"></script>
+  <script src="media-metadata.js?v=8"></script>
+  <script src="player-controls.js?v=36"></script>
+  <script src="lyrics.js?v=38"></script>
   <script src="/google-auth-config.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script>
@@ -848,10 +844,14 @@
     const catalogSongInfoDetails = document.getElementById('catalogSongInfoDetails');
     const catalogArtistPortrait = document.getElementById('catalogArtistPortrait');
     const catalogArtistBackground = document.getElementById('catalogArtistBackground');
+    // Genre tabs query the JioSaavn search proxy with the language/region term
+    // on the right. The value doubles as the chart's cache key check and the
+    // search string sent to /api/music-search.
     const genreFeedIds = {
-      pop: 14,
-      rock: 21,
-      'hip-hop': 18
+      international: ['ed sheeran', 'taylor swift', 'the weeknd'],
+      hindi: ['hindi'],
+      malayalam: ['malayalam'],
+      tamil: ['tamil']
     };
     const genreResultCache = new Map();
     // Recently fetched suggestions keyed by normalized term. Repeat searches
@@ -869,7 +869,7 @@
     // Genre tabs use Apple's genre charts. Versioned separately from the old
     // text-search and filtered result caches.
     // v9 keeps only the first 21 chart tracks (7 columns x 3 rows).
-    const GENRE_CACHE_KEY = 'thaalam-itunes-genre-cache-v9';
+    const GENRE_CACHE_KEY = 'thaalam-jiosaavn-genre-cache-v1';
     const GENRE_CHART_LIMIT = 21;
     // One small ranked search request feeds both the suggestion dropdown and
     // the results grid: fetch 20, rank by relevance, show the top 20.
@@ -891,7 +891,7 @@
         }, { rootMargin: '1200px 0px' })
       : null;
     const ACTIVE_VIEW_KEY = 'thaalam-active-view-v1';
-    let activeGenre = 'pop';
+    let activeGenre = 'international';
     let activeSearchTerm = '';
     let suggestionRequestId = 0;
     let suggestionTimer = 0;
@@ -1116,7 +1116,7 @@
         ? song.artworkUrl100
             .replace(/^http:/, 'https:')
             .replace(/\d+x\d+bb\./, '600x600bb.')
-        : 'album-placeholder.svg?v=2';
+          : 'album-placeholder.svg?v=3';
       const releaseDate = song.releaseDate
         ? new Date(song.releaseDate).toLocaleDateString()
         : 'N/A';
@@ -1129,7 +1129,7 @@
       catalogSongInfoArt.src = artworkUrl;
       catalogSongInfoArt.alt = `${song.trackName || 'Song'} album artwork`;
       catalogSongInfoArt.onerror = () => {
-        catalogSongInfoArt.src = 'album-placeholder.svg?v=2';
+        catalogSongInfoArt.src = 'album-placeholder.svg?v=3';
       };
       catalogSongInfoTrack.textContent = song.trackName || 'Unknown song';
       catalogSongInfoArtist.textContent = artistName;
@@ -1397,7 +1397,7 @@
           artwork.classList.add('is-loaded');
         }, { once: true });
         artwork.addEventListener('error', () => {
-          artwork.src = 'album-placeholder.svg?v=2';
+          artwork.src = 'album-placeholder.svg?v=3';
         }, { once: true });
         const artworkUrl = song.artworkUrl100
           ? song.artworkUrl100
@@ -1436,7 +1436,7 @@
           if (catalogArtworkObserver) catalogArtworkObserver.observe(artwork);
           else loadCatalogArtwork(artwork);
         } else {
-          artwork.src = 'album-placeholder.svg?v=2';
+          artwork.src = 'album-placeholder.svg?v=3';
         }
       });
       genreResults.dataset.renderKey = renderKey;
@@ -1485,116 +1485,132 @@
       genreResults.appendChild(placeholders);
     }
 
-    // The iTunes search API sends `Access-Control-Allow-Origin: *`, so a plain
-    // fetch beats JSONP: no script compile step, HTTP/2 multiplexing on the
-    // preconnected socket, and a real timeout. JSONP stays as an automatic
-    // fallback for environments where the fetch is blocked.
-    function searchGenre(term, requestId, limit = 200, callbackPrefix = 'thaalamGenreCallback') {
-      const query = new URLSearchParams({
-        term,
-        entity: 'song',
-        media: 'music',
-        limit: String(limit)
-      });
-      const timeoutSignal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout
-        ? AbortSignal.timeout(12000)
-        : undefined;
-      return fetch(`https://itunes.apple.com/search?${query}`, { signal: timeoutSignal })
+    // JioSaavn search is proxied through /api/music-search (same-origin),
+    // since JioSaavn blocks browser CORS on its internal API.
+    function searchGenre(term, requestId, limit = 200) {
+      const url = new URL('/api/music-search', window.location.origin);
+      url.searchParams.set('q', term);
+      url.searchParams.set('limit', String(Math.min(25, limit)));
+      return fetch(url, { cache: 'no-store' })
         .then((response) => {
           if (!response.ok) throw new Error(`The song search failed (${response.status}).`);
           return response.json();
         })
-        .then((data) => data?.results || [])
-        .catch(() => searchGenreJsonp(term, requestId, limit, callbackPrefix));
-    }
-
-    function searchGenreJsonp(term, requestId, limit = 200, callbackPrefix = 'thaalamGenreCallback') {
-      return new Promise((resolve, reject) => {
-        const callbackName = `${callbackPrefix}${requestId}`;
-        const query = new URLSearchParams({
-          term,
-          entity: 'song',
-          media: 'music',
-          limit: String(limit),
-          callback: callbackName
+        .then((data) => {
+          const results = data?.results || [];
+          return results.map((song) => ({
+            trackId: song.id,
+            trackName: song.title,
+            artistName: song.artist,
+            collectionName: song.album,
+            artworkUrl100: song.thumbnail,
+            trackViewUrl: song.permalink,
+            streamUrl: song.streamUrl,
+            trackTimeMillis: song.durationSeconds ? song.durationSeconds * 1000 : 0,
+            providerTrackId: song.id
+          }));
         });
-        const request = document.createElement('script');
-        let settled = false;
-        const timeout = window.setTimeout(() => {
-          finish(new Error('The song search timed out.'));
-        }, 12000);
-
-        function finish(error, data) {
-          if (settled) return;
-          settled = true;
-          window.clearTimeout(timeout);
-          delete window[callbackName];
-          request.remove();
-          if (error) reject(error);
-          else resolve(data?.results || []);
-        }
-
-        window[callbackName] = (data) => finish(null, data);
-        request.onerror = () => finish(new Error('The song search is unavailable.'));
-        request.src = `https://itunes.apple.com/search?${query}`;
-        document.head.appendChild(request);
-      });
     }
 
     function searchGenreChart(genreId, requestId, limit = GENRE_CHART_LIMIT) {
-      return new Promise((resolve, reject) => {
-        const callbackName = `thaalamGenreChartCallback${requestId}`;
-        const request = document.createElement('script');
-        let settled = false;
-        const timeout = window.setTimeout(() => {
-          finish(new Error('The song chart timed out.'));
-        }, 12000);
-
-        function finish(error, data) {
-          if (settled) return;
-          settled = true;
-          window.clearTimeout(timeout);
-          delete window[callbackName];
-          request.remove();
-          if (error) {
-            reject(error);
-            return;
+      // A feed may combine several queries (the International tab mixes a few
+      // big English artists). Fan the queries out, then merge by rank so the
+      // grid mixes artists instead of showing one query's block first.
+      const queries = Array.isArray(genreId) ? genreId : [genreId];
+      const label = Array.isArray(genreId) ? genreId.join(' / ') : genreId;
+      const perQuery = Math.min(25, limit + 4);
+      return Promise.all(queries.map((query) => {
+        const url = new URL('/api/music-search', window.location.origin);
+        url.searchParams.set('q', query);
+        // Ask for a few rows above the grid size: JioSaavn returns many
+        // alternate uploads of the same hit (e.g. the same song eight times),
+        // so the headroom lets de-duplication still fill every chart card.
+        url.searchParams.set('limit', String(perQuery));
+        return fetch(url, { cache: 'no-store' })
+          .then((response) => {
+            if (!response.ok) throw new Error(`The song chart failed (${response.status}).`);
+            return response.json();
+          })
+          .then((data) => data?.results || [])
+          .catch(() => []);
+      }))
+        .then((pages) => {
+          if (!pages.some((page) => page.length)) {
+            throw new Error('The song chart failed (empty).');
           }
-          const entries = data?.feed?.entry || [];
-          resolve(entries.map((entry) => ({
-            trackName: entry.title?.label || '',
-            artistName: entry['im:artist']?.label || '',
-            collectionName: entry['im:collection']?.['im:name']?.label || '',
-            artworkUrl100: entry['im:image']?.at(-1)?.label || '',
-            trackViewUrl: entry.link?.attributes?.href || '',
-            trackId: entry.id?.attributes?.['im:id'] || '',
-            primaryGenreName: entry.category?.attributes?.term || ''
-          })));
-        }
-
-        window[callbackName] = (data) => finish(null, data);
-        request.onerror = () => finish(new Error('The song chart is unavailable.'));
-        request.src = `https://itunes.apple.com/us/rss/topsongs/limit=${limit}/genre=${genreId}/callback=${callbackName}/json`;
-        document.head.appendChild(request);
-      });
+          const seen = new Set();
+          const songs = [];
+          // Round-robin by rank: take each query's #1, then each #2, and so
+          // on, so one artist can't crowd out the rest of the grid.
+          for (let rank = 0; songs.length < limit; rank += 1) {
+            let advanced = false;
+            for (const page of pages) {
+              const song = page[rank];
+              if (!song) continue;
+              advanced = true;
+              const mapped = {
+                trackId: song.id,
+                trackName: song.title,
+                artistName: song.artist,
+                collectionName: song.album,
+                artworkUrl100: song.thumbnail,
+                trackViewUrl: song.permalink,
+                streamUrl: song.streamUrl,
+                trackTimeMillis: song.durationSeconds ? song.durationSeconds * 1000 : 0,
+                primaryGenreName: label
+              };
+              // Collapse re-uploads of one recording (same title + artist) so the
+              // grid shows distinct songs instead of the same tile repeated.
+              const key = `${mapped.trackName || ''}|${mapped.artistName || ''}`
+                .toLowerCase()
+                .replace(/\s+/g, ' ')
+                .trim();
+              if (seen.has(key)) continue;
+              seen.add(key);
+              songs.push(mapped);
+              if (songs.length >= limit) break;
+            }
+            if (!advanced) break;
+          }
+          return songs;
+        });
     }
 
-    // iTunes pads result pages with loosely related songs. Keep only songs
-    // whose title/artist share words with the query — preferring matches that
-    // contain every query word — so the grid shows the exact songs searched
-    // for, not the long tail. Falls back gracefully when nothing matches all
-    // words (e.g. colloquial or misspelled queries).
+    // Prefer official title matches over "(From "Album")" album references:
+    // a query matching the song's core title (parentheticals stripped) ranks
+    // first; songs matching only via the "(From ...)" suffix or album name are
+    // the fallback. Falls back gracefully when nothing matches.
     function rankSearchResults(songs, term, limit) {
       if (!Array.isArray(songs)) return [];
       const words = term.trim().toLowerCase().split(/\s+/).filter(Boolean);
       if (!words.length) return songs.slice(0, limit);
-      const sharedWordCount = (song) => {
-        const haystack = `${song.trackName || ''} ${song.artistName || ''}`.toLowerCase();
-        return words.filter((word) => haystack.includes(word)).length;
-      };
-      const exact = songs.filter((song) => sharedWordCount(song) === words.length);
-      const partial = songs.filter((song) => sharedWordCount(song) > 0);
-      return (exact.length ? exact : partial.length ? partial : songs).slice(0, limit);
+      // Core title = track name without "(...)" / "[...]" suffixes like
+      // '(From "Chandrolsavam")' or '(Chandrolsavam)' — those name the album,
+      // not the song itself.
+      const coreTitleOf = (song) => (song.trackName || '')
+        .replace(/\([^)]*\)/g, ' ')
+        .replace(/\[[^\]]*\]/g, ' ')
+        .toLowerCase();
+      const fullHayOf = (song) =>
+        `${song.trackName || ''} ${song.artistName || ''} ${song.collectionName || ''}`.toLowerCase();
+      const sharedWordCount = (haystack) => words.filter((word) => haystack.includes(word)).length;
+      const official = [];
+      const fromVersion = [];
+      const partial = [];
+      songs.forEach((song) => {
+        const coreHay = `${coreTitleOf(song)} ${(song.artistName || '').toLowerCase()}`;
+        if (sharedWordCount(coreHay) === words.length) official.push(song);
+        else if (sharedWordCount(fullHayOf(song)) === words.length) fromVersion.push(song);
+        else if (sharedWordCount(fullHayOf(song)) > 0) partial.push(song);
+      });
+      const ranked = official.length
+        ? [...official, ...fromVersion, ...partial]
+        : fromVersion.length
+          ? [...fromVersion, ...partial]
+          : partial.length
+            ? partial
+            : songs;
+      return ranked.slice(0, limit);
     }
 
     async function loadCatalog(cacheKey, term, genreId = null) {
@@ -1620,8 +1636,8 @@
         Date.now() - storedEntry.savedAt < GENRE_CACHE_TTL &&
         Array.isArray(storedEntry.songs)
       ) {
-        // Only the three RSS chart tabs trim to 21 — searches rank down to the
-        // top 20 and Favourites keep their full lists.
+        // Only the four language/region chart tabs trim to 21 — searches rank
+        // down to the top 20 and Favourites keep their full lists.
         const isChartCache = Object.prototype.hasOwnProperty.call(genreFeedIds, cacheKey);
         const storedSongs = isChartCache
           ? storedEntry.songs.slice(0, GENRE_CHART_LIMIT)
@@ -1638,7 +1654,7 @@
       try {
         // Search terms reuse the suggestion pipeline's single per-term request
         // (fetchCatalogSuggestions dedupes by term), so Enter never triggers a
-        // second, redundant iTunes round trip. Chart tabs keep their RSS feed.
+        // second, redundant round trip. Chart tabs keep their own search query.
         const songs = genreId
           ? await searchGenreChart(genreId, requestId)
           : await fetchCatalogSuggestions(term);
@@ -1725,7 +1741,7 @@
       catalogSearchInput.value = '';
       catalogClearButton.hidden = true;
       hideCatalogSuggestions();
-      loadGenre('pop');
+      loadGenre('international');
       catalogSearchInput.focus();
     }
 
@@ -1784,7 +1800,7 @@
       if (cached) return Promise.resolve(cached);
       const pending = suggestionRequests.get(key);
       if (pending) return pending;
-      const request = searchGenre(term, ++suggestionRequestId, SEARCH_FETCH_LIMIT, 'thaalamSuggestionCallback')
+      const request = searchGenre(term, ++suggestionRequestId, SEARCH_FETCH_LIMIT)
         .then((songs) => {
           cacheSuggestions(term, songs);
           return songs;
@@ -1833,7 +1849,7 @@
       const term = catalogSearchInput.value.trim();
       if (term.length < 2) {
         hideCatalogSuggestions();
-        if (!term && activeGenre.startsWith('search:')) loadGenre('pop');
+        if (!term && activeGenre.startsWith('search:')) loadGenre('international');
         return;
       }
 
