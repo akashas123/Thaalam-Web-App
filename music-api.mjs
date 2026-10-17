@@ -555,7 +555,8 @@ async function fetchProviderRadioSongs(id, k) {
   try {
     songPayload = await callProviderApi(
       'webradio.getSong',
-      { stationid, k: String(k) },
+      // Limit one Worker request's stream decryption work.
+      { stationid, k: String(Math.min(k, 12)) },
       'android'
     );
   } catch {
@@ -586,6 +587,88 @@ async function fetchProviderRadioSongs(id, k) {
   return { stationid, songs: songs.slice(0, k) };
 }
 
+/* Recover autoplay when JioSaavn's radio station is empty or repeats the
+   current artist. Search within the current song's language and allow one
+   playable result per artist so each track can seed another continuation. */
+async function fetchAutoplayFallbackSongs(id, limit, radioTracks = []) {
+  let current = null;
+  try {
+    const details = await callProviderApi('song.getDetails', { cc: '1', pids: id });
+    current = details?.songs?.[0] || null;
+  } catch {
+  }
+
+  const info = current?.more_info || {};
+  const currentLanguage = String(current?.language || '').trim().toLowerCase();
+  const currentAlbumId = String(info.album_id || '');
+  const currentArtistIds = new Set((info.artistMap?.primary_artists || [])
+    .map((artist) => String(artist.id || '')).filter(Boolean));
+  const currentArtistNames = new Set((info.artistMap?.primary_artists || [])
+    .map((artist) => sanitizeText(artist.name).toLowerCase()).filter(Boolean));
+  const title = sanitizeText(current?.title);
+  const artist = sanitizeText(current?.subtitle).split(' - ')[0];
+  const languageQuery = currentLanguage && currentLanguage !== 'english'
+    ? `${currentLanguage} hit songs`
+    : 'english hit songs';
+  const queries = [title ? `${title} similar songs` : '',
+    artist ? `${artist} similar artists` : '', languageQuery].filter(Boolean);
+  const results = [];
+  const seenSongs = new Set([id]);
+  const seenArtists = new Set(currentArtistIds);
+  currentArtistNames.forEach((name) => seenArtists.add(name));
+  const seenAlbums = new Set(currentAlbumId ? [currentAlbumId] : []);
+
+  const canAdd = (language, albumId, artistIds, artistNames) =>
+    (!currentLanguage || !language || language === currentLanguage) &&
+    (!albumId || !seenAlbums.has(albumId)) &&
+    !artistIds.some((value) => seenArtists.has(value)) &&
+    !artistNames.some((value) => seenArtists.has(value));
+  const addMapped = (mapped, language, albumId, artistIds, artistNames) => {
+    if (!mapped?.streamUrl || seenSongs.has(mapped.id) ||
+        (currentLanguage && language && language !== currentLanguage) ||
+        (albumId && seenAlbums.has(albumId)) ||
+        artistIds.some((value) => seenArtists.has(value)) ||
+        artistNames.some((value) => seenArtists.has(value))) return;
+    seenSongs.add(mapped.id);
+    artistIds.forEach((value) => seenArtists.add(value));
+    artistNames.forEach((value) => seenArtists.add(value));
+    if (albumId) seenAlbums.add(albumId);
+    results.push(mapped);
+  };
+
+  for (const track of radioTracks) {
+    addMapped(track, track.language, String(track.albumId || ''),
+      (track.artistIds || []).map(String),
+      String(track.artist || '').split(/,\s*/).map((name) => name.toLowerCase()).filter(Boolean));
+    if (results.length >= limit) return results;
+  }
+
+  for (const query of queries) {
+    if (results.length >= limit) break;
+    try {
+      const payload = await callProviderApi('search.getResults', { q: query, n: '20', p: '1' });
+      const raw = payload?.data?.results || payload?.results || [];
+      for (const candidate of Array.isArray(raw) ? raw : []) {
+        const candidateId = String(candidate?.id || '');
+        if (!candidateId || seenSongs.has(candidateId)) continue;
+        const moreInfo = candidate?.more_info || {};
+        const artists = moreInfo.artistMap?.primary_artists || [];
+        const artistIds = artists.map((item) => String(item.id || '')).filter(Boolean);
+        const artistNames = artists.map((item) => sanitizeText(item.name).toLowerCase()).filter(Boolean);
+        const language = String(candidate.language || '').trim().toLowerCase();
+        const albumId = String(moreInfo.album_id || '');
+        if (canAdd(language, albumId, artistIds, artistNames)) {
+          addMapped(mapProviderSong(candidate), language, albumId, artistIds, artistNames);
+        }
+        if (results.length >= limit) break;
+      }
+    } catch {
+      // Continue through the other query seeds if one provider call fails.
+    }
+  }
+  return results;
+}
+
 /* GET /api/music-autoplay?id=<songId>&k=<1-50>
    Build each continuation from a fresh provider radio station. The client
    requests another station around each played track, so the queue can keep
@@ -599,8 +682,9 @@ export async function handleAutoplay(request) {
   const k = Math.max(1, Math.min(50, Number(url.searchParams.get('k')) || 30));
 
   const radio = await fetchProviderRadioSongs(id, k);
+  const results = await fetchAutoplayFallbackSongs(id, Math.min(k, 12), radio.songs);
   return Response.json(
-    { results: radio.songs, stationid: radio.stationid || undefined },
+    { results, stationid: radio.stationid || undefined },
     { headers: { 'Cache-Control': 'no-store' } }
   );
 }

@@ -58,6 +58,8 @@ let relatedTrackCursor = 0;
 let isFetchingRelated = false;
 let prefetchToken = 0;
 let autoplayRetryTimer = 0;
+let autoplayTrackInProgress = false;
+let isAdvancingAutoplay = false;
 /* The JioSaavn song-radio station currently driving the continuation queue.
    Each autoplay response builds a fresh station around the playing track, so
    this is informational and keeps the client aligned with the server. */
@@ -601,6 +603,8 @@ onDemandAudio.addEventListener('loadedmetadata', applyPendingMediaIntent);
 
 onDemandAudio.addEventListener('playing', () => {
   if (!window.onDemandPlaybackActive) return;
+  isAdvancingAutoplay = false;
+  window.clearInterval(autoplayRetryTimer);
   logOnDemand('playing', onDemandAudio.currentTime.toFixed(1), 's');
   onDemandModeLabel.textContent = 'ON DEMAND';
   syncOnDemandVolumeToStored();
@@ -632,6 +636,8 @@ onDemandAudio.addEventListener('stalled', () => {
 
 onDemandAudio.addEventListener('ended', () => {
   if (!window.onDemandPlaybackActive) return;
+  if (isAdvancingAutoplay) return;
+  isAdvancingAutoplay = true;
   onDemandModeLabel.textContent = 'ON DEMAND';
   setOnDemandPlaying(false);
   // Autoplay continues into the next queue item; the label is updated by
@@ -686,6 +692,14 @@ async function handlePlaybackError() {
   }
 
   console.error('Rejected every stream for this track');
+  if (autoplayTrackInProgress) {
+    const failedTrackId = currentOnDemandTrackId;
+    if (failedTrackId) playedTrackIds.add(failedTrackId);
+    autoplayTrackInProgress = false;
+    onDemandModeLabel.textContent = 'FINDING NEXT SONG';
+    advanceToSimilarSong();
+    return;
+  }
   onDemandArtwork.hidden = false;
   onDemandArtwork.style.opacity = '1';
   onDemandPlayButton.disabled = true;
@@ -1050,12 +1064,12 @@ function advanceToSimilarSong() {
     }
 
     attempts += 1;
-    if (attempts > 100 || (!isFetchingRelated && attempts > 12)) {
-      window.clearInterval(autoplayRetryTimer);
-      onDemandModeLabel.textContent = 'ON DEMAND';
-      // Surface the reason in the station slot: the mode label is hidden while
-      // on-demand is active, so without this the player just stops silently.
-      onDemandStation.textContent = 'No more similar songs';
+    if (!isFetchingRelated && attempts >= 12) {
+      attempts = 0;
+      onDemandModeLabel.textContent = 'FINDING NEXT SONG';
+      // Providers can briefly return an empty radio station. Recreate it and
+      // keep checking instead of leaving the audio ended for good.
+      if (currentOnDemandTrackId) prefetchRelatedTracks(currentOnDemandTrackId);
     }
   }, 250);
 }
@@ -1063,6 +1077,7 @@ function advanceToSimilarSong() {
 /* Starts a track that came from the queue list. It already has a resolved
    stream, so it skips the search round-trip that startOnDemandSong performs. */
 async function playRelatedTrack(track) {
+  autoplayTrackInProgress = true;
   const artworkPromise = prefetchTrackArtwork(track);
   const song = relatedTrackToSong(track);
   const requestId = ++songRequestId;
@@ -1104,6 +1119,7 @@ async function playRelatedTrack(track) {
 }
 
 async function startOnDemandSong(song, { preserveQueue = false, openNowPlaying = true } = {}) {
+  autoplayTrackInProgress = false;
   if (!song?.trackName) return;
   // Ratings-backed favourites may contain partial or older metadata. Keep the
   // player input shape consistent before artwork lookup, search, and queueing.
@@ -1372,6 +1388,8 @@ function returnToLive() {
   // Cancel any in-flight related-tracks lookup so a late response cannot
   // restart on-demand playback after the listener has gone back to live.
   window.clearInterval(autoplayRetryTimer);
+  autoplayTrackInProgress = false;
+  isAdvancingAutoplay = false;
   prefetchToken += 1;
   relatedTrackCache = [];
   relatedTrackCursor = 0;
