@@ -153,10 +153,11 @@ async function searchSongs(query, maxResults = 10) {
 }
 
 /* The continuation queue comes from the provider's song radio station. */
-async function fetchAutoplayQueue(trackId) {
+async function fetchAutoplayQueue(trackId, stationId = '') {
   const url = new URL('/api/music-autoplay', window.location.origin);
   url.searchParams.set('id', trackId);
   url.searchParams.set('k', '50');
+  if (stationId) url.searchParams.set('stationid', stationId);
   const response = await fetch(url, { cache: 'no-store' });
   const payload = await response.json().catch(() => null);
   if (!response.ok) throw new Error(payload?.error || `Autoplay failed (${response.status}).`);
@@ -931,10 +932,9 @@ const autoplayKey = (value) => normalizeText(value || '');
 /* Fetch recommendations from song radio, skipping the playing artist/album
    and keeping only one track per artist and album per batch. */
 async function fetchRelatedTracks(trackId) {
-  if (!trackId) return [];
+  if (!trackId) return { tracks: [], stationid: '' };
   try {
-    const queue = await fetchAutoplayQueue(trackId);
-    if (queue.stationid) radioStationId = queue.stationid;
+    const queue = await fetchAutoplayQueue(trackId, radioStationId);
     const currentSong = currentOnDemandSong || {};
     const currentArtistIds = new Set((currentSong.providerArtistIds || []).map(String));
     const currentArtistName = autoplayKey(currentSong.artistName);
@@ -964,10 +964,10 @@ async function fetchRelatedTracks(trackId) {
       });
     };
 
-    return filterTracks(queue.tracks);
+    return { tracks: filterTracks(queue.tracks), stationid: queue.stationid };
   } catch (error) {
     console.warn('Autoplay: Failed.', error);
-    return [];
+    return { tracks: [], stationid: '' };
   }
 }
 
@@ -983,9 +983,10 @@ function prefetchRelatedTracks(trackId, { force = false } = {}) {
   isFetchingRelated = true;
 
   fetchRelatedTracks(trackId)
-    .then((tracks) => {
+    .then(({ tracks, stationid }) => {
       // Ignore a response for a track the listener has already moved past.
       if (token !== prefetchToken) return;
+      if (stationid) radioStationId = stationid;
       const unplayedQueue = relatedTrackCache.slice(relatedTrackCursor);
       const queuedIds = new Set(unplayedQueue.map((track) => track.id));
       const queuedArtists = new Set(unplayedQueue
@@ -1169,6 +1170,7 @@ async function startOnDemandSong(song, { preserveQueue = false, openNowPlaying =
       playedTrackIds.clear();
       relatedTrackCache = [];
       relatedTrackCursor = 0;
+      radioStationId = '';
       isFetchingRelated = false;
       prefetchToken += 1;
     }
@@ -1418,6 +1420,7 @@ function returnToLive() {
   prefetchToken += 1;
   relatedTrackCache = [];
   relatedTrackCursor = 0;
+  radioStationId = '';
   isFetchingRelated = false;
   // The only path off on-demand, so it is also the only place that clears the
   // stored session.
