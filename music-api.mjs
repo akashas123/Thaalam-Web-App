@@ -457,7 +457,7 @@ async function fetchProviderRadioSongs(id, k) {
   try {
     const stationPayload = await callProviderApi(
       'webradio.createEntityStation',
-      { entity_type: 'queue', entity_id: JSON.stringify([id]) },
+      { entity_type: 'song', entity_id: id },
       'android'
     );
     stationid = (stationPayload && stationPayload.stationid) || null;

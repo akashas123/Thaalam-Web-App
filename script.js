@@ -1145,7 +1145,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js?v=216')
+    navigator.serviceWorker.register('./sw.js?v=218')
       .then((registration) => {
         // Poll for a newer worker so deployed versions reach open tabs without
         // the user having to close every tab + hard-refresh twice.
