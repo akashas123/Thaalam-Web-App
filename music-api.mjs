@@ -11,8 +11,6 @@ const UPSTREAM_REQUEST_HEADERS = {
   accept: 'application/json, text/plain, */*'
 };
 const SONG_ID_PATTERN = /^[A-Za-z0-9_-]{4,32}$/;
-// JioSaavn URL token for International: India Superhits Top 50.
-const INTERNATIONAL_CHART_TOKEN = 'aXoCADwITrUCObrEMJSxEw__';
 
 /* ------------------------------------------------------------------ *
  * DES-ECB decryption (key 38346591) for encrypted_media_url.
@@ -381,7 +379,7 @@ export async function handleSearch(request) {
    provider language does not match the selected tab. */
 async function handleGenreSearch(url) {
   const language = (url.searchParams.get('lang') || '').trim().toLowerCase();
-  if (language === 'english') return handleInternationalGenreSearch();
+  if (language === 'english') return handleInternationalGenreSearch(url);
   const query = (url.searchParams.get('q') || '').trim().replace(/\s+/g, ' ');
   if (!query || query.length > 200) {
     return Response.json({ error: 'Enter an artist to load the genre.' }, { status: 400 });
@@ -424,18 +422,17 @@ async function handleGenreSearch(url) {
 
 async function handleInternationalGenreSearch() {
   try {
-    let playlist = await callProviderApi('webapi.get', {
-      type: 'playlist', token: INTERNATIONAL_CHART_TOKEN
+    // Use the chart's stable JioSaavn playlist ID directly. webapi.get can
+    // return only playlist metadata in Workers, while playlist.getDetails
+    // returns the same list[] shape used by the language genre feeds.
+    const payload = await callProviderApi('playlist.getDetails', {
+      listid: '1134595537', cc: 'in', n: '21', p: '1'
     });
-    let rawSongs = Array.isArray(playlist?.list) ? playlist.list
-      : Array.isArray(playlist?.songs) ? playlist.songs : [];
-    if (!rawSongs.length && /^\d+$/.test(String(playlist?.id || ''))) {
-      playlist = await callProviderApi('playlist.getDetails', {
-        listid: String(playlist.id), n: '21', p: '1'
-      });
-      rawSongs = Array.isArray(playlist?.list) ? playlist.list
-        : Array.isArray(playlist?.songs) ? playlist.songs : [];
-    }
+    const playlist = payload?.data?.data || payload?.data || payload;
+    const readPlaylistSongs = (value) => Array.isArray(value?.list) ? value.list
+      : Array.isArray(value?.songs) ? value.songs
+        : Array.isArray(value?.results) ? value.results : [];
+    let rawSongs = readPlaylistSongs(playlist);
     const results = rawSongs
       // This JioSaavn editorial chart is English, but playlist entries may omit
       // their language field. Trust the chart for missing tags; reject explicit
@@ -446,7 +443,7 @@ async function handleInternationalGenreSearch() {
       })
       .slice(0, 21)
       .map((song) => {
-        const mapped = mapProviderSong(song, false);
+        const mapped = mapProviderSong(song);
         return mapped ? { ...mapped, language: 'english' } : null;
       })
       .filter(Boolean);

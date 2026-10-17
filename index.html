@@ -867,7 +867,7 @@
     const artistInfoRequests = new Map();
     // Version the genre cache separately so changes to feed filtering replace
     // previously cached broad search matches.
-    const GENRE_CACHE_KEY = 'thaalam-music-genre-cache-v7';
+    const GENRE_CACHE_KEY = 'thaalam-music-genre-cache-v8';
     const GENRE_CHART_LIMIT = 21;
     // One small ranked search request feeds both the suggestion dropdown and
     // the results grid: fetch 20, rank by relevance, show the top 20.
@@ -1511,7 +1511,7 @@
     }
 
     function searchGenreChart(genreId, requestId, language, limit = GENRE_CHART_LIMIT) {
-      // The International feed is the maintained JioSaavn English viral chart.
+      // International uses the JioSaavn International: India Superhits Top 50 chart.
       const queries = Array.isArray(genreId) ? genreId : [genreId];
       const label = Array.isArray(genreId) ? genreId.join(' / ') : genreId;
       const perQuery = Math.min(25, Math.ceil(limit / queries.length) + 4);
