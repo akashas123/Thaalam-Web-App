@@ -11,7 +11,7 @@ const UPSTREAM_REQUEST_HEADERS = {
   accept: 'application/json, text/plain, */*'
 };
 const SONG_ID_PATTERN = /^[A-Za-z0-9_-]{4,32}$/;
-const INTERNATIONAL_CHART_QUERY = 'english trending songs';
+const INTERNATIONAL_CHART_PLAYLIST_ID = '48189087';
 
 /* ------------------------------------------------------------------ *
  * DES-ECB decryption (key 38346591) for encrypted_media_url.
@@ -423,14 +423,8 @@ async function handleGenreSearch(url) {
 
 async function handleInternationalGenreSearch() {
   try {
-    const chartPage = await callProviderApi('search.getPlaylistResults', {
-      q: INTERNATIONAL_CHART_QUERY, n: '20', p: '1'
-    });
-    const chart = (chartPage?.results || [])
-      .find((item) => /english viral hits/i.test(sanitizeText(item.title)));
-    if (!chart?.id) return providerErrorResponse('JioSaavn English trending chart is unavailable.');
     const playlist = await callProviderApi('playlist.getDetails', {
-      listid: String(chart.id), n: '50', p: '1'
+      listid: INTERNATIONAL_CHART_PLAYLIST_ID, n: '50', p: '1'
     });
     const rawSongs = Array.isArray(playlist?.list) ? playlist.list : [];
     const results = rawSongs.map(mapProviderSong)
