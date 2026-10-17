@@ -279,6 +279,7 @@ function mapProviderSong(raw) {
     artistIds,
     album,
     albumId: String(info.album_id || ''),
+    language: sanitizeText(raw.language).toLowerCase(),
     duration: formatDuration(durationSeconds),
     durationSeconds,
     thumbnail,
@@ -384,6 +385,11 @@ async function handleGenreSearch(url) {
     return Response.json({ error: 'Enter an artist to load the genre.' }, { status: 400 });
   }
   const limit = Math.max(1, Math.min(25, Number(url.searchParams.get('limit')) || 10));
+  const language = (url.searchParams.get('lang') || '').trim().toLowerCase();
+  const allowedLanguages = new Set(['english', 'hindi', 'malayalam', 'tamil']);
+  if (!allowedLanguages.has(language)) {
+    return Response.json({ error: 'A supported genre language is required.' }, { status: 400 });
+  }
   try {
     const payload = await callProviderApi('autocomplete.get', { query });
     const raw = payload?.songs?.data || payload?.data?.songs || [];
@@ -396,7 +402,7 @@ async function handleGenreSearch(url) {
     const detailedSongs = detailPayload?.songs || detailPayload?.data?.songs || [];
     const results = (Array.isArray(detailedSongs) ? detailedSongs : [])
       .map(mapProviderSong)
-      .filter((song) => song?.streamUrl)
+      .filter((song) => song?.streamUrl && song.language === language)
       .slice(0, limit);
     if (!results.length) return providerErrorResponse('No playable artist tracks were found.');
     return Response.json({ results }, {

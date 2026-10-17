@@ -1511,7 +1511,7 @@
         });
     }
 
-    function searchGenreChart(genreId, requestId, limit = GENRE_CHART_LIMIT) {
+    function searchGenreChart(genreId, requestId, language, limit = GENRE_CHART_LIMIT) {
       // A feed may combine several queries (the International tab mixes a few
       // big English artists). Fan the queries out, then merge by rank so the
       // grid mixes artists instead of showing one query's block first.
@@ -1535,6 +1535,7 @@
         const url = new URL('/api/music-search', window.location.origin);
         url.searchParams.set('q', query);
         url.searchParams.set('mode', 'genre');
+        url.searchParams.set('lang', language);
         // Ask for a few rows above the grid size: JioSaavn returns many
         // alternate uploads of the same hit (e.g. the same song eight times),
         // so the headroom lets de-duplication still fill every chart card.
@@ -1552,28 +1553,8 @@
       }))
         .then((pages) => {
           if (!pages.some((page) => page.length)) {
-            const fallbackQuery = `${queries[0]} songs`;
-            const fallbackUrl = new URL('/api/music-search', window.location.origin);
-            fallbackUrl.searchParams.set('q', fallbackQuery);
-            fallbackUrl.searchParams.set('mode', 'genre');
-            fallbackUrl.searchParams.set('limit', String(perQuery));
-            return fetch(fallbackUrl, { cache: 'no-store' })
-              .then((response) => {
-                if (!response.ok) throw new Error(`The song chart failed (${response.status}).`);
-                return response.json();
-              })
-              .then((data) => {
-                const fallbackResults = filterArtist(
-                  Array.isArray(data?.results) ? data.results : [],
-                  queries[0]
-                );
-                if (!fallbackResults.length) throw new Error('The song chart failed (empty).');
-                return [fallbackResults];
-              });
+            throw new Error('No matching songs were returned for this genre.');
           }
-          return pages;
-        })
-        .then((pages) => {
           const seen = new Set();
           const songs = [];
           // Round-robin by rank: take each query's #1, then each #2, and so
@@ -1691,8 +1672,14 @@
         // Search terms reuse the suggestion pipeline's single per-term request
         // (fetchCatalogSuggestions dedupes by term), so Enter never triggers a
         // second, redundant round trip. Chart tabs keep their own search query.
+        const genreLanguage = {
+          international: 'english',
+          hindi: 'hindi',
+          malayalam: 'malayalam',
+          tamil: 'tamil'
+        }[cacheKey];
         const songs = genreId
-          ? await searchGenreChart(genreId, requestId)
+          ? await searchGenreChart(genreId, requestId, genreLanguage)
           : await fetchCatalogSuggestions(term);
         const trimmedSongs = genreId
           ? songs.slice(0, GENRE_CHART_LIMIT)

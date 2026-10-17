@@ -235,6 +235,7 @@ function mapProviderSong(raw) {
     artistIds,
     album,
     albumId: String(info.album_id || ''),
+    language: String(raw.language || '').trim().toLowerCase(),
     duration: formatDuration(durationSeconds),
     durationSeconds,
     thumbnail,
@@ -261,6 +262,9 @@ function readSongId(url) {
    receives up to `limit` playable songs instead of one thin page. */
 async function handleSearch(request) {
   const url = new URL(request.url);
+  if (url.searchParams.get('mode') === 'genre') {
+    return handleGenreSearch(url);
+  }
   const query = (url.searchParams.get('q') || '').trim().replace(/\s+/g, ' ');
   if (!query || query.length > 200) {
     return Response.json({ error: 'Enter a song title to search.' }, { status: 400 });
@@ -300,6 +304,41 @@ async function handleSearch(request) {
   return Response.json({ results: results.slice(0, 25) }, {
     headers: { 'Cache-Control': 'public, max-age=300, s-maxage=600' }
   });
+}
+
+/* Genre feeds use autocomplete to identify genuine artist songs, hydrate
+   their playable streams, and enforce the selected language on the server. */
+async function handleGenreSearch(url) {
+  const query = (url.searchParams.get('q') || '').trim().replace(/\s+/g, ' ');
+  if (!query || query.length > 200) {
+    return Response.json({ error: 'Enter an artist to load the genre.' }, { status: 400 });
+  }
+  const limit = Math.max(1, Math.min(25, Number(url.searchParams.get('limit')) || 10));
+  const language = (url.searchParams.get('lang') || '').trim().toLowerCase();
+  const allowedLanguages = new Set(['english', 'hindi', 'malayalam', 'tamil']);
+  if (!allowedLanguages.has(language)) {
+    return Response.json({ error: 'A supported genre language is required.' }, { status: 400 });
+  }
+  try {
+    const payload = await callProviderApi('autocomplete.get', { query });
+    const raw = payload?.songs?.data || payload?.data?.songs || [];
+    const ids = [...new Set((Array.isArray(raw) ? raw : [])
+      .map((song) => String(song?.id || ''))
+      .filter((id) => SONG_ID_PATTERN.test(id)))].slice(0, Math.min(25, limit * 2));
+    if (!ids.length) return providerErrorResponse('No playable artist tracks were found.');
+    const detailPayload = await callProviderApi('song.getDetails', { pids: ids.join(',') });
+    const detailedSongs = detailPayload?.songs || detailPayload?.data?.songs || [];
+    const results = (Array.isArray(detailedSongs) ? detailedSongs : [])
+      .map(mapProviderSong)
+      .filter((song) => song?.streamUrl && song.language === language)
+      .slice(0, limit);
+    if (!results.length) return providerErrorResponse('No playable tracks were found for this language.');
+    return Response.json({ results }, {
+      headers: { 'Cache-Control': 'public, max-age=300, s-maxage=600' }
+    });
+  } catch {
+    return providerErrorResponse('JioSaavn genre search is temporarily unavailable.');
+  }
 }
 
 /* GET /api/music-song?id=<songId>
