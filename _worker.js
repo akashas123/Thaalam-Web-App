@@ -12,6 +12,15 @@ const UPSTREAM_REQUEST_HEADERS = {
   accept: 'application/json, text/plain, */*'
 };
 const SONG_ID_PATTERN = /^[A-Za-z0-9_-]{4,32}$/;
+const INTERNATIONAL_POP_TRACK_IDS = {
+  'ed sheeran': ['icJam_5l', '6o8JoQ8b', 'szuGlu5K', 'l7D4VKW1'],
+  'taylor swift': ['cI09igfS', 'WOvsziSC', 'vc6iNp0N', '4SQmljgZ'],
+  'the weeknd': ['TcDP-KUl', 'fW-Mxsnu', 'tvxo4Jm0', 'AG7ER2zH'],
+  'bruno mars': ['EpKOk9yo', 'Vfs5WLX-'],
+  'harry styles': ['It96yG1r', 'N34NxTO9'],
+  'billie eilish': ['v0OogPk7', 'JR8ew5Yw', 'vXGLrsk-'],
+  coldplay: ['kxQttW9E', 'DYBuG4Ko']
+};
 
 /* DES-ECB decryption (key 38346591) for encrypted_media_url, implemented in
    plain JS because Workers do not expose DES through their crypto APIs. */
@@ -360,14 +369,10 @@ async function handleArtistGenreSearch(url) {
   }
   const limit = Math.max(1, Math.min(25, Number(url.searchParams.get('limit')) || 10));
   const artistKey = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const trackIds = INTERNATIONAL_POP_TRACK_IDS[artistKey(artist)];
+  if (!trackIds) return Response.json({ error: 'Artist is not in the International pop catalog.' }, { status: 400 });
   try {
-    const payload = await callProviderApi('autocomplete.get', { query: artist });
-    const raw = payload?.songs?.data || payload?.data?.songs || [];
-    const ids = [...new Set((Array.isArray(raw) ? raw : [])
-      .map((song) => String(song?.id || ''))
-      .filter((id) => SONG_ID_PATTERN.test(id)))].slice(0, Math.min(25, limit * 2));
-    if (!ids.length) return providerErrorResponse('No artist tracks were found.');
-    const detailPayload = await callProviderApi('song.getDetails', { pids: ids.join(',') });
+    const detailPayload = await callProviderApi('song.getDetails', { pids: trackIds.join(',') });
     const detailedSongs = detailPayload?.songs || detailPayload?.data?.songs || [];
     const results = (Array.isArray(detailedSongs) ? detailedSongs : [])
       .map(mapProviderSong)
