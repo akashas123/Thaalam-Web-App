@@ -576,7 +576,10 @@ function applyPendingMediaIntent() {
     const target = pendingStartSeconds;
     pendingStartSeconds = -1;
     try {
-      if (target > 0) onDemandAudio.currentTime = target;
+      // A fresh pick passes 0: seeking explicitly restarts the same song from
+      // the top instead of continuing where it was (the old `target > 0`
+      // guard skipped the seek, so re-tapping a playing card did nothing).
+      onDemandAudio.currentTime = target;
     } catch {
       logOnDemand('seek to', target, 'rejected; starting from the top');
     }

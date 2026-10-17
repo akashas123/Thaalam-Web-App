@@ -1576,22 +1576,41 @@
         });
     }
 
-    // iTunes pads result pages with loosely related songs. Keep only songs
-    // whose title/artist share words with the query — preferring matches that
-    // contain every query word — so the grid shows the exact songs searched
-    // for, not the long tail. Falls back gracefully when nothing matches all
-    // words (e.g. colloquial or misspelled queries).
+    // Prefer official title matches over "(From "Album")" album references:
+    // a query matching the song's core title (parentheticals stripped) ranks
+    // first; songs matching only via the "(From ...)" suffix or album name are
+    // the fallback. Falls back gracefully when nothing matches.
     function rankSearchResults(songs, term, limit) {
       if (!Array.isArray(songs)) return [];
       const words = term.trim().toLowerCase().split(/\s+/).filter(Boolean);
       if (!words.length) return songs.slice(0, limit);
-      const sharedWordCount = (song) => {
-        const haystack = `${song.trackName || ''} ${song.artistName || ''}`.toLowerCase();
-        return words.filter((word) => haystack.includes(word)).length;
-      };
-      const exact = songs.filter((song) => sharedWordCount(song) === words.length);
-      const partial = songs.filter((song) => sharedWordCount(song) > 0);
-      return (exact.length ? exact : partial.length ? partial : songs).slice(0, limit);
+      // Core title = track name without "(...)" / "[...]" suffixes like
+      // '(From "Chandrolsavam")' or '(Chandrolsavam)' — those name the album,
+      // not the song itself.
+      const coreTitleOf = (song) => (song.trackName || '')
+        .replace(/\([^)]*\)/g, ' ')
+        .replace(/\[[^\]]*\]/g, ' ')
+        .toLowerCase();
+      const fullHayOf = (song) =>
+        `${song.trackName || ''} ${song.artistName || ''} ${song.collectionName || ''}`.toLowerCase();
+      const sharedWordCount = (haystack) => words.filter((word) => haystack.includes(word)).length;
+      const official = [];
+      const fromVersion = [];
+      const partial = [];
+      songs.forEach((song) => {
+        const coreHay = `${coreTitleOf(song)} ${(song.artistName || '').toLowerCase()}`;
+        if (sharedWordCount(coreHay) === words.length) official.push(song);
+        else if (sharedWordCount(fullHayOf(song)) === words.length) fromVersion.push(song);
+        else if (sharedWordCount(fullHayOf(song)) > 0) partial.push(song);
+      });
+      const ranked = official.length
+        ? [...official, ...fromVersion, ...partial]
+        : fromVersion.length
+          ? [...fromVersion, ...partial]
+          : partial.length
+            ? partial
+            : songs;
+      return ranked.slice(0, limit);
     }
 
     async function loadCatalog(cacheKey, term, genreId = null) {

@@ -1,25 +1,27 @@
-import { writeFileSync } from 'node:fs';
-import { handleJioSaavnSearch } from './jiosaavn-search.mjs';
+import { handleJioSaavnAlbum, handleJioSaavnSearch } from './jiosaavn-search.mjs';
 
-// Mirror searchGenreChart: fetch 25, dedupe title|artist, stop at 21.
-const out = [];
-for (const q of ['trending english songs']) {
-  const res = await handleJioSaavnSearch(
-    new Request('http://localhost/api/jiosaavn-search?q=' + encodeURIComponent(q) + '&limit=25')
-  );
-  const data = await res.json();
-  const results = data.results || [];
-  const seen = new Set();
-  const songs = [];
-  for (const s of results) {
-    const key = `${s.title}|${s.artist}`.toLowerCase().replace(/\s+/g, ' ').trim();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    songs.push(s);
-    if (songs.length >= 21) break;
-  }
-  out.push(`q="${q}" raw ${results.length} -> cards ${songs.length}/21`);
-  for (const s of songs) out.push(`    ${String(s.title).slice(0, 42)} | ${String(s.artist).slice(0, 30)} | ${s.thumbnail ? 'art' : 'NOART'}`);
+// Probe A: does search now include albums?
+const res = await handleJioSaavnSearch(
+  new Request('http://localhost/api/jiosaavn-search?q=' + encodeURIComponent('rockstar') + '&limit=3')
+);
+const data = await res.json();
+console.log('SEARCH STATUS', res.status);
+console.log('SONGS', (data.results || []).length, 'ALBUMS', (data.albums || []).length);
+for (const a of (data.albums || []).slice(0, 5)) {
+  console.log('ALBUM:', a.id, '|', a.title, '|', a.artist, '|', a.year, '|', a.songCount, '|', (a.thumbnail || '').slice(0, 60));
 }
-writeFileSync('_probe_final.txt', out.join('\n'));
-console.log('done');
+
+// Probe B: album tracklist for the first album hit.
+const firstAlbum = (data.albums || [])[0];
+if (firstAlbum) {
+  const albumRes = await handleJioSaavnAlbum(
+    new Request('http://localhost/api/jiosaavn-album?id=' + encodeURIComponent(firstAlbum.id))
+  );
+  const albumData = await albumRes.json();
+  console.log('ALBUM STATUS', albumRes.status);
+  console.log('ALBUM TITLE', albumData.album?.title, '| TRACKS', (albumData.songs || []).length);
+  for (const s of (albumData.songs || []).slice(0, 5)) {
+    console.log('TRACK:', s.trackName, '|', s.artistName, '|', s.streamUrl ? 'stream' : 'NOSTREAM');
+  }
+}
+

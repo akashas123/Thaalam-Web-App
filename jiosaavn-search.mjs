@@ -203,6 +203,47 @@ function formatDuration(totalSeconds) {
     : `${minutes}:${pad(rest)}`;
 }
 
+/* Normalises any JioSaavn album-shaped payload (album search results) into
+   the single client-facing shape. Album ids are numeric, so they use their
+   own pattern. */
+const ALBUM_ID_PATTERN = /^[0-9]{4,16}$/;
+
+function mapJiosaavnAlbum(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const id = String(raw.id || raw.album_id || '');
+  const title = sanitizeText(raw.title || raw.album_name);
+  if (!ALBUM_ID_PATTERN.test(id) || !title) return null;
+
+  const info = raw.more_info || {};
+  const artistNames = (info.artistMap?.primary_artists || [])
+    .map((artist) => sanitizeText(artist.name))
+    .filter(Boolean);
+  const artist = artistNames.join(', ') ||
+    sanitizeText(raw.subtitle) ||
+    sanitizeText(info.music) ||
+    sanitizeText(raw.album_artist);
+  const songCount = Math.max(0, Number(info.song_count) || 0);
+  const year = String(raw.year || '').trim();
+  const language = String(raw.language || '').trim();
+  const thumbnail = String(raw.image || raw.album_image || '')
+    .replace(/^http:/, 'https:')
+    .replace(/150x150|50x50/, '500x500');
+
+  return {
+    id,
+    title,
+    artist,
+    year,
+    language,
+    songCount,
+    thumbnail,
+    permalink: String(raw.perma_url || raw.album_link || '')
+  };
+}
+
+/* GET /api/jiosaavn-album?id=<albumId>
+   Album tracklist via content.getAlbumDetails (list[] holds song payloads
+   shaped exactly like search results, so they map through mapJiosaavnSong). */
 /* Normalises any JioSaavn song-shaped payload (search results, song details,
    album lists, artist top songs) into the single client-facing shape. */
 function mapJiosaavnSong(raw) {
@@ -254,9 +295,12 @@ function readSongId(url) {
 }
 
 /* GET /api/jiosaavn-search?q=<query>&limit=<1-25>
-   Returns ranked-by-relevance catalogue songs with resolved stream URLs.
-   Pages through JioSaavn result pages (p=1, 2, ...) so the caller actually
-   receives up to `limit` playable songs instead of one thin page. */
+   Returns ranked-by-relevance catalogue songs with resolved stream URLs,
+   plus matching albums (title, artist, artwork) when the query names one.
+   Pages through JioSaavn song result pages (p=1, 2, ...) so the caller
+   actually receives up to `limit` playable songs instead of one thin page;
+   albums come from a single search.getAlbumResults page (no pagination).
+   Shape: { results: [...songs], albums: [...albums] }. */
 export async function handleJioSaavnSearch(request) {
   const url = new URL(request.url);
   const query = (url.searchParams.get('q') || '').trim().replace(/\s+/g, ' ');
@@ -267,36 +311,109 @@ export async function handleJioSaavnSearch(request) {
 
   const seen = new Set();
   const results = [];
+  const seenAlbums = new Set();
+  const albums = [];
   try {
-    // JioSaavn rarely honours n=25 on page one; walk pages until the grid is
-    // full (or pages run dry) so genre tabs fill all 21 cards.
-    for (let page = 1; page <= 5 && results.length < limit; page += 1) {
-      const payload = await callJiosaavn('search.getResults', { q: query, n: String(Math.max(limit, 10)), p: String(page) });
-      const raw = payload?.data?.results || payload?.results || [];
-      const items = Array.isArray(raw) ? raw : [];
-      if (!items.length) break;
-      for (const item of items) {
-        const mapped = mapJiosaavnSong(item);
-        // A song without a decryptable stream URL is unplayable; skip it rather
-        // than letting the client rank it and fail at play time.
-        if (mapped && mapped.streamUrl && !seen.has(mapped.id)) {
-          seen.add(mapped.id);
-          results.push(mapped);
-          if (results.length >= limit) break;
+    const songPages = (async () => {
+      // JioSaavn rarely honours n=25 on page one; walk pages until the grid is
+      // full (or pages run dry) so genre tabs fill all 21 cards.
+      for (let page = 1; page <= 5 && results.length < limit; page += 1) {
+        const payload = await callJiosaavn('search.getResults', { q: query, n: String(Math.max(limit, 10)), p: String(page) });
+        const raw = payload?.data?.results || payload?.results || [];
+        const items = Array.isArray(raw) ? raw : [];
+        if (!items.length) break;
+        for (const item of items) {
+          const mapped = mapJiosaavnSong(item);
+          // A song without a decryptable stream URL is unplayable; skip it rather
+          // than letting the client rank it and fail at play time.
+          if (mapped && mapped.streamUrl && !seen.has(mapped.id)) {
+            seen.add(mapped.id);
+            results.push(mapped);
+            if (results.length >= limit) break;
+          }
         }
+        // Last page: fewer fresh songs than requested means nothing more to fetch.
+        if (items.length < 10) break;
       }
-      // Last page: fewer fresh songs than requested means nothing more to fetch.
-      if (items.length < 10) break;
-    }
+    })();
+    const albumPage = (async () => {
+      try {
+        const payload = await callJiosaavn('search.getAlbumResults', { q: query, p: '1', n: '10' });
+        const raw = payload?.data?.results || payload?.results || [];
+        const items = Array.isArray(raw) ? raw : [];
+        for (const item of items) {
+          const mapped = mapJiosaavnAlbum(item);
+          if (mapped && !seenAlbums.has(mapped.id)) {
+            seenAlbums.add(mapped.id);
+            albums.push(mapped);
+            if (albums.length >= 6) break;
+          }
+        }
+      } catch {
+        // Albums are additive — a failed album lookup must never fail search.
+      }
+    })();
+    await Promise.all([songPages, albumPage]);
   } catch {
     return jiosaavnErrorResponse('JioSaavn search is temporarily unavailable.');
   }
-  if (!results.length) {
+  if (!results.length && !albums.length) {
     return jiosaavnErrorResponse('JioSaavn search is temporarily unavailable.');
   }
 
-  return Response.json({ results: results.slice(0, 25) }, {
+  return Response.json({ results: results.slice(0, 25), albums: albums.slice(0, 6) }, {
     headers: { 'Cache-Control': 'public, max-age=300, s-maxage=600' }
+  });
+}
+
+/* GET /api/jiosaavn-album?id=<albumId>
+   Album details + tracklist. content.getAlbumDetails returns the header
+   (title/artist/artwork) plus list[] of song payloads shaped like search
+   results, so tracks map through mapJiosaavnSong with stream URLs.
+   Shape: { album, songs: [...] }. */
+export async function handleJioSaavnAlbum(request) {
+  const url = new URL(request.url);
+  const id = (url.searchParams.get('id') || '').trim();
+  if (!ALBUM_ID_PATTERN.test(id)) {
+    return Response.json({ error: 'A valid album is required.' }, { status: 400 });
+  }
+
+  let payload = null;
+  try {
+    payload = await callJiosaavn('content.getAlbumDetails', { albumid: id });
+  } catch {
+    return jiosaavnErrorResponse('JioSaavn album details are temporarily unavailable.');
+  }
+  if (!payload) {
+    return jiosaavnErrorResponse('JioSaavn album details are temporarily unavailable.');
+  }
+  const album = mapJiosaavnAlbum(payload);
+  const list = Array.isArray(payload.list) ? payload.list : [];
+  const seen = new Set();
+  const songs = [];
+  for (const item of list) {
+    const mapped = mapJiosaavnSong(item);
+    if (mapped && mapped.streamUrl && !seen.has(mapped.id)) {
+      seen.add(mapped.id);
+      songs.push({
+        trackId: mapped.id,
+        trackName: mapped.title,
+        artistName: mapped.artist,
+        collectionName: mapped.album || album?.title || '',
+        artworkUrl100: mapped.thumbnail || album?.thumbnail || '',
+        trackViewUrl: mapped.permalink,
+        streamUrl: mapped.streamUrl,
+        trackTimeMillis: mapped.durationSeconds ? mapped.durationSeconds * 1000 : 0,
+        jiosaavnId: mapped.id
+      });
+      if (songs.length >= 50) break;
+    }
+  }
+  if (!album && !songs.length) {
+    return jiosaavnErrorResponse('JioSaavn album details are temporarily unavailable.');
+  }
+  return Response.json({ album: album || null, songs }, {
+    headers: { 'Cache-Control': 'public, max-age=600, s-maxage=600' }
   });
 }
 

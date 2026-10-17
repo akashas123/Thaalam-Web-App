@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
-import { handleJioSaavnAutoplay, handleJioSaavnSearch, handleJioSaavnSong } from './jiosaavn-search.mjs';
+import { handleJioSaavnAlbum, handleJioSaavnAutoplay, handleJioSaavnSearch, handleJioSaavnSong } from './jiosaavn-search.mjs';
 
 export default defineConfig({
   plugins: [{
@@ -9,6 +9,7 @@ export default defineConfig({
         const pathname = request.url?.split('?')[0];
         const handlers = {
           '/api/jiosaavn-search': handleJioSaavnSearch,
+          '/api/jiosaavn-album': handleJioSaavnAlbum,
           '/api/jiosaavn-autoplay': handleJioSaavnAutoplay,
           '/api/jiosaavn-song': handleJioSaavnSong
         };
