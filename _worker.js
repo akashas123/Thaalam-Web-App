@@ -12,8 +12,8 @@ const UPSTREAM_REQUEST_HEADERS = {
   accept: 'application/json, text/plain, */*'
 };
 const SONG_ID_PATTERN = /^[A-Za-z0-9_-]{4,32}$/;
-// Numeric ID resolved from JioSaavn's International: India Superhits Top 50 URL.
-const INTERNATIONAL_CHART_PLAYLIST_ID = '1134595537';
+// JioSaavn URL token for International: India Superhits Top 50.
+const INTERNATIONAL_CHART_TOKEN = 'aXoCADwITrUCObrEMJSxEw__';
 
 /* DES-ECB decryption (key 38346591) for encrypted_media_url, implemented in
    plain JS because Workers do not expose DES through their crypto APIs. */
@@ -355,10 +355,18 @@ async function handleGenreSearch(url) {
 
 async function handleInternationalGenreSearch() {
   try {
-    const playlist = await callProviderApi('playlist.getDetails', {
-      listid: INTERNATIONAL_CHART_PLAYLIST_ID, n: '21', p: '1'
+    let playlist = await callProviderApi('webapi.get', {
+      type: 'playlist', token: INTERNATIONAL_CHART_TOKEN
     });
-    const rawSongs = Array.isArray(playlist?.list) ? playlist.list : [];
+    let rawSongs = Array.isArray(playlist?.list) ? playlist.list
+      : Array.isArray(playlist?.songs) ? playlist.songs : [];
+    if (!rawSongs.length && /^\d+$/.test(String(playlist?.id || ''))) {
+      playlist = await callProviderApi('playlist.getDetails', {
+        listid: String(playlist.id), n: '21', p: '1'
+      });
+      rawSongs = Array.isArray(playlist?.list) ? playlist.list
+        : Array.isArray(playlist?.songs) ? playlist.songs : [];
+    }
     const results = rawSongs
       // This JioSaavn editorial chart is English, but playlist entries may omit
       // their language field. Trust the chart for missing tags; reject explicit
