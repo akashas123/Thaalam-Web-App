@@ -429,9 +429,18 @@ async function handleInternationalGenreSearch() {
     });
     const rawSongs = Array.isArray(playlist?.list) ? playlist.list : [];
     const results = rawSongs
-      .filter((song) => String(song?.language || '').trim().toLowerCase() === 'english')
+      // This JioSaavn editorial chart is English, but playlist entries may omit
+      // their language field. Trust the chart for missing tags; reject explicit
+      // non-English tags if JioSaavn adds mixed-language entries later.
+      .filter((song) => {
+        const language = String(song?.language || '').trim().toLowerCase();
+        return !language || language === 'english';
+      })
       .slice(0, 21)
-      .map((song) => mapProviderSong(song, false))
+      .map((song) => {
+        const mapped = mapProviderSong(song, false);
+        return mapped ? { ...mapped, language: 'english' } : null;
+      })
       .filter(Boolean);
     if (!results.length) return providerErrorResponse('No English tracks were found in JioSaavn’s trending chart.');
     return Response.json({ results }, {
