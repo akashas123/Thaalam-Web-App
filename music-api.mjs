@@ -379,7 +379,7 @@ export async function handleSearch(request) {
    provider language does not match the selected tab. */
 async function handleGenreSearch(url) {
   const language = (url.searchParams.get('lang') || '').trim().toLowerCase();
-  if (language === 'english') return handleInternationalGenreSearch(url);
+  if (language === 'english') return handleInternationalGenreSearch();
   const query = (url.searchParams.get('q') || '').trim().replace(/\s+/g, ' ');
   if (!query || query.length > 200) {
     return Response.json({ error: 'Enter an artist to load the genre.' }, { status: 400 });
@@ -426,7 +426,7 @@ async function handleInternationalGenreSearch() {
     // return only playlist metadata in Workers, while playlist.getDetails
     // returns the same list[] shape used by the language genre feeds.
     const payload = await callProviderApi('playlist.getDetails', {
-      listid: '1134595537', cc: 'in', n: '21', p: '1'
+      listid: '1134595537', n: '50', p: '1'
     });
     const playlist = payload?.data?.data || payload?.data || payload;
     const readPlaylistSongs = (value) => Array.isArray(value?.list) ? value.list
