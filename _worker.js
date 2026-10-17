@@ -356,14 +356,14 @@ async function handleGenreSearch(url) {
 async function handleInternationalGenreSearch() {
   try {
     const playlist = await callProviderApi('playlist.getDetails', {
-      listid: INTERNATIONAL_CHART_PLAYLIST_ID, n: '50', p: '1'
+      listid: INTERNATIONAL_CHART_PLAYLIST_ID, n: '21', p: '1'
     });
     const rawSongs = Array.isArray(playlist?.list) ? playlist.list : [];
     const results = rawSongs
       .filter((song) => String(song?.language || '').trim().toLowerCase() === 'english')
+      .slice(0, 21)
       .map((song) => mapProviderSong(song, false))
-      .filter(Boolean)
-      .slice(0, 25);
+      .filter(Boolean);
     if (!results.length) return providerErrorResponse('No English tracks were found in JioSaavn’s trending chart.');
     return Response.json({ results }, {
       headers: { 'Cache-Control': 'public, max-age=300, s-maxage=900' }
