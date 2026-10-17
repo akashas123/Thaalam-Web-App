@@ -375,10 +375,8 @@ export async function handleSearch(request) {
   });
 }
 
-/* Genre feeds search for an artist name, where search.getResults can rank
-   unrelated tracks whose title merely contains that name. Use Saavn's
-   autocomplete song matches, then hydrate their IDs to get playable streams
-   and canonical primary-artist credits before returning them to the client. */
+/* Genre feeds use a language-specific query and reject every result whose
+   provider language does not match the selected tab. */
 async function handleGenreSearch(url) {
   const query = (url.searchParams.get('q') || '').trim().replace(/\s+/g, ' ');
   if (!query || query.length > 200) {
@@ -391,20 +389,28 @@ async function handleGenreSearch(url) {
     return Response.json({ error: 'A supported genre language is required.' }, { status: 400 });
   }
   try {
-    const payload = await callProviderApi('autocomplete.get', { query });
-    const raw = payload?.songs?.data || payload?.data?.songs || [];
-    const ids = [...new Set((Array.isArray(raw) ? raw : [])
-      .map((song) => String(song?.id || ''))
-      .filter((id) => SONG_ID_PATTERN.test(id)))].slice(0, Math.min(25, limit * 2));
-    if (!ids.length) return providerErrorResponse('No playable artist tracks were found.');
-
-    const detailPayload = await callProviderApi('song.getDetails', { pids: ids.join(',') });
-    const detailedSongs = detailPayload?.songs || detailPayload?.data?.songs || [];
-    const results = (Array.isArray(detailedSongs) ? detailedSongs : [])
-      .map(mapProviderSong)
-      .filter((song) => song?.streamUrl && song.language === language)
-      .slice(0, limit);
-    if (!results.length) return providerErrorResponse('No playable artist tracks were found.');
+    const seen = new Set();
+    const results = [];
+    for (let page = 1; page <= 5 && results.length < limit; page += 1) {
+      const payload = await callProviderApi('search.getResults', {
+        q: query,
+        n: String(Math.max(limit, 10)),
+        p: String(page)
+      });
+      const raw = payload?.data?.results || payload?.results || [];
+      const items = Array.isArray(raw) ? raw : [];
+      if (!items.length) break;
+      for (const item of items) {
+        const song = mapProviderSong(item);
+        if (song?.streamUrl && song.language === language && !seen.has(song.id)) {
+          seen.add(song.id);
+          results.push(song);
+          if (results.length >= limit) break;
+        }
+      }
+      if (items.length < 10) break;
+    }
+    if (!results.length) return providerErrorResponse('No tracks were found for this language.');
     return Response.json({ results }, {
       headers: { 'Cache-Control': 'public, max-age=300, s-maxage=600' }
     });

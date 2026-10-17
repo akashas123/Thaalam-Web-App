@@ -844,14 +844,13 @@
     const catalogSongInfoDetails = document.getElementById('catalogSongInfoDetails');
     const catalogArtistPortrait = document.getElementById('catalogArtistPortrait');
     const catalogArtistBackground = document.getElementById('catalogArtistBackground');
-    // Genre tabs query the JioSaavn search proxy with the language/region term
-    // on the right. The value doubles as the chart's cache key check and the
-    // search string sent to /api/music-search.
+    // Genre tabs use language-specific catalogue terms; the API filters every
+    // returned track by its provider language metadata.
     const genreFeedIds = {
-      international: ['ed sheeran', 'taylor swift', 'the weeknd'],
-      hindi: ['arijit singh', 'shreya ghoshal', 'sonu nigam'],
-      malayalam: ['vineeth sreenivasan', 'sushin shyam', 'k s chithra'],
-      tamil: ['anirudh ravichander', 'sid sriram', 'harris jayaraj']
+      international: ['english songs'],
+      hindi: ['hindi songs'],
+      malayalam: ['malayalam songs'],
+      tamil: ['tamil songs']
     };
     const genreResultCache = new Map();
     // Recently fetched suggestions keyed by normalized term. Repeat searches
@@ -868,7 +867,7 @@
     const artistInfoRequests = new Map();
     // Version the genre cache separately so changes to feed filtering replace
     // previously cached broad search matches.
-    const GENRE_CACHE_KEY = 'thaalam-music-genre-cache-v4';
+    const GENRE_CACHE_KEY = 'thaalam-music-genre-cache-v5';
     const GENRE_CHART_LIMIT = 21;
     // One small ranked search request feeds both the suggestion dropdown and
     // the results grid: fetch 20, rank by relevance, show the top 20.
@@ -1517,20 +1516,10 @@
       // grid mixes artists instead of showing one query's block first.
       const queries = Array.isArray(genreId) ? genreId : [genreId];
       const label = Array.isArray(genreId) ? genreId.join(' / ') : genreId;
-      const perQuery = Math.min(12, Math.ceil(limit / queries.length) + 4);
-      const artistKey = (value) => String(value || '')
-        .normalize('NFKD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, '');
-      const filterArtist = (results, query) => {
-        if (!Array.isArray(genreId)) return results;
-        const requestedArtist = artistKey(query);
-        return results.filter((song) =>
-          String(song.artist || '').split(/,|&|\bfeat(?:uring)?\b|\bwith\b/i)
-            .some((artist) => artistKey(artist) === requestedArtist)
-        );
-      };
+      const perQuery = Math.min(25, Math.ceil(limit / queries.length) + 4);
+      const filterLanguage = (results) => results.filter((song) =>
+        String(song.language || '').trim().toLowerCase() === language
+      );
       return Promise.all(queries.map((query) => {
         const url = new URL('/api/music-search', window.location.origin);
         url.searchParams.set('q', query);
@@ -1547,7 +1536,7 @@
           })
           .then((data) => {
             const results = data?.results || [];
-            return filterArtist(results, query);
+            return filterLanguage(results);
           })
           .catch(() => []);
       }))
