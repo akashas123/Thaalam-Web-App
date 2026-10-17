@@ -11,7 +11,8 @@ const UPSTREAM_REQUEST_HEADERS = {
   accept: 'application/json, text/plain, */*'
 };
 const SONG_ID_PATTERN = /^[A-Za-z0-9_-]{4,32}$/;
-const INTERNATIONAL_CHART_PLAYLIST_ID = '48189087';
+// Numeric ID resolved from JioSaavn's International: India Superhits Top 50 URL.
+const INTERNATIONAL_CHART_PLAYLIST_ID = '1134595537';
 
 /* ------------------------------------------------------------------ *
  * DES-ECB decryption (key 38346591) for encrypted_media_url.
