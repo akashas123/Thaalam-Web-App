@@ -832,7 +832,9 @@ body.view-rises-from-mini.view-now-playing .player-view {
 
   /* Numeric volume readout sitting right after the slider. */
   .mini-player-volume-value {
-    min-width: 2ch;
+    width: 3ch;
+    min-width: 3ch;
+    flex: 0 0 3ch;
     margin-left: 0.15rem;
     color: rgba(255, 255, 255, 0.72);
     font-size: 0.72rem;

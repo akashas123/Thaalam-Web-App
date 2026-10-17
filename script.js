@@ -975,9 +975,9 @@ function updateAlbumArt(artworkUrl) {
 
   if (!artworkUrl) {
     lastArtwork = '';
-    albumArtImage.src = 'album-placeholder.svg?v=2';
+    albumArtImage.src = 'album-placeholder.svg?v=3';
     albumArtImage.style.opacity = '1';
-    if (miniPlayerArt) miniPlayerArt.src = 'album-placeholder.svg?v=2';
+    if (miniPlayerArt) miniPlayerArt.src = 'album-placeholder.svg?v=3';
     return;
   }
   lastArtwork = artworkUrl;
@@ -994,9 +994,9 @@ function updateAlbumArt(artworkUrl) {
   };
   image.onerror = () => {
     if (requestId !== artworkRequestId) return;
-    albumArtImage.src = 'album-placeholder.svg?v=2';
+    albumArtImage.src = 'album-placeholder.svg?v=3';
     albumArtImage.style.opacity = '1';
-    if (miniPlayerArt) miniPlayerArt.src = 'album-placeholder.svg?v=2';
+    if (miniPlayerArt) miniPlayerArt.src = 'album-placeholder.svg?v=3';
   };
   image.src = artworkUrl;
   updateAlbumColors(artworkUrl, requestId);
@@ -1084,12 +1084,12 @@ window.restoreLiveRadioUi = restoreLiveRadioUi;
 
 document.addEventListener('DOMContentLoaded', () => {
   if (radio) radio.preload = 'none';
-  if (albumArtImage) albumArtImage.src = 'album-placeholder.svg?v=2';
+  if (albumArtImage) albumArtImage.src = 'album-placeholder.svg?v=3';
 
   const favicon = document.createElement('link');
   favicon.rel = 'icon';
   favicon.type = 'image/png';
-  favicon.href = 'icon-512.png?v=3';
+  favicon.href = 'icon-512.png?v=4';
   document.head.prepend(favicon);
 
   const albumBackground = document.createElement('div');
@@ -1145,7 +1145,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js')
+    navigator.serviceWorker.register('./sw.js?v=215')
       .then((registration) => {
         // Poll for a newer worker so deployed versions reach open tabs without
         // the user having to close every tab + hard-refresh twice.

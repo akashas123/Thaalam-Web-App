@@ -11,9 +11,9 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=168">
-  <link rel="icon" type="image/png" href="icon-512.png?v=3">
-  <link rel="apple-touch-icon" href="icon-192.png?v=3">
+  <link rel="stylesheet" href="style.css?v=169">
+  <link rel="icon" type="image/png" href="icon-512.png?v=4">
+  <link rel="apple-touch-icon" href="icon-192.png?v=4">
 
   <style>
     .tagline[class~="marquee"] span {
@@ -319,7 +319,7 @@
     <div class="mini-player-center">
       <div class="mini-player-now">
         <button class="mini-player-art" type="button" data-view="now-playing" aria-label="Open Now Playing">
-          <img id="miniPlayerArt" src="album-placeholder.svg?v=2" alt="">
+          <img id="miniPlayerArt" src="album-placeholder.svg?v=3" alt="">
         </button>
         <div class="mini-player-meta">
           <button class="mini-player-track" type="button" data-view="now-playing" aria-label="Open Now Playing">
@@ -359,7 +359,7 @@
     <form method="dialog">
       <button class="dialog-close" aria-label="Close install prompt">&times;</button>
     </form>
-    <img class="install-app-mark" src="icon-192.png?v=3" alt="">
+    <img class="install-app-mark" src="icon-192.png?v=4" alt="">
     <p class="site-page-eyebrow">Non-Stop 24x7</p>
     <h2 id="installAppTitle">Install Thaalam 24x7</h2>
     <p class="install-app-description" id="installAppDescription"></p>
@@ -380,7 +380,7 @@
   <div class="app player-view" id="playerView">
 
     <div class="album-art-card">
-      <img id="albumArtImg" src="album-placeholder.svg?v=2" alt="Album artwork placeholder">
+      <img id="albumArtImg" src="album-placeholder.svg?v=3" alt="Album artwork placeholder">
     </div>
 
     <div class="station-row" id="stationRow">
@@ -600,7 +600,7 @@
     </form>
     <h2 id="catalogSongInfoTitle">Song information</h2>
     <div class="catalog-song-layout">
-      <img class="song-info-art" id="catalogSongInfoArt" src="album-placeholder.svg?v=2" alt="Album artwork">
+      <img class="song-info-art" id="catalogSongInfoArt" src="album-placeholder.svg?v=3" alt="Album artwork">
       <div class="catalog-song-copy">
         <p class="song-info-track" id="catalogSongInfoTrack"></p>
         <p class="song-info-details" id="catalogSongInfoDetails"></p>
@@ -730,13 +730,13 @@
   </aside>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
-  <script src="script.js?v=53"></script>
-  <script src="ondemand-player.js?v=1"></script>
-  <script src="audio-recovery.js?v=2"></script>
-  <script src="marquee.js?v=3"></script>
-  <script src="media-metadata.js?v=7"></script>
-  <script src="player-controls.js?v=35"></script>
-  <script src="lyrics.js?v=37"></script>
+  <script src="script.js?v=54"></script>
+  <script src="ondemand-player.js?v=2"></script>
+  <script src="audio-recovery.js?v=3"></script>
+  <script src="marquee.js?v=4"></script>
+  <script src="media-metadata.js?v=8"></script>
+  <script src="player-controls.js?v=36"></script>
+  <script src="lyrics.js?v=38"></script>
   <script src="/google-auth-config.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script>
@@ -1116,7 +1116,7 @@
         ? song.artworkUrl100
             .replace(/^http:/, 'https:')
             .replace(/\d+x\d+bb\./, '600x600bb.')
-        : 'album-placeholder.svg?v=2';
+          : 'album-placeholder.svg?v=3';
       const releaseDate = song.releaseDate
         ? new Date(song.releaseDate).toLocaleDateString()
         : 'N/A';
@@ -1129,7 +1129,7 @@
       catalogSongInfoArt.src = artworkUrl;
       catalogSongInfoArt.alt = `${song.trackName || 'Song'} album artwork`;
       catalogSongInfoArt.onerror = () => {
-        catalogSongInfoArt.src = 'album-placeholder.svg?v=2';
+        catalogSongInfoArt.src = 'album-placeholder.svg?v=3';
       };
       catalogSongInfoTrack.textContent = song.trackName || 'Unknown song';
       catalogSongInfoArtist.textContent = artistName;
@@ -1397,7 +1397,7 @@
           artwork.classList.add('is-loaded');
         }, { once: true });
         artwork.addEventListener('error', () => {
-          artwork.src = 'album-placeholder.svg?v=2';
+          artwork.src = 'album-placeholder.svg?v=3';
         }, { once: true });
         const artworkUrl = song.artworkUrl100
           ? song.artworkUrl100
@@ -1436,7 +1436,7 @@
           if (catalogArtworkObserver) catalogArtworkObserver.observe(artwork);
           else loadCatalogArtwork(artwork);
         } else {
-          artwork.src = 'album-placeholder.svg?v=2';
+          artwork.src = 'album-placeholder.svg?v=3';
         }
       });
       genreResults.dataset.renderKey = renderKey;
