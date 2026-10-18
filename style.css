@@ -289,6 +289,10 @@ body::after {
   -webkit-backdrop-filter: blur(1.25rem) saturate(150%);
 }
 
+.desktop-welcome-greeting {
+  display: none;
+}
+
 .desktop-profile-button:hover,
 .desktop-profile-button:focus-visible {
   background: rgba(255, 255, 255, 0.22);
@@ -542,6 +546,27 @@ body.view-rises-from-mini.view-now-playing .player-view {
 
   body.view-home .desktop-profile-button {
     display: grid;
+  }
+
+  body.view-home .desktop-welcome-greeting:not([hidden]) {
+    position: fixed;
+    z-index: 6;
+    top: 0.45rem;
+    right: 4.15rem;
+    display: flex;
+    height: 2.35rem;
+    align-items: center;
+    max-width: min(16rem, calc(100vw - 7rem));
+    padding: 0 0.8rem;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.09);
+    color: rgba(255, 255, 255, 0.88);
+    font-size: 0.78rem;
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .desktop-profile-button:hover,

@@ -11,7 +11,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=193">
+  <link rel="stylesheet" href="style.css?v=197">
   <link rel="icon" type="image/png" href="icon-512.png?v=4">
   <link rel="apple-touch-icon" href="icon-192.png?v=4">
 
@@ -191,6 +191,7 @@
     </div>
   </nav>
 
+  <span class="desktop-welcome-greeting" id="welcomeGreeting" hidden aria-live="polite"></span>
   <button class="desktop-profile-button" id="profileButton" type="button" aria-label="Account and sync information" aria-haspopup="dialog" aria-controls="profileDialog">
     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"></path></svg>
   </button>
@@ -2745,6 +2746,7 @@
   <script>
     (() => {
       const profileButton = document.getElementById('profileButton');
+      const welcomeGreeting = document.getElementById('welcomeGreeting');
       const profileDialog = document.getElementById('profileDialog');
       const signInButton = document.getElementById('googleSignInButton');
       const status = document.getElementById('profileDialogStatus');
@@ -2770,7 +2772,18 @@
       }
       window.getThaalamGoogleUserId = () => savedProfile?.sub || '';
 
+      const getTimeGreeting = () => {
+        const hour = new Date().getHours();
+        if (hour < 12) return 'Good morning';
+        if (hour < 17) return 'Good afternoon';
+        return 'Good evening';
+      };
+
       const showProfile = (user) => {
+        const firstName = String(user.name || '').trim().split(/\s+/)[0];
+        const greeting = getTimeGreeting();
+        welcomeGreeting.textContent = firstName ? `${greeting}, ${firstName}` : greeting;
+        welcomeGreeting.hidden = false;
         if (user.picture) {
           const avatar = document.createElement('img');
           avatar.className = 'profile-avatar';
@@ -2795,6 +2808,7 @@
       };
 
       const showGuest = () => {
+        welcomeGreeting.hidden = true;
         profileButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"></path></svg>';
         profileButton.setAttribute('aria-label', 'Account and sync information');
         accountView.hidden = true;
