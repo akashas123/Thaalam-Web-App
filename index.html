@@ -2093,12 +2093,26 @@
       if (!token || !userId) {
         genreResults.setAttribute('aria-busy', 'false');
         let localRatings = {};
+        let accountCache = null;
         let songInfo = {};
         try { localRatings = JSON.parse(localStorage.getItem('thaalam24x7-ratings') || '{}'); } catch { /* Ignore malformed browser ratings. */ }
+        if (userId) {
+          try { accountCache = JSON.parse(localStorage.getItem(`thaalam.favourites:${userId}`) || 'null'); } catch { /* Use device ratings if the account cache is malformed. */ }
+        }
         try { songInfo = JSON.parse(localStorage.getItem('thaalam24x7-song-info-v1') || '{}'); } catch { /* Song cards can still use rating keys. */ }
-        const songs = Object.entries(localRatings && typeof localRatings === 'object' ? localRatings : {})
-          .filter(([, rating]) => rating === 'up')
-          .map(([trackKey]) => {
+        const cachedAccountRatings = Array.isArray(accountCache?.ratings) ? accountCache.ratings : [];
+        const accountEntries = new Map(cachedAccountRatings
+          .filter((entry) => entry?.track_key && (entry.rating === 'up' || entry.rating === 'down'))
+          .map((entry) => [entry.track_key, entry]));
+        Object.entries(localRatings && typeof localRatings === 'object' ? localRatings : {})
+          .filter(([, rating]) => rating === 'up' || rating === 'down')
+          .forEach(([trackKey, rating]) => {
+            if (!accountEntries.has(trackKey)) accountEntries.set(trackKey, { track_key: trackKey, rating });
+          });
+        const songs = [...accountEntries.values()]
+          .filter((entry) => entry.rating === 'up')
+          .map((entry) => {
+            const trackKey = entry.track_key;
             const info = songInfo?.[trackKey] || {};
             const [keyTitle = '', keyArtist = ''] = trackKey.startsWith('youtube:') ? ['', ''] : trackKey.split('|');
             const rawVideoId = trackKey.startsWith('youtube:') ? trackKey.slice('youtube:'.length) : '';
@@ -2108,10 +2122,10 @@
             const fallbackArtwork = videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '';
             return {
               trackKey,
-              favouritedAt: info.savedAt || 0,
-              trackName: info.track || keyTitle || 'Liked song',
-              artistName: info.artist || keyArtist || 'Unknown artist',
-              artworkUrl100: info.artworkUrl100 || info.artwork || fallbackArtwork,
+              favouritedAt: info.savedAt || entry.updated_at || 0,
+              trackName: info.track || entry.title || keyTitle || 'Liked song',
+              artistName: info.artist || entry.artist || keyArtist || 'Unknown artist',
+              artworkUrl100: info.artworkUrl100 || info.artwork || entry.artwork || entry.artworkUrl100 || fallbackArtwork,
               ...(videoId ? { youtubeVideoId: videoId } : {})
             };
           });
@@ -2324,7 +2338,7 @@
       );
       genreTabList.hidden = false;
       homeSubtitle.textContent = genre === 'you-like'
-        ? (window.getThaalamGoogleAccessToken?.() && window.getThaalamGoogleUserId?.()
+        ? (window.getThaalamGoogleUserId?.()
           ? 'Songs you favourited with this Google account'
           : 'Songs you favourited on this device')
         : 'Explore songs by genre';
@@ -2930,9 +2944,10 @@
       };
 
       if (savedProfile && !window.getThaalamGoogleAccessToken()) {
-        // Keep the saved account visible without triggering Google's popup
-        // flow on every app launch. Reconnect only after an explicit click.
+        // Refresh the short-lived Google token silently. This uses prompt:none,
+        // so it restores account syncing without opening a sign-in popup.
         keepSavedAccountVisible();
+        window.addEventListener('load', () => requestGoogleAccess(true), { once: true });
       }
 
       window.addEventListener('thaalam:auth-expired', () => {
