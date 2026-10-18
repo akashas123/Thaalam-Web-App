@@ -1542,6 +1542,26 @@ body.view-rises-from-mini.view-now-playing .player-view {
     scrollbar-width: none;
   }
 
+  /* Keep the Browse header, tabs and sort controls stationary while a long
+     favourites list scrolls. The fixed home page provides the viewport bound;
+     only the list itself becomes a scroll container in list layout. */
+  .home-page:has(.genre-results.favourites-list-layout) .site-page-content {
+    overflow-y: hidden;
+  }
+
+  .genre-results.favourites-list-layout {
+    max-height: max(8rem, calc(100dvh - 25rem));
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .genre-results.favourites-list-layout::-webkit-scrollbar {
+    display: none;
+  }
+
   .home-page .site-page-content::-webkit-scrollbar {
     display: none;
   }
