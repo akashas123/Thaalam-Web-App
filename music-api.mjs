@@ -164,7 +164,7 @@ function parseProviderPayload(text) {
   }
 }
 
-async function callProviderApi(call, params, ctx = 'web6dot0') {
+async function callProviderApi(call, params, ctx = 'web6dot0', env = {}) {
   const url = new URL(UPSTREAM_API_URL);
   url.searchParams.set('__call', call);
   for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
@@ -172,7 +172,13 @@ async function callProviderApi(call, params, ctx = 'web6dot0') {
   url.searchParams.set('_marker', '0');
   url.searchParams.set('ctx', ctx);
   url.searchParams.set('api_version', '4');
-  const response = await fetch(url, { headers: UPSTREAM_REQUEST_HEADERS });
+  const relayUrl = env.JIOSAAVN_RELAY_URL;
+  const relayToken = env.JIOSAAVN_RELAY_TOKEN;
+  const targetUrl = relayUrl ? new URL(url.search, relayUrl).toString() : url;
+  const headers = relayUrl
+    ? { ...UPSTREAM_REQUEST_HEADERS, 'x-relay-token': relayToken || '' }
+    : UPSTREAM_REQUEST_HEADERS;
+  const response = await fetch(targetUrl, { headers });
   if (!response.ok) return null;
   return parseProviderPayload(await response.text());
 }
@@ -306,7 +312,7 @@ function readSongId(url) {
    actually receives up to `limit` playable songs instead of one thin page;
    albums come from a single search.getAlbumResults page (no pagination).
    Shape: { results: [...songs], albums: [...albums] }. */
-export async function handleSearch(request) {
+export async function handleSearch(request, env = {}) {
   const url = new URL(request.url);
   const query = (url.searchParams.get('q') || '').trim().replace(/\s+/g, ' ');
   if (!query || query.length > 200) {
@@ -323,7 +329,7 @@ export async function handleSearch(request) {
       // JioSaavn rarely honours n=25 on page one; walk pages until the grid is
       // full (or pages run dry) so genre tabs fill all 21 cards.
       for (let page = 1; page <= 5 && results.length < limit; page += 1) {
-        const payload = await callProviderApi('search.getResults', { q: query, n: String(Math.max(limit, 10)), p: String(page) });
+        const payload = await callProviderApi('search.getResults', { q: query, n: String(Math.max(limit, 10)), p: String(page) }, 'web6dot0', env);
         const raw = payload?.data?.results || payload?.results || [];
         const items = Array.isArray(raw) ? raw : [];
         if (!items.length) break;
@@ -343,7 +349,7 @@ export async function handleSearch(request) {
     })();
     const albumPage = (async () => {
       try {
-        const payload = await callProviderApi('search.getAlbumResults', { q: query, p: '1', n: '10' });
+        const payload = await callProviderApi('search.getAlbumResults', { q: query, p: '1', n: '10' }, 'web6dot0', env);
         const raw = payload?.data?.results || payload?.results || [];
         const items = Array.isArray(raw) ? raw : [];
         for (const item of items) {
@@ -376,7 +382,7 @@ export async function handleSearch(request) {
    (title/artist/artwork) plus list[] of song payloads shaped like search
    results, so tracks map through mapProviderSong with stream URLs.
    Shape: { album, songs: [...] }. */
-export async function handleAlbum(request) {
+export async function handleAlbum(request, env = {}) {
   const url = new URL(request.url);
   const id = (url.searchParams.get('id') || '').trim();
   if (!ALBUM_ID_PATTERN.test(id)) {
@@ -385,7 +391,7 @@ export async function handleAlbum(request) {
 
   let payload = null;
   try {
-    payload = await callProviderApi('content.getAlbumDetails', { albumid: id });
+    payload = await callProviderApi('content.getAlbumDetails', { albumid: id }, 'web6dot0', env);
   } catch {
     return providerErrorResponse('JioSaavn album details are temporarily unavailable.');
   }
@@ -424,7 +430,7 @@ export async function handleAlbum(request) {
 
 /* GET /api/music-song?id=<songId>
    Fresh stream resolution for a known song (used to recover expired URLs). */
-export async function handleSong(request) {
+export async function handleSong(request, env = {}) {
   const url = new URL(request.url);
   const id = readSongId(url);
   if (!isValidSongId(id)) {
@@ -433,7 +439,7 @@ export async function handleSong(request) {
 
   let payload = null;
   try {
-    payload = await callProviderApi('song.getDetails', { cc: '1', pids: id });
+    payload = await callProviderApi('song.getDetails', { cc: '1', pids: id }, 'web6dot0', env);
   } catch {
     return providerErrorResponse('JioSaavn song details are temporarily unavailable.');
   }
@@ -452,13 +458,13 @@ export async function handleSong(request) {
    autoplay request builds a fresh station around the requested song. The
    client de-duplicates against playedTrackIds, so chained stations keep the
    radio moving without repeating the session's played tracks. */
-async function fetchProviderRadioSongs(id, k) {
+async function fetchProviderRadioSongs(id, k, env = {}) {
   let stationid = null;
   try {
     const stationPayload = await callProviderApi(
       'webradio.createEntityStation',
       { entity_type: 'queue', entity_id: JSON.stringify([id]) },
-      'android'
+      'android', env
     );
     stationid = (stationPayload && stationPayload.stationid) || null;
   } catch {
@@ -471,7 +477,7 @@ async function fetchProviderRadioSongs(id, k) {
     songPayload = await callProviderApi(
       'webradio.getSong',
       { stationid, k: String(k) },
-      'android'
+      'android', env
     );
   } catch {
     songPayload = null;
@@ -509,7 +515,7 @@ async function fetchProviderRadioSongs(id, k) {
    Build each continuation from a fresh provider radio station. The client
    requests another station around each played track, so the queue can keep
    growing while it filters out the current artist and album. */
-export async function handleAutoplay(request) {
+export async function handleAutoplay(request, env = {}) {
   const url = new URL(request.url);
   const id = readSongId(url);
   if (!isValidSongId(id)) {
@@ -517,7 +523,7 @@ export async function handleAutoplay(request) {
   }
   const k = Math.max(1, Math.min(50, Number(url.searchParams.get('k')) || 30));
 
-  const radio = await fetchProviderRadioSongs(id, k);
+  const radio = await fetchProviderRadioSongs(id, k, env);
   return Response.json(
     { results: radio.songs, stationid: radio.stationid || undefined },
     { headers: { 'Cache-Control': 'no-store' } }

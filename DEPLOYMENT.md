@@ -35,6 +35,14 @@ time; after expiry, sign in again to resume syncing.
 
 On-demand search, stream resolution, and autoplay use JioSaavn's undocumented web API through same-origin routes (`/api/music-search`, `/api/music-song`, `/api/music-autoplay`). The API blocks browser CORS, so all calls are proxied server-side; song media URLs arrive DES-ECB encrypted (key `38346591`) and are decrypted in plain JS before being returned. Playback streams the direct CDN audio through an HTML5 `<audio>` element (the CDN answers Range requests, so seeking works). Autoplay creates a new radio station from each played track and filters out the current artist and album, then requests another station as playback advances. These endpoints are undocumented and can change without notice.
 
+If Cloudflare's outbound requests to JioSaavn are blocked, the Worker can send
+catalogue API requests through the optional India hosted relay in `relay/`.
+Deploy that service and set `JIOSAAVN_RELAY_URL` and the secret
+`JIOSAAVN_RELAY_TOKEN` in the Pages Functions or direct-upload Worker runtime.
+The relay only forwards to JioSaavn's fixed API host; audio playback still
+streams directly from JioSaavn's CDN. With these variables unset, local
+development continues to call JioSaavn directly.
+
 ## Cloudflare Pages
 
 For Git integration or a Wrangler deployment, Cloudflare Pages discovers the files in `functions/api/` and serves `/api/music-search`, `/api/music-song`, `/api/music-autoplay`, and `/api/ratings`.
