@@ -2387,6 +2387,9 @@
     window.addEventListener('thaalam:authenticated', () => {
       if (activeGenre === 'you-like') loadGenre('you-like');
     });
+    window.addEventListener('thaalam:profile-ready', () => {
+      if (activeGenre === 'you-like') loadGenre('you-like');
+    });
 
     function searchCatalog(term) {
       const normalizedTerm = term.trim();
@@ -2971,6 +2974,7 @@
       signInButton.addEventListener('click', () => {
         requestGoogleAccess(false);
       });
+      window.dispatchEvent(new Event('thaalam:profile-ready'));
     })();
   </script>
 </body>
