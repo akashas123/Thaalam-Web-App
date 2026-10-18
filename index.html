@@ -1756,6 +1756,7 @@
 
     async function loadCatalog(cacheKey, term, genreId = null) {
       activeGenre = cacheKey;
+      favouriteSortControl.hidden = true;
       const requestId = ++genreRequestId;
       const cached = genreResultCache.get(cacheKey);
       if (cached) {
@@ -2836,18 +2837,9 @@
       };
 
       if (savedProfile && !window.getThaalamGoogleAccessToken()) {
-        let attempts = 0;
-        const renewSilently = () => {
-          if (window.getThaalamGoogleAccessToken() || !savedProfile) return;
-          if (getTokenClient()) {
-            requestGoogleAccess(true);
-            return;
-          }
-          attempts += 1;
-          if (attempts < 40) window.setTimeout(renewSilently, 250);
-          else setReconnectRequired();
-        };
-        renewSilently();
+        // Keep the saved account visible without triggering Google's popup
+        // flow on every app launch. Reconnect only after an explicit click.
+        setReconnectRequired();
       }
 
       window.addEventListener('thaalam:auth-expired', () => {
