@@ -946,6 +946,8 @@ body.view-rises-from-mini.view-now-playing .player-view {
   .mini-player-title.is-marquee,
   .mini-player-artist.is-marquee {
     text-overflow: clip;
+    -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 0.65rem), transparent 100%);
+    mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 0.65rem), transparent 100%);
   }
 
   .mini-player-title.is-marquee::before,
@@ -1809,11 +1811,23 @@ body.view-rises-from-mini.view-now-playing .player-view {
   .genre-results.favourites-list-layout .genre-card-title {
     font-size: 1.05rem;
     font-weight: 700;
+    color: rgba(235, 239, 245, 0.84);
   }
 
   .genre-results.favourites-list-layout .genre-card-artist {
     margin-top: 0.35rem;
     font-size: 0.9rem;
+    color: rgba(220, 226, 235, 0.68);
+  }
+
+  .genre-results.favourites-list-layout .genre-card.is-active-track .genre-card-title {
+    color: #ff3f69;
+    text-shadow: none;
+  }
+
+  .genre-results.favourites-list-layout .genre-card.is-active-track .genre-card-artist {
+    color: rgba(255, 116, 145, 0.96);
+    text-shadow: none;
   }
 
   /* One-shot cascade after an intentional genre-tab switch: script.js spends
@@ -2441,10 +2455,11 @@ body.view-rises-from-mini.view-now-playing .player-view {
 .on-demand-like-button.rating-selected svg {
   fill: currentColor;
   stroke: none;
-  filter: drop-shadow(0 0 0.32rem rgba(255, 255, 255, 0.95));
+  filter: none;
 }
 
 .on-demand-like-button.rating-selected {
+  color: #ff5c7a;
   opacity: 1;
 }
 
@@ -2481,6 +2496,11 @@ body.on-demand-active .tagline.now-playing-track {
 
 .tagline[class~="paused"] > #nowPlaying {
   animation-play-state: paused;
+}
+
+.tagline.marquee > #nowPlaying {
+  -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 0.8rem), transparent 100%);
+  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 0.8rem), transparent 100%);
 }
 
 [class~="live-row"] {
@@ -4113,6 +4133,7 @@ body.has-lyrics .lyrics-panel {
     position: relative;
     top: auto;
     right: auto;
+    left: -0.5rem;
     transform: none;
   }
 
@@ -4441,5 +4462,11 @@ body {
 img {
   -webkit-user-drag: none;
   user-drag: none;
+}
+
+@media (min-width: 56.25rem) and (max-width: 75rem) and (pointer: fine) {
+  body.view-now-playing .now-playing-track > .on-demand-like-button {
+    left: 0;
+  }
 }
 

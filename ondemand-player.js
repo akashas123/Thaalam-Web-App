@@ -258,8 +258,12 @@ async function findOnDemandSong(song) {
       const officialAudio = /\b(?:official\s+)?(?:original\s+)?audio\b/i.test(item.title);
       return {
         ...item,
-        score: (exactTitle ? 100 : titleMatch ? 65 : 0) +
-          (artistMatch ? 30 : 0) + (featuredArtistMatch ? 8 : 0) +
+        // On favorites restored after a reload, the original provider id may
+        // not be available, so title/artist search resolves the stream. Give
+        // the credited artist enough weight that an exact-title recording by
+        // another artist cannot outrank the intended recording.
+        score: (exactTitle ? 100 : titleMatch ? 60 : 0) +
+          (artistMatch ? 60 : 0) + (featuredArtistMatch ? 10 : 0) +
           (albumFirst && albumMatch ? 24 : albumMatch ? 12 : 0) +
           (officialAudio ? 15 : 0) + Math.max(0, 20 - index) -
           (rejectedTitle ? 1000 : 0) - (nonCatalogTitle ? 400 : 0)
@@ -556,6 +560,7 @@ function setOnDemandPlaying(isPlaying) {
   else window.showPlayerPlayIcon?.();
   onDemandPlayButton?.classList.remove('is-loading');
   onDemandMiniToggle?.classList.remove('is-loading');
+  window.dispatchEvent(new Event('thaalam:on-demand-playback-state'));
 }
 
 /* Re-assert the listener's stored volume level + mute flag on the audio

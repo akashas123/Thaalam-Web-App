@@ -337,7 +337,29 @@ function bindMiniPlayerProxy(miniButton, targetId) {
 
 bindMiniPlayerProxy(miniPrevButton, 'onDemandPrevButton');
 bindMiniPlayerProxy(miniNextButton, 'onDemandNextButton');
-bindMiniPlayerProxy(miniInfoButton, 'songInfoButton');
+miniInfoButton?.addEventListener('click', () => {
+  const onDemand = Boolean(window.onDemandPlaybackActive);
+  const source = onDemand
+    ? window.getCurrentOnDemandSong?.()
+    : window.latestNowPlayingData?.now_playing?.song || window.currentNowPlayingSong;
+  const title = source?.trackName || source?.title || '';
+  const artist = source?.artistName || source?.artist || '';
+  if (!title || !artist || typeof window.openCatalogSongInfo !== 'function') return;
+
+  const clock = onDemand ? window.getOnDemandTrackClock?.() : null;
+  const duration = Number(source.trackTimeMillis) ||
+    Number(source.duration) * 1000 ||
+    Number(clock?.duration) * 1000 || 0;
+  window.openCatalogSongInfo({
+    trackName: title,
+    artistName: artist,
+    collectionName: source.collectionName || source.album || source.album_name || '',
+    artworkUrl100: source.artworkUrl100 || source.art || '',
+    primaryGenreName: source.primaryGenreName || source.genre || '',
+    releaseDate: source.releaseDate || '',
+    trackTimeMillis: duration
+  }, miniInfoButton);
+});
 
 /* "Like" maps to a different control per mode: the on-demand heart, or the
    live-radio thumbs-up. Pick the right one at click time. */
@@ -378,8 +400,12 @@ function syncMiniPlayerControls() {
   }
 
   if (miniInfoButton) {
-    const info = document.getElementById('songInfoButton');
-    miniInfoButton.disabled = Boolean(info?.disabled);
+    const source = onDemandActive
+      ? window.getCurrentOnDemandSong?.()
+      : window.latestNowPlayingData?.now_playing?.song || window.currentNowPlayingSong;
+    miniInfoButton.disabled = !Boolean(
+      (source?.trackName || source?.title) && (source?.artistName || source?.artist)
+    );
   }
 }
 
