@@ -1813,6 +1813,21 @@ body.view-rises-from-mini.view-now-playing .player-view {
     text-shadow: none;
   }
 
+  .genre-remove-favourite-button {
+    right: auto;
+    left: clamp(0.35rem, 6%, 0.65rem);
+  }
+
+  .genre-remove-favourite-button svg {
+    width: 58%;
+    height: 58%;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 2;
+  }
+
   .genre-play-button:hover {
     background: rgba(16, 18, 20, 0.88);
     border-color: #fff;
@@ -1821,6 +1836,12 @@ body.view-rises-from-mini.view-now-playing .player-view {
 
   .genre-info-button:hover {
     background: rgba(16, 18, 20, 0.88);
+    border-color: #fff;
+    transform: scale(1.08);
+  }
+
+  .genre-remove-favourite-button:hover {
+    background: rgba(130, 24, 34, 0.92);
     border-color: #fff;
     transform: scale(1.08);
   }

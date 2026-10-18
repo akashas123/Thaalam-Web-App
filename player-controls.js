@@ -417,6 +417,19 @@ function notifyRatingChanged(trackKey, rating) {
   }));
 }
 
+function removeFavoriteRating(trackKey) {
+  if (!trackKey) return false;
+  const ratings = getStoredRatings();
+  delete ratings[trackKey];
+  if (!saveStoredRatings(ratings)) return false;
+  if (currentRatingTrackKey === trackKey) applyStoredRating(null);
+  notifyRatingChanged(trackKey, null);
+  void persistRatingToCloud(trackKey, null);
+  return true;
+}
+
+window.removeFavoriteRating = removeFavoriteRating;
+
 function getStoredRatings() {
   try {
     const stored =

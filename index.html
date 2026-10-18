@@ -11,7 +11,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=169">
+  <link rel="stylesheet" href="style.css?v=170">
   <link rel="icon" type="image/png" href="icon-512.png?v=4">
   <link rel="apple-touch-icon" href="icon-192.png?v=4">
 
@@ -743,7 +743,7 @@
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=8"></script>
-  <script src="player-controls.js?v=36"></script>
+  <script src="player-controls.js?v=37"></script>
   <script src="lyrics.js?v=38"></script>
   <script src="/google-auth-config.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -1484,6 +1484,16 @@
         infoButton.textContent = 'i';
         infoButton.addEventListener('click', () => openCatalogSongInfo(song, infoButton));
 
+        const removeFavouriteButton = document.createElement('button');
+        removeFavouriteButton.className = 'genre-info-button genre-remove-favourite-button';
+        removeFavouriteButton.type = 'button';
+        removeFavouriteButton.setAttribute('aria-label', `Remove ${song.trackName || 'song'} from favourites`);
+        removeFavouriteButton.title = 'Remove from favourites';
+        removeFavouriteButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-.8 13H6.8L6 7m4 3v7m4-7v7"/></svg>';
+        removeFavouriteButton.addEventListener('click', () => {
+          window.removeFavoriteRating?.(song.trackKey);
+        });
+
         const artworkFrame = document.createElement('span');
         artworkFrame.className = 'genre-card-art-frame';
         const artwork = document.createElement('img');
@@ -1502,7 +1512,11 @@
               .replace(/\d+x\d+bb\./, '600x600bb.')
           : '';
         artworkFrame.appendChild(artwork);
-        media.append(artworkFrame, playButton, infoButton);
+        if (activeGenre === 'you-like') {
+          media.append(artworkFrame, playButton, infoButton, removeFavouriteButton);
+        } else {
+          media.append(artworkFrame, playButton, infoButton);
+        }
 
         const details = document.createElement('div');
         details.className = 'genre-card-details';
