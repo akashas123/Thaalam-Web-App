@@ -1109,7 +1109,7 @@
       await Promise.all(Array.from({ length: workerCount }, prefetchWorker));
     }
 
-    async function openCatalogSongInfo(song) {
+    async function openCatalogSongInfo(song, trigger = null) {
       const requestId = ++catalogSongInfoRequestId;
       const artistName = song.artistName || 'Unknown artist';
       const artworkUrl = song.artworkUrl100
@@ -1143,7 +1143,62 @@
       catalogArtistPortrait.removeAttribute('src');
       catalogArtistBackground.hidden = false;
       catalogArtistBackground.textContent = 'Loading artist information...';
-      if (!catalogSongInfoDialog.open) catalogSongInfoDialog.showModal();
+      if (!catalogSongInfoDialog.open) {
+        catalogSongInfoDialog.showModal();
+
+        const triggerRect = trigger?.getBoundingClientRect();
+        const dialogRect = catalogSongInfoDialog.getBoundingClientRect();
+        if (triggerRect && dialogRect.width && dialogRect.height) {
+          const originX = triggerRect.left + triggerRect.width / 2 - dialogRect.left;
+          const originY = triggerRect.top + triggerRect.height / 2 - dialogRect.top;
+          const farthestCorner = Math.max(
+            Math.hypot(originX, originY),
+            Math.hypot(dialogRect.width - originX, originY),
+            Math.hypot(originX, dialogRect.height - originY),
+            Math.hypot(dialogRect.width - originX, dialogRect.height - originY)
+          );
+          catalogSongInfoDialog.style.transformOrigin = `${originX}px ${originY}px`;
+          catalogSongInfoDialog.animate(
+            [
+              {
+                opacity: 0.9,
+                transform: 'scale(0.025) rotate(-8deg)',
+                clipPath: `circle(1px at ${originX}px ${originY}px)`,
+                borderRadius: '50% 50% 45% 55% / 55% 45% 55% 45%',
+                filter: 'blur(1px)'
+              },
+              {
+                offset: 0.16,
+                opacity: 1,
+                transform: 'scale(0.16) rotate(-5deg)',
+                clipPath: `circle(${Math.ceil(farthestCorner * 0.16)}px at ${originX}px ${originY}px)`,
+                borderRadius: '45% 55% 50% 50% / 55% 45% 55% 45%',
+                filter: 'blur(0)'
+              },
+              {
+                offset: 0.72,
+                opacity: 1,
+                transform: 'scale(1.025) rotate(1deg)',
+                clipPath: `circle(${Math.ceil(farthestCorner + 2)}px at ${originX}px ${originY}px)`,
+                borderRadius: '1.7rem 0.8rem 1.5rem 0.9rem',
+                filter: 'blur(0)'
+              },
+              {
+                opacity: 1,
+                transform: 'scale(1) rotate(0)',
+                clipPath: `circle(${Math.ceil(farthestCorner + 2)}px at ${originX}px ${originY}px)`,
+                borderRadius: '1rem',
+                filter: 'blur(0)'
+              }
+            ],
+            {
+              duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 900,
+              easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)',
+              fill: 'both'
+            }
+          );
+        }
+      }
 
       try {
         const info = await getWikipediaArtistInfo(artistName.split(',')[0].trim());
@@ -1385,7 +1440,7 @@
         infoButton.setAttribute('aria-label', `Song information for ${song.trackName || 'song'}`);
         infoButton.title = 'Song information';
         infoButton.textContent = 'i';
-        infoButton.addEventListener('click', () => openCatalogSongInfo(song));
+        infoButton.addEventListener('click', () => openCatalogSongInfo(song, infoButton));
 
         const artworkFrame = document.createElement('span');
         artworkFrame.className = 'genre-card-art-frame';
