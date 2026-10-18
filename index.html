@@ -2944,10 +2944,8 @@
       };
 
       if (savedProfile && !window.getThaalamGoogleAccessToken()) {
-        // Refresh the short-lived Google token silently. This uses prompt:none,
-        // so it restores account syncing without opening a sign-in popup.
+        // Keep the saved account visible without requesting OAuth during app startup.
         keepSavedAccountVisible();
-        window.addEventListener('load', () => requestGoogleAccess(true), { once: true });
       }
 
       window.addEventListener('thaalam:auth-expired', () => {
