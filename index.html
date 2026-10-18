@@ -11,9 +11,9 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=168">
-  <link rel="icon" type="image/png" href="icon-512.png?v=3">
-  <link rel="apple-touch-icon" href="icon-192.png?v=3">
+  <link rel="stylesheet" href="style.css?v=169">
+  <link rel="icon" type="image/png" href="icon-512.png?v=4">
+  <link rel="apple-touch-icon" href="icon-192.png?v=4">
 
   <style>
     .tagline[class~="marquee"] span {
@@ -238,6 +238,14 @@
         <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="tamil">Tamil</button>
         <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="you-like">Favourites</button>
       </div>
+      <div class="favourite-sort-control" id="favouriteSortControl" hidden>
+        <label for="favouriteSort">Sort by</label>
+        <select id="favouriteSort">
+          <option value="recent">Recently added</option>
+          <option value="title">Title</option>
+          <option value="artist">Artist</option>
+        </select>
+      </div>
       <div class="genre-results" id="genreResults" role="tabpanel" aria-live="polite">
       </div>
     </div>
@@ -319,7 +327,7 @@
     <div class="mini-player-center">
       <div class="mini-player-now">
         <button class="mini-player-art" type="button" data-view="now-playing" aria-label="Open Now Playing">
-          <img id="miniPlayerArt" src="album-placeholder.svg?v=2" alt="">
+          <img id="miniPlayerArt" src="album-placeholder.svg?v=3" alt="">
         </button>
         <div class="mini-player-meta">
           <button class="mini-player-track" type="button" data-view="now-playing" aria-label="Open Now Playing">
@@ -359,7 +367,7 @@
     <form method="dialog">
       <button class="dialog-close" aria-label="Close install prompt">&times;</button>
     </form>
-    <img class="install-app-mark" src="icon-192.png?v=3" alt="">
+    <img class="install-app-mark" src="icon-192.png?v=4" alt="">
     <p class="site-page-eyebrow">Non-Stop 24x7</p>
     <h2 id="installAppTitle">Install Thaalam 24x7</h2>
     <p class="install-app-description" id="installAppDescription"></p>
@@ -380,7 +388,7 @@
   <div class="app player-view" id="playerView">
 
     <div class="album-art-card">
-      <img id="albumArtImg" src="album-placeholder.svg?v=2" alt="Album artwork placeholder">
+      <img id="albumArtImg" src="album-placeholder.svg?v=3" alt="Album artwork placeholder">
     </div>
 
     <div class="station-row" id="stationRow">
@@ -600,7 +608,7 @@
     </form>
     <h2 id="catalogSongInfoTitle">Song information</h2>
     <div class="catalog-song-layout">
-      <img class="song-info-art" id="catalogSongInfoArt" src="album-placeholder.svg?v=2" alt="Album artwork">
+      <img class="song-info-art" id="catalogSongInfoArt" src="album-placeholder.svg?v=3" alt="Album artwork">
       <div class="catalog-song-copy">
         <p class="song-info-track" id="catalogSongInfoTrack"></p>
         <p class="song-info-details" id="catalogSongInfoDetails"></p>
@@ -730,13 +738,13 @@
   </aside>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
-  <script src="script.js?v=53"></script>
-  <script src="ondemand-player.js?v=1"></script>
-  <script src="audio-recovery.js?v=2"></script>
-  <script src="marquee.js?v=3"></script>
-  <script src="media-metadata.js?v=7"></script>
-  <script src="player-controls.js?v=35"></script>
-  <script src="lyrics.js?v=37"></script>
+  <script src="script.js?v=54"></script>
+  <script src="ondemand-player.js?v=2"></script>
+  <script src="audio-recovery.js?v=3"></script>
+  <script src="marquee.js?v=4"></script>
+  <script src="media-metadata.js?v=8"></script>
+  <script src="player-controls.js?v=36"></script>
+  <script src="lyrics.js?v=38"></script>
   <script src="/google-auth-config.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script>
@@ -832,6 +840,8 @@
     const genreTabList = document.querySelector('.genre-tabs');
     const genreResults =
       document.getElementById('genreResults');
+    const favouriteSortControl = document.getElementById('favouriteSortControl');
+    const favouriteSortSelect = document.getElementById('favouriteSort');
     const homeSubtitle = document.querySelector('.home-page .site-page-copy');
     const catalogSearchForm = document.getElementById('catalogSearchForm');
     const catalogSearchInput = document.getElementById('catalogSearchInput');
@@ -896,6 +906,12 @@
     let suggestionRequestId = 0;
     let suggestionTimer = 0;
     let genreRequestId = 0;
+    let currentFavouriteSongs = [];
+    const FAVOURITE_SORT_KEY = 'thaalam-favourite-sort-v1';
+    try {
+      const savedSort = localStorage.getItem(FAVOURITE_SORT_KEY);
+      favouriteSortSelect.value = ['recent', 'title', 'artist'].includes(savedSort) ? savedSort : 'recent';
+    } catch { /* Use the default recent order if storage is unavailable. */ }
     // Armed only by an intentional genre-tab switch (click or arrow keys) and
     // spent by the next grid rebuild, so the tile-shuffle cascade in
     // renderGenreResults() runs for tab switches alone — never on first load,
@@ -1116,7 +1132,7 @@
         ? song.artworkUrl100
             .replace(/^http:/, 'https:')
             .replace(/\d+x\d+bb\./, '600x600bb.')
-        : 'album-placeholder.svg?v=2';
+        : 'album-placeholder.svg?v=3';
       const releaseDate = song.releaseDate
         ? new Date(song.releaseDate).toLocaleDateString()
         : 'N/A';
@@ -1129,7 +1145,7 @@
       catalogSongInfoArt.src = artworkUrl;
       catalogSongInfoArt.alt = `${song.trackName || 'Song'} album artwork`;
       catalogSongInfoArt.onerror = () => {
-        catalogSongInfoArt.src = 'album-placeholder.svg?v=2';
+        catalogSongInfoArt.src = 'album-placeholder.svg?v=3';
       };
       catalogSongInfoTrack.textContent = song.trackName || 'Unknown song';
       catalogSongInfoArtist.textContent = artistName;
@@ -1255,6 +1271,24 @@
       return ordered;
     }
 
+    function sortFavouriteSongs(songs) {
+      const sorted = [...songs];
+      if (favouriteSortSelect.value === 'title') {
+        sorted.sort((first, second) =>
+          (first.trackName || '').localeCompare(second.trackName || '', undefined, { sensitivity: 'base' }) ||
+          (first.artistName || '').localeCompare(second.artistName || '', undefined, { sensitivity: 'base' })
+        );
+      } else if (favouriteSortSelect.value === 'artist') {
+        sorted.sort((first, second) =>
+          (first.artistName || '').localeCompare(second.artistName || '', undefined, { sensitivity: 'base' }) ||
+          (first.trackName || '').localeCompare(second.trackName || '', undefined, { sensitivity: 'base' })
+        );
+      } else {
+        sorted.sort((first, second) => (second.favouritedAt || 0) - (first.favouritedAt || 0));
+      }
+      return sorted;
+    }
+
     function setHomeTint(color) {
       document.body.style.setProperty('--home-tint', color);
       // Only show the wash when a real sampled color exists. Empty grids,
@@ -1376,7 +1410,9 @@
         return;
       }
 
-      const orderedSongs = diversifyGenreSongs(songs);
+      const orderedSongs = activeGenre === 'you-like'
+        ? sortFavouriteSongs(songs)
+        : diversifyGenreSongs(songs);
       // Identity of everything the cards actually show, in display order.
       // The liked-songs rescue passes patch titles/artwork on the same
       // objects, so those fields must bust the key and force a rebuild.
@@ -1431,6 +1467,12 @@
         playButton.addEventListener('click', () => {
           // Play in the mini player without yanking the listener out of the
           // catalog. The mini player's art/title already open Now Playing.
+          if (activeGenre === 'you-like' && window.startOnDemandQueue) {
+            const queue = sortFavouriteSongs(currentFavouriteSongs);
+            const songIndex = queue.findIndex((item) => item.trackKey && item.trackKey === song.trackKey);
+            window.startOnDemandQueue(queue, songIndex >= 0 ? songIndex : 0, { openNowPlaying: false });
+            return;
+          }
           window.startOnDemandSong?.(song, { openNowPlaying: false });
         });
 
@@ -1452,7 +1494,7 @@
           artwork.classList.add('is-loaded');
         }, { once: true });
         artwork.addEventListener('error', () => {
-          artwork.src = 'album-placeholder.svg?v=2';
+          artwork.src = 'album-placeholder.svg?v=3';
         }, { once: true });
         const artworkUrl = song.artworkUrl100
           ? song.artworkUrl100
@@ -1491,7 +1533,7 @@
           if (catalogArtworkObserver) catalogArtworkObserver.observe(artwork);
           else loadCatalogArtwork(artwork);
         } else {
-          artwork.src = 'album-placeholder.svg?v=2';
+          artwork.src = 'album-placeholder.svg?v=3';
         }
       });
       genreResults.dataset.renderKey = renderKey;
@@ -1954,12 +1996,15 @@
             // better than the blank placeholder while iTunes lookup runs.
             const fallbackArtwork = videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '';
             return {
+              trackKey,
+              favouritedAt: info.savedAt || 0,
               trackName: info.track || keyTitle || 'Liked song',
               artistName: info.artist || keyArtist || 'Unknown artist',
               artworkUrl100: info.artworkUrl100 || info.artwork || fallbackArtwork,
               ...(videoId ? { youtubeVideoId: videoId } : {})
             };
           });
+        currentFavouriteSongs = songs;
         renderGenreResults(songs);
         // Rescue pass for likes saved before metadata snapshots existed:
         // a `youtube:ID` with no cached title can often be recovered from the
@@ -2063,12 +2108,14 @@
             const storedArtwork = entry.artwork || entry.artworkUrl100 || '';
             const fallbackArtwork = (!storedArtwork && videoId) ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '';
             return {
+              trackKey: entry.track_key || '',
               trackName: entry.title || 'Liked song',
               artistName: entry.artist || 'Unknown artist',
               artworkUrl100: storedArtwork || fallbackArtwork,
               ...(videoId ? { youtubeVideoId: videoId } : {})
             };
           });
+        currentFavouriteSongs = songs;
         renderGenreResults(songs);
         // Liked tracks come from the ratings service without catalog artwork.
         // Resolve missing covers once and keep them beside the cached ratings
@@ -2110,6 +2157,49 @@
       }
     }
 
+    window.addEventListener('thaalam:rating-changed', (event) => {
+      const { trackKey, rating, song } = event.detail || {};
+      if (!trackKey || !song) return;
+
+      const userId = window.getThaalamGoogleUserId?.();
+      if (userId) {
+        const cacheKey = `thaalam.favourites:${userId}`;
+        try {
+          const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
+          if (Array.isArray(cached?.ratings)) {
+            const ratings = cached.ratings.filter((entry) => entry.track_key !== trackKey);
+            if (rating === 'up') {
+              ratings.unshift({
+                track_key: trackKey,
+                rating: 'up',
+                title: song.trackName,
+                artist: song.artistName,
+                video_id: song.youtubeVideoId || '',
+                artwork: song.artworkUrl100 || ''
+              });
+            }
+            localStorage.setItem(cacheKey, JSON.stringify({ ...cached, etag: '', ratings }));
+          }
+        } catch { /* The live tab still updates if its cache cannot be written. */ }
+      }
+
+      if (activeGenre !== 'you-like') return;
+      const existingIndex = currentFavouriteSongs.findIndex((item) => item.trackKey === trackKey);
+      if (rating === 'up') {
+        const nextSong = { ...song };
+        nextSong.favouritedAt = Date.now();
+        if (existingIndex >= 0) currentFavouriteSongs.splice(existingIndex, 1);
+        currentFavouriteSongs.unshift(nextSong);
+      } else if (existingIndex >= 0) {
+        currentFavouriteSongs.splice(existingIndex, 1);
+      }
+      renderGenreResults(currentFavouriteSongs);
+      if (!currentFavouriteSongs.length) {
+        const empty = genreResults.querySelector('.genre-empty');
+        if (empty) empty.textContent = 'Your favourite songs will appear here';
+      }
+    });
+
     function loadGenre(genre) {
       genreTabList.hidden = false;
       homeSubtitle.textContent = genre === 'you-like'
@@ -2124,12 +2214,19 @@
         tab.tabIndex = selected ? 0 : -1;
       });
       if (genre === 'you-like') {
+        favouriteSortControl.hidden = false;
         const requestId = ++genreRequestId;
         activeGenre = genre;
         return loadLikedSongs(requestId);
       }
+      favouriteSortControl.hidden = true;
       return loadCatalog(genre, '', genreFeedIds[genre]);
     }
+
+    favouriteSortSelect.addEventListener('change', () => {
+      try { localStorage.setItem(FAVOURITE_SORT_KEY, favouriteSortSelect.value); } catch { /* Sorting still works for this visit. */ }
+      if (activeGenre === 'you-like') renderGenreResults(currentFavouriteSongs);
+    });
 
     window.addEventListener('thaalam:authenticated', () => {
       if (activeGenre === 'you-like') loadGenre('you-like');

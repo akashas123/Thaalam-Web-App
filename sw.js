@@ -1,22 +1,22 @@
-const CACHE_NAME = 'thaalam-24x7-v214';
-const ALBUM_ART_CACHE_NAME = 'thaalam-album-art-v1';
+const CACHE_NAME = 'thaalam-24x7-v215';
+const ALBUM_ART_CACHE_NAME = 'thaalam-album-art-v2';
 const ALBUM_ART_CACHE_LIMIT = 240;
 
 const APP_FILES = [
   './',
   './index.html',
-  './style.css?v=168',
-  './script.js?v=53',
-  './audio-recovery.js?v=2',
-  './marquee.js?v=3',
-  './media-metadata.js?v=7',
-  './player-controls.js?v=35',
-  './ondemand-player.js?v=1',
-  './lyrics.js?v=37',
+  './style.css?v=169',
+  './script.js?v=54',
+  './audio-recovery.js?v=3',
+  './marquee.js?v=4',
+  './media-metadata.js?v=8',
+  './player-controls.js?v=36',
+  './ondemand-player.js?v=2',
+  './lyrics.js?v=38',
   './manifest.json',
-  './album-placeholder.svg?v=2',
-  './icon-192.png?v=3',
-  './icon-512.png?v=3'
+  './album-placeholder.svg?v=3',
+  './icon-192.png?v=4',
+  './icon-512.png?v=4'
 ];
 
 self.addEventListener('install', (event) => {

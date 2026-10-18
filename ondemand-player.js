@@ -47,6 +47,8 @@ const albumArtworkCache = new Map();
    buttons walk this list; the live feed is not part of it. */
 let onDemandQueue = [];
 let onDemandQueueIndex = -1;
+let onDemandQueueSource = 'autoplay';
+let onDemandFavouriteQueueLength = 0;
 let isScrubbing = false;
 let scrubTargetSeconds = 0;
 let scrubbingBar = null;
@@ -70,7 +72,9 @@ const playedTrackIds = new Set();
 function updateNowPlayingSubtitle(isOnDemand) {
   if (nowPlayingSubtitle) {
     nowPlayingSubtitle.textContent = isOnDemand
-      ? 'Discover music through Autoplay'
+      ? (onDemandQueueSource === 'favourites'
+        ? 'Songs you favourited'
+        : 'Discover music through Autoplay')
       : 'Discover music through Live';
   }
 }
@@ -309,6 +313,8 @@ function saveOnDemandSession(song, trackId, position = 0) {
       position: Math.max(0, Number(position) || 0),
       queue: onDemandQueue,
       queueIndex: onDemandQueueIndex,
+      queueSource: onDemandQueueSource,
+      favouriteQueueLength: onDemandFavouriteQueueLength,
       // Paused state is part of the session: reopening should not start making
       // noise on its own if the listener had deliberately stopped the song.
       playing: window.onDemandPlaying === true
@@ -790,9 +796,9 @@ function updateOnDemandMetadata(song, track) {
   // track's artwork visible.
   const colorRequestId = window.bumpArtworkRequestId?.() ?? 0;
   const artworkRequestId = ++onDemandArtworkRequestId;
-  onDemandArtwork.src = 'album-placeholder.svg?v=2';
+  onDemandArtwork.src = 'album-placeholder.svg?v=3';
   onDemandArtwork.classList.remove('is-wide-thumbnail');
-  onDemandMiniArtwork.src = 'album-placeholder.svg?v=2';
+  onDemandMiniArtwork.src = 'album-placeholder.svg?v=3';
   onDemandMiniArtwork.classList.remove('is-wide-thumbnail');
 
   // Prefer the pick's own artwork (catalog or JioSaavn); the iTunes lookup is
@@ -905,6 +911,9 @@ function skipOnDemandSong(offset) {
   if (!nextSong) return;
 
   onDemandQueueIndex = nextIndex;
+  onDemandQueueSource = onDemandFavouriteQueueLength > 0 && nextIndex < onDemandFavouriteQueueLength
+    ? 'favourites'
+    : 'autoplay';
   updateTransportButtonState();
   // Skips stay in the listener's current view; only fresh picks open Now
   // Playing (see startOnDemandSong).
@@ -1023,6 +1032,11 @@ function prefetchUpcomingTrackArtwork() {
 function advanceToSimilarSong() {
   if (!window.onDemandPlaybackActive) return;
 
+  if (onDemandQueueIndex >= 0 && onDemandQueueIndex < onDemandQueue.length - 1) {
+    skipOnDemandSong(1);
+    return;
+  }
+
   const nextTrack = relatedTrackCache[relatedTrackCursor];
   if (nextTrack) {
     relatedTrackCursor += 1;
@@ -1062,6 +1076,8 @@ function advanceToSimilarSong() {
 /* Starts a track that came from the queue list. It already has a resolved
    stream, so it skips the search round-trip that startOnDemandSong performs. */
 async function playRelatedTrack(track) {
+  onDemandQueueSource = 'autoplay';
+  updateNowPlayingSubtitle(true);
   const artworkPromise = prefetchTrackArtwork(track);
   const song = relatedTrackToSong(track);
   const requestId = ++songRequestId;
@@ -1124,6 +1140,8 @@ async function startOnDemandSong(song, { preserveQueue = false, openNowPlaying =
       // added afterward can still be played next and navigated back to.
       onDemandQueue = [];
       onDemandQueueIndex = -1;
+      onDemandQueueSource = 'autoplay';
+      onDemandFavouriteQueueLength = 0;
       playedTrackIds.clear();
       relatedTrackCache = [];
       relatedTrackCursor = 0;
@@ -1229,6 +1247,30 @@ async function startOnDemandSong(song, { preserveQueue = false, openNowPlaying =
   }
 }
 
+function startOnDemandQueue(songs, startIndex = 0, options = {}) {
+  const queue = Array.isArray(songs)
+    ? songs.filter((song) => song?.trackName)
+    : [];
+  if (!queue.length) return;
+
+  const selectedIndex = Math.max(0, Math.min(queue.length - 1, Number(startIndex) || 0));
+  onDemandQueue = queue;
+  onDemandQueueIndex = selectedIndex;
+  onDemandQueueSource = 'favourites';
+  onDemandFavouriteQueueLength = queue.length;
+  playedTrackIds.clear();
+  relatedTrackCache = [];
+  relatedTrackCursor = 0;
+  isFetchingRelated = false;
+  prefetchToken += 1;
+  updateTransportButtonState();
+
+  return startOnDemandSong(queue[selectedIndex], {
+    ...options,
+    preserveQueue: true
+  });
+}
+
 function toggleOnDemandPlayback(shouldPlay) {
   if (!onDemandAudio.getAttribute('src')) return;
   const isPlaying = !onDemandAudio.paused && !onDemandAudio.ended;
@@ -1273,6 +1315,13 @@ async function restoreOnDemandSession() {
   if (savedQueue.length && savedIndex >= 0 && savedIndex < savedQueue.length) {
     onDemandQueue = savedQueue;
     onDemandQueueIndex = savedIndex;
+    onDemandFavouriteQueueLength = Math.max(
+      0,
+      Math.min(savedQueue.length, Number(stored.favouriteQueueLength) || 0)
+    );
+    onDemandQueueSource = onDemandFavouriteQueueLength > 0 && savedIndex < onDemandFavouriteQueueLength
+      ? 'favourites'
+      : 'autoplay';
     playedTrackIds.clear();
     savedQueue.forEach((entry) => {
       if (entry?.providerTrackId) playedTrackIds.add(entry.providerTrackId);
@@ -1282,6 +1331,8 @@ async function restoreOnDemandSession() {
   } else {
     onDemandQueue = [];
     onDemandQueueIndex = -1;
+    onDemandQueueSource = 'autoplay';
+    onDemandFavouriteQueueLength = 0;
     enqueueOnDemandSong({ ...song, providerTrackId: stored.trackId });
   }
   // Enter the same on-demand state a fresh selection would, before any live
@@ -1373,6 +1424,7 @@ function returnToLive() {
   relatedTrackCache = [];
   relatedTrackCursor = 0;
   isFetchingRelated = false;
+  onDemandFavouriteQueueLength = 0;
   // The only path off on-demand, so it is also the only place that clears the
   // stored session.
   clearOnDemandSession();
@@ -1400,6 +1452,7 @@ function returnToLive() {
 }
 
 window.startOnDemandSong = startOnDemandSong;
+window.startOnDemandQueue = startOnDemandQueue;
 window.toggleOnDemandPlayback = toggleOnDemandPlayback;
 window.returnToLive = returnToLive;
 // Legacy liked rows keep a `youtubeVideoId`; expose it so their rating key

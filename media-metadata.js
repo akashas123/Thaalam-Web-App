@@ -1,5 +1,5 @@
 const metadataRadio = document.getElementById('radio');
-const fallbackArtwork = new URL('album-placeholder.svg?v=2', window.location.href).href;
+const fallbackArtwork = new URL('album-placeholder.svg?v=3', window.location.href).href;
 let currentArtwork = '';
 
 function setFavicon(artwork) {

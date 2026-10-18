@@ -1628,6 +1628,48 @@ body.view-rises-from-mini.view-now-playing .player-view {
     outline-offset: 2px;
   }
 
+  .favourite-sort-control {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.6rem;
+    margin-top: 0.65rem;
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 0.82rem;
+  }
+
+  .favourite-sort-control[hidden] {
+    display: none;
+  }
+
+  .favourite-sort-control select {
+    min-height: 2.25rem;
+    padding: 0.35rem 2rem 0.35rem 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='m1 1 5 5 5-5' fill='none' stroke='%23d7ecff' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 0.7rem;
+    color: #fff;
+    color-scheme: dark;
+    appearance: none;
+    outline: none;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .favourite-sort-control select:focus-visible {
+    border-color: rgba(215, 236, 255, 0.65);
+    outline: none;
+  }
+
+  .favourite-sort-control select option {
+    background: #151a20;
+    color: #fff;
+  }
+
   .genre-results {
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -1702,7 +1744,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 0.85rem;
     overflow: hidden;
-    background: rgba(255, 255, 255, 0.08) url("album-placeholder.svg?v=2") center / cover no-repeat;
+    background: rgba(255, 255, 255, 0.08) url("album-placeholder.svg?v=3") center / cover no-repeat;
     box-shadow: 0 0.75rem 1.5rem rgba(0, 0, 0, 0.2);
     transition: border-color 0.18s ease, box-shadow 0.18s ease;
   }

@@ -396,6 +396,27 @@ function saveStoredSongInfo(key, entry) {
   }
 }
 
+function notifyRatingChanged(trackKey, rating) {
+  const details = getRatingTrackDetails(trackKey);
+  let info = {};
+  try {
+    info = JSON.parse(localStorage.getItem(SONG_INFO_STORAGE_KEY) || '{}')?.[trackKey] || {};
+  } catch { /* The rating change still updates the current tab. */ }
+  window.dispatchEvent(new CustomEvent('thaalam:rating-changed', {
+    detail: {
+      trackKey,
+      rating,
+      song: {
+        trackKey,
+        trackName: info.track || details.title || 'Liked song',
+        artistName: info.artist || details.artist || 'Unknown artist',
+        artworkUrl100: info.artworkUrl100 || info.artwork || details.artwork || '',
+        ...(details.videoId ? { youtubeVideoId: details.videoId } : {})
+      }
+    }
+  }));
+}
+
 function getStoredRatings() {
   try {
     const stored =
@@ -788,6 +809,8 @@ function setStoredRating(
       null
     );
 
+    notifyRatingChanged(currentRatingTrackKey, null);
+
     return false;
   }
 
@@ -862,6 +885,8 @@ function setStoredRating(
   applyStoredRating(
     value
   );
+
+  notifyRatingChanged(currentRatingTrackKey, value);
 
   return true;
 }
@@ -958,7 +983,7 @@ function updateSongInfo() {
   songInfoArt.src =
     albumArtImage?.currentSrc ||
     albumArtImage?.src ||
-    'album-placeholder.svg?v=2';
+    'album-placeholder.svg?v=3';
 
   showSongInfo(
     '',
