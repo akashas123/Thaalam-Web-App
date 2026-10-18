@@ -208,8 +208,6 @@
       <img class="profile-account-avatar" id="profileAccountAvatar" alt="Profile picture">
       <p class="profile-account-name" id="profileAccountName"></p>
       <p class="profile-account-email" id="profileAccountEmail"></p>
-      <p class="profile-sync-status" id="profileSyncStatus" role="status" hidden></p>
-      <button class="profile-dialog-action" id="googleReconnectButton" type="button" hidden>Reconnect Google</button>
       <button class="profile-logout-button" id="profileLogoutButton" type="button">Log out</button>
     </div>
   </dialog>
@@ -2755,8 +2753,6 @@
       const accountAvatar = document.getElementById('profileAccountAvatar');
       const accountName = document.getElementById('profileAccountName');
       const accountEmail = document.getElementById('profileAccountEmail');
-      const syncStatus = document.getElementById('profileSyncStatus');
-      const reconnectButton = document.getElementById('googleReconnectButton');
       const logoutButton = document.getElementById('profileLogoutButton');
       if (!profileButton || !profileDialog || !signInButton || !status || !guestView || !accountView) return;
 
@@ -2824,17 +2820,14 @@
 
       let tokenClient = null;
       let silentTokenRequest = false;
-      const setReconnectRequired = () => {
+      const keepSavedAccountVisible = () => {
         if (!savedProfile) return;
         showProfile(savedProfile);
-        syncStatus.hidden = false;
-        syncStatus.textContent = 'Reconnect Google to sync your account likes.';
-        reconnectButton.hidden = false;
       };
 
       const finishGoogleSignIn = (response) => {
         if (response.error || !response.access_token) {
-          if (silentTokenRequest) setReconnectRequired();
+          if (silentTokenRequest) keepSavedAccountVisible();
           else {
             status.hidden = false;
             status.textContent = 'Google sign-in failed. Please try again.';
@@ -2856,13 +2849,11 @@
             sessionStorage.setItem(accessTokenStorageKey, response.access_token);
             savedProfile = profile;
             showProfile(profile);
-            syncStatus.hidden = true;
-            reconnectButton.hidden = true;
             window.dispatchEvent(new Event('thaalam:authenticated'));
             if (profileDialog.open) profileDialog.close();
           })
           .catch(() => {
-            if (savedProfile) setReconnectRequired();
+            if (savedProfile) keepSavedAccountVisible();
             else {
               status.hidden = false;
               status.textContent = 'Signed in with Google, but the profile could not be loaded.';
@@ -2885,7 +2876,7 @@
       const requestGoogleAccess = (silent = false) => {
         const client = getTokenClient();
         if (!client) {
-          if (silent) setReconnectRequired();
+          if (silent) keepSavedAccountVisible();
           else {
             status.hidden = false;
             status.textContent = 'Google sign-in is not available. Check the OAuth client configuration and reload.';
@@ -2901,16 +2892,12 @@
       if (savedProfile && !window.getThaalamGoogleAccessToken()) {
         // Keep the saved account visible without triggering Google's popup
         // flow on every app launch. Reconnect only after an explicit click.
-        setReconnectRequired();
+        keepSavedAccountVisible();
       }
 
       window.addEventListener('thaalam:auth-expired', () => {
         sessionStorage.removeItem(accessTokenStorageKey);
-        setReconnectRequired();
-      });
-      window.addEventListener('thaalam:sync-unavailable', () => {
-        syncStatus.hidden = false;
-        syncStatus.textContent = 'Likes are saved on this device, but account sync is not available yet.';
+        keepSavedAccountVisible();
       });
 
       if (clientId) {
@@ -2924,7 +2911,6 @@
         sessionStorage.removeItem(accessTokenStorageKey);
         window.location.reload();
       });
-      reconnectButton.addEventListener('click', () => requestGoogleAccess(false));
       profileDialog.addEventListener('click', (event) => {
         if (event.target === profileDialog) profileDialog.close();
       });
