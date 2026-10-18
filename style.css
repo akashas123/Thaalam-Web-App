@@ -1322,7 +1322,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
        as the window narrows. Below ~640px the grid falls back to 2x2 and
        then single column like before. */
     grid-template-columns: repeat(auto-fit, minmax(min(100%, clamp(7rem, 17vw, 14rem)), 1fr));
-    gap: 1rem;
+    gap: 0.45rem;
     list-style: none;
   }
 
@@ -1632,6 +1632,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
     display: flex;
     align-items: center;
     justify-content: flex-end;
+    flex-wrap: wrap;
     gap: 0.6rem;
     margin-top: 0.65rem;
     color: rgba(255, 255, 255, 0.72);
@@ -1670,12 +1671,149 @@ body.view-rises-from-mini.view-now-playing .player-view {
     color: #fff;
   }
 
+  .favourite-layout-toggle {
+    display: flex;
+    gap: 0.2rem;
+    padding: 0.18rem;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .favourite-layout-toggle button {
+    display: grid;
+    width: 1.85rem;
+    height: 1.85rem;
+    padding: 0;
+    place-items: center;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.66);
+    cursor: pointer;
+  }
+
+  .favourite-layout-toggle button.is-selected {
+    background: rgba(215, 236, 255, 0.2);
+    color: #fff;
+  }
+
+  .favourite-layout-toggle button:focus-visible {
+    outline: 1px solid rgba(215, 236, 255, 0.7);
+    outline-offset: 1px;
+  }
+
+  .favourite-layout-toggle svg {
+    width: 1rem;
+    height: 1rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.5;
+  }
+
   .genre-results {
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
     gap: 1rem 0.85rem;
     margin-top: 1rem;
     overflow: visible;
+  }
+
+  .genre-results.favourites-list-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.1rem;
+  }
+
+  .genre-results.is-layout-switching .genre-card {
+    animation: favourite-layout-enter 0.32s ease both;
+  }
+
+  @keyframes favourite-layout-enter {
+    from { opacity: 0; transform: translateY(0.4rem) scale(0.985); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .genre-results.is-layout-switching .genre-card {
+      animation: none;
+    }
+  }
+
+  .genre-results.favourites-list-layout .genre-card {
+    display: grid;
+    grid-template-columns: 3.5rem minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.15rem 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .genre-results.favourites-list-layout .genre-card-media {
+    width: 3.5rem;
+    height: 3.5rem;
+    flex: 0 0 3.5rem;
+  }
+
+  .genre-results.favourites-list-layout .genre-card-art-frame {
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    aspect-ratio: 1;
+    border-radius: 0.15rem;
+  }
+
+  .genre-results.favourites-list-layout .genre-play-button {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .genre-results.favourites-list-layout .genre-play-button svg {
+    width: 1.45rem;
+    height: 1.45rem;
+  }
+
+  .genre-results.favourites-list-layout .genre-play-button:hover {
+    background: transparent;
+    transform: translate(-50%, -50%) scale(1.15);
+  }
+
+  .genre-results.favourites-list-layout .genre-info-button {
+    position: relative;
+    inset: auto;
+    width: 2rem;
+    height: 2rem;
+    font-size: 0.85rem;
+  }
+
+  .genre-results.favourites-list-layout .genre-remove-favourite-button {
+    left: auto;
+  }
+
+  .genre-card-list-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  .genre-results.favourites-list-layout .genre-card-details {
+    margin-top: 0;
+  }
+
+  .genre-results.favourites-list-layout .genre-card-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+  }
+
+  .genre-results.favourites-list-layout .genre-card-artist {
+    margin-top: 0.35rem;
+    font-size: 0.9rem;
   }
 
   /* One-shot cascade after an intentional genre-tab switch: script.js spends
