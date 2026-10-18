@@ -665,6 +665,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
        scroll area changes with card count. Horizontal centring is unchanged
        (justify-items stays centre from place-items above). */
     align-items: start;
+    padding-bottom: 0;
   }
 
   body.view-home .player-view,
@@ -706,6 +707,11 @@ body.view-rises-from-mini.view-now-playing .player-view {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     animation: miniPlayerDockIn 0.35s ease-out both;
+  }
+
+  body:has(.home-page .genre-results.favourites-list-layout) .mini-player,
+  body:has(.home-page .catalog-search input:not(:placeholder-shown)) .mini-player {
+    border-top: 0;
   }
 
   @keyframes miniPlayerDockIn {
@@ -1531,8 +1537,13 @@ body.view-rises-from-mini.view-now-playing .player-view {
 
   .home-page .site-page-content {
     width: min(88rem, 100%);
-    max-height: calc(100dvh - 4rem);
+    height: calc(100dvh - 4rem);
+    max-height: none;
+    box-sizing: border-box;
+    display: grid;
+    grid-template-rows: auto auto auto minmax(0, 1fr);
     padding: clamp(1rem, 2.5vw, 2.25rem);
+    padding-bottom: 0;
     overflow-x: hidden;
     overflow-y: auto;
     scroll-behavior: auto;
@@ -1542,15 +1553,18 @@ body.view-rises-from-mini.view-now-playing .player-view {
     scrollbar-width: none;
   }
 
-  /* Keep the Browse header, tabs and sort controls stationary while a long
-     favourites list scrolls. The fixed home page provides the viewport bound;
-     only the list itself becomes a scroll container in list layout. */
-  .home-page:has(.genre-results.favourites-list-layout) .site-page-content {
+  /* Keep the Browse heading, search and genre tabs fixed while results scroll. */
+  .home-page .site-page-content {
     overflow-y: hidden;
   }
 
+  body.mini-player-visible.view-home .home-page .site-page-content {
+    height: calc(100dvh - 8.5rem);
+    padding-bottom: 0;
+  }
+
   .genre-results.favourites-list-layout {
-    max-height: max(8rem, calc(100dvh - 25rem));
+    max-height: max(8rem, calc(100dvh - 20rem));
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior-y: contain;
@@ -1559,6 +1573,40 @@ body.view-rises-from-mini.view-now-playing .player-view {
   }
 
   .genre-results.favourites-list-layout::-webkit-scrollbar {
+    display: none;
+  }
+
+  .home-page .genre-results {
+    grid-row: 4;
+    min-height: 0;
+    max-height: none;
+    grid-auto-rows: max-content;
+    align-content: start;
+    box-sizing: border-box;
+    padding-bottom: 3rem;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  body.view-home .home-page .genre-results {
+    max-height: none;
+    padding-bottom: 3rem;
+  }
+
+  body.view-home .home-page:has(.catalog-search input:not(:placeholder-shown)) .genre-results,
+  body.view-home .home-page .genre-results.favourites-list-layout {
+    padding-bottom: 0;
+  }
+
+  .home-page .genre-results.favourites-list-layout,
+  .home-page:has(.catalog-search input:not(:placeholder-shown)) .genre-results {
+    padding-bottom: 0;
+  }
+
+  .home-page .genre-results::-webkit-scrollbar {
     display: none;
   }
 
@@ -1768,9 +1816,88 @@ body.view-rises-from-mini.view-now-playing .player-view {
     overflow: visible;
   }
 
+  /* Constrain only the results region. Grid rows retain their natural height,
+     so album artwork and its title/artist remain fully visible while scrolling. */
+  .genre-results {
+    max-height: max(8rem, calc(100dvh - 20rem));
+    box-sizing: border-box;
+    padding-bottom: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .genre-results::-webkit-scrollbar {
+    display: none;
+  }
+
+  body.view-home:not(.mini-player-visible) .genre-results {
+    max-height: max(8rem, calc(100dvh - 19.25rem));
+    padding-bottom: 3rem;
+    border: 0;
+    box-shadow: none;
+  }
+
+  body.mini-player-visible.view-home .genre-results {
+    max-height: max(8rem, calc(100dvh - 21.75rem));
+    padding-bottom: 2rem;
+  }
+
+  body.mini-player-visible.view-home .genre-results.favourites-list-layout {
+    max-height: max(8rem, calc(100dvh - 27.5rem));
+  }
+
+  .home-page:has(.catalog-search input:not(:placeholder-shown)) .genre-results {
+    max-height: max(8rem, calc(100dvh - 19.25rem));
+    padding-bottom: 0;
+  }
+
+  body.view-home:not(.mini-player-visible) .home-page:has(.catalog-search input:not(:placeholder-shown)) .genre-results {
+    max-height: none;
+    padding-bottom: 3.25rem;
+  }
+
+  body.view-home:not(.mini-player-visible) .home-page .genre-results:not(.favourites-list-layout) {
+    max-height: none;
+  }
+
+  body.mini-player-visible.view-home .home-page:has(.catalog-search input:not(:placeholder-shown)) .genre-results {
+    max-height: max(8rem, calc(100dvh - 18.5rem));
+    padding-bottom: 2rem;
+  }
+
+  body.mini-player-visible.view-home .home-page:has(.catalog-search input:not(:placeholder-shown)) .site-page-content {
+    height: calc(100dvh - 7rem);
+  }
+
+  body.mini-player-visible.view-home .home-page:has(.genre-results.favourites-list-layout) .genre-results.favourites-list-layout {
+    max-height: max(8rem, calc(100dvh - 18.5rem));
+    padding-bottom: 2rem;
+  }
+
+  body.mini-player-visible.view-home .home-page:has(.genre-results.favourites-list-layout) .site-page-content {
+    height: calc(100dvh - 7rem);
+  }
+
+
   .genre-results.favourites-list-layout {
     grid-template-columns: minmax(0, 1fr);
     gap: 0.1rem;
+  }
+
+  .genre-results.favourites-list-layout {
+    max-height: max(8rem, calc(100dvh - 20rem));
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .genre-results.favourites-list-layout::-webkit-scrollbar {
+    display: none;
   }
 
   .genre-results.is-layout-switching .genre-card {
@@ -4512,6 +4639,39 @@ img {
 @media (min-width: 56.25rem) and (max-width: 75rem) and (pointer: fine) {
   body.view-now-playing .now-playing-track > .on-demand-like-button {
     left: 0;
+  }
+}
+
+/* Compact-height Browse layout: reclaim heading whitespace so the chart and
+   search grids get a taller, scrollable viewport above the mini-player. */
+@media (max-height: 48rem) {
+  body.view-home .site-page.home-page {
+    padding-top: 3.25rem;
+  }
+
+  body.view-home .home-page .site-page-content {
+    padding-top: 0.5rem;
+  }
+
+  body.mini-player-visible.view-home .home-page .site-page-content {
+    height: calc(100dvh - 7.75rem);
+  }
+
+  body.mini-player-visible.view-home .home-page:has(.catalog-search input:not(:placeholder-shown)) .site-page-content {
+    height: calc(100dvh - 6.25rem);
+  }
+
+  body.mini-player-visible.view-home .home-page:has(.catalog-search input:not(:placeholder-shown)) .genre-results:not(.favourites-list-layout) {
+    max-height: none;
+    padding-bottom: 3.25rem;
+  }
+
+  body.mini-player-visible.view-home .home-page .genre-results:not(.favourites-list-layout) {
+    min-height: 0;
+    max-height: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    touch-action: pan-y;
   }
 }
 

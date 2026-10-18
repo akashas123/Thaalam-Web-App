@@ -11,7 +11,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=198">
+  <link rel="stylesheet" href="style.css?v=242">
   <link rel="icon" type="image/png" href="icon-512.png?v=4">
   <link rel="apple-touch-icon" href="icon-192.png?v=4">
 
@@ -1452,6 +1452,7 @@
     }
 
     function renderGenreResults(songs) {
+      if (activeGenre.startsWith('search:')) genreResults.scrollTop = 0;
       const wasBusy = genreResults.getAttribute('aria-busy') === 'true';
       genreResults.setAttribute('aria-busy', 'false');
       genreResults.classList.toggle(
@@ -2326,6 +2327,7 @@
     });
 
     function loadGenre(genre) {
+      genreResults.scrollTop = 0;
       if (activeGenre !== genre && catalogSearchInput.value) {
         catalogSearchInput.value = '';
         catalogClearButton.hidden = true;
@@ -2394,6 +2396,7 @@
     function searchCatalog(term) {
       const normalizedTerm = term.trim();
       if (!normalizedTerm) return;
+      genreResults.scrollTop = 0;
       if (activeGenre === 'you-like') {
         const query = normalizedTerm.toLocaleLowerCase();
         hideCatalogSuggestions();

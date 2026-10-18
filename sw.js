@@ -5,7 +5,7 @@ const ALBUM_ART_CACHE_LIMIT = 240;
 const APP_FILES = [
   './',
   './index.html',
-  './style.css?v=197',
+  './style.css?v=242',
   './script.js?v=55',
   './audio-recovery.js?v=3',
   './marquee.js?v=4',

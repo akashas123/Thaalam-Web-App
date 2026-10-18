@@ -1,4 +1,4 @@
-﻿(() => {
+(() => {
   const radio = document.getElementById('radio');
   if (!radio) return;
 
