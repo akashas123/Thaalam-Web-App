@@ -4709,6 +4709,11 @@ body.has-lyrics .lyrics-panel {
     -webkit-backdrop-filter: none;
   }
 
+  body.mini-player-visible.view-home .mini-player.is-on-demand,
+  body.mini-player-visible.view-library .mini-player.is-on-demand {
+    grid-template-columns: minmax(0, 1fr) 2.1rem 2.1rem 2.1rem;
+  }
+
   body.mini-player-visible.view-home .mini-player-transport,
   body.mini-player-visible.view-library .mini-player-transport { display: contents; }
   body.mini-player-visible.view-home .mini-player-ctrl,
@@ -4726,7 +4731,7 @@ body.has-lyrics .lyrics-panel {
   body.mini-player-visible.view-home #miniVolumeValue,
   body.mini-player-visible.view-library #miniVolumeValue { display: none; }
   body.mini-player-visible.view-home .mini-player-center,
-  body.mini-player-visible.view-library .mini-player-center { grid-column: 1; grid-row: 1; min-width: 0; overflow: visible; }
+  body.mini-player-visible.view-library .mini-player-center { position: static; grid-column: 1; grid-row: 1; min-width: 0; overflow: visible; }
   body.mini-player-visible.view-home .mini-player-now,
   body.mini-player-visible.view-library .mini-player-now { display: flex; min-width: 0; align-items: center; gap: 0.65rem; }
   body.mini-player-visible.view-home .mini-player-art,
@@ -4744,13 +4749,15 @@ body.has-lyrics .lyrics-panel {
   body.mini-player-visible.view-home .mini-player-artist,
   body.mini-player-visible.view-library .mini-player-artist { color: rgba(255,255,255,.62); font-size: 0.68rem; }
   body.mini-player-visible.view-home .mini-player-seek,
-  body.mini-player-visible.view-library .mini-player-seek { position: absolute; top: auto; right: 0.75rem; bottom: 0.12rem; left: 0.75rem; z-index: 4; display: flex; width: auto; max-width: none; gap: 0; }
+  body.mini-player-visible.view-library .mini-player-seek { position: absolute; top: 0; right: 0; bottom: auto; left: 0; z-index: 20; display: flex; width: auto; height: 0.13rem; max-width: none; gap: 0; overflow: visible; }
   body.mini-player-visible.view-home .mini-player-clock,
   body.mini-player-visible.view-library .mini-player-clock { display: none; }
   body.mini-player-visible.view-home .mini-player-progress,
-  body.mini-player-visible.view-library .mini-player-progress { height: 0.24rem; background: rgba(255,255,255,.58); box-shadow: 0 0 0.2rem rgba(255,255,255,.25); }
+  body.mini-player-visible.view-library .mini-player-progress { display: block; width: 100%; height: 0.13rem; flex: 1 1 100%; background: rgba(255,255,255,.18); box-shadow: none; }
+  body.mini-player-visible.view-home .mini-player-progress.is-seekable,
+  body.mini-player-visible.view-library .mini-player-progress.is-seekable { touch-action: none; }
   body.mini-player-visible.view-home .mini-player-progress-fill,
-  body.mini-player-visible.view-library .mini-player-progress-fill { background: #fff; box-shadow: 0 0 0.35rem rgba(255,255,255,.45); }
+  body.mini-player-visible.view-library .mini-player-progress-fill { display: block; background: #fff; box-shadow: 0 0 0.35rem rgba(255,255,255,.45); }
   body.mini-player-visible.view-home .mini-player-like,
   body.mini-player-visible.view-library .mini-player-like { display: grid; width: 2.1rem; height: 2.4rem; grid-column: 2; grid-row: 1; place-items: center; border: 0; background: transparent; color: #fff; }
   body.mini-player-visible.view-home .mini-player-like svg,
@@ -4763,6 +4770,14 @@ body.has-lyrics .lyrics-panel {
   body.mini-player-visible.view-library .mini-player-toggle { position: relative; display: grid; width: 2.25rem; height: 2.4rem; grid-column: 3; grid-row: 1; place-items: center; border: 0; border-radius: 50%; background: transparent; color: #fff; }
   body.mini-player-visible.view-home .mini-player-toggle svg,
   body.mini-player-visible.view-library .mini-player-toggle svg { width: 1.35rem; height: 1.35rem; fill: currentColor; }
+  body.mini-player-visible.view-home #miniNextButton,
+  body.mini-player-visible.view-library #miniNextButton { display: none; }
+  body.mini-player-visible.view-home #miniNextButton.is-on-demand,
+  body.mini-player-visible.view-library #miniNextButton.is-on-demand { display: grid; width: 2.1rem; height: 2.4rem; grid-column: 4; grid-row: 1; justify-self: center; place-items: center; border: 0; background: transparent; color: #fff; }
+  body.mini-player-visible.view-home #miniNextButton svg,
+  body.mini-player-visible.view-library #miniNextButton svg { width: 1.25rem; height: 1.25rem; fill: currentColor; }
+  body.mini-player-visible.view-home #miniNextButton:disabled,
+  body.mini-player-visible.view-library #miniNextButton:disabled { opacity: 0.4; }
 
   body.mini-player-visible.view-home .mini-player,
   body.mini-player-visible.view-about .mini-player,

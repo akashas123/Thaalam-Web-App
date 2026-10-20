@@ -17,9 +17,12 @@ const onDemandMiniTitle = document.getElementById('miniPlayerTitle');
 const onDemandMiniArtist = document.getElementById('miniPlayerArtist');
 const nowPlayingSubtitle = document.getElementById('nowPlayingSubtitle');
 const onDemandMiniArtwork = document.getElementById('miniPlayerArt');
+const onDemandMiniProgressBar = document.getElementById('miniPlayerProgress');
+const onDemandMiniProgressFill = document.getElementById('miniPlayerProgressFill');
 const playbackProgressBar = document.getElementById('progressBar');
 const playbackProgressFill = document.getElementById('progressFill');
 const playbackProgressThumb = document.getElementById('progressThumb');
+const liveProgressRadio = document.getElementById('radio');
 const onDemandPrevButton = document.getElementById('onDemandPrevButton');
 const onDemandNextButton = document.getElementById('onDemandNextButton');
 
@@ -38,6 +41,9 @@ let pendingStartSeconds = -1;
 let pendingShouldPlay = false;
 let selectedDuration = 0;
 let songRequestId = 0;
+let liveProgressSongKey = '';
+let liveProgressBaseElapsed = 0;
+let liveProgressSyncTime = 0;
 /* Playable candidates for the current pick ({ id, streamUrl }), so a bad
    stream can fall through to the next search result. */
 let trackCandidates = [];
@@ -55,6 +61,7 @@ let onDemandFavouriteQueueLength = 0;
 let isScrubbing = false;
 let scrubTargetSeconds = 0;
 let scrubbingBar = null;
+let scrubPointerId = null;
 
 /* Radio recommendations for the playing track, fetched ahead so autoplay
    can continue without waiting for the current song to end. */
@@ -451,11 +458,41 @@ function updatePlaybackProgress() {
 
   // Live radio: show progress for the song currently on air.
   const liveClock = window.getAudibleTrackClock?.();
-  if (liveClock && Number(liveClock.duration) > 0) {
-    setPlaybackProgress(liveClock.elapsed, liveClock.duration);
-  } else {
-    setPlaybackProgress(0, 0);
+  const nowPlaying = window.latestNowPlayingData?.now_playing;
+  const song = nowPlaying?.song;
+  // The radio API can rotate its internal id between metadata polls. Use the
+  // visible track metadata first so those polls don't restart the clock.
+  const songKey = [song?.title, song?.artist].filter(Boolean).join('|')
+    || song?.id
+    || 'live';
+  const serverElapsed = Math.max(
+    Number(liveClock?.elapsed) || 0,
+    Number(nowPlaying?.elapsed) || 0,
+    parseDurationString(onDemandElapsed?.textContent || '')
+  );
+  const now = performance.now();
+  if (songKey !== liveProgressSongKey) {
+    liveProgressSongKey = songKey;
+    liveProgressBaseElapsed = serverElapsed;
+    liveProgressSyncTime = now;
+  } else if (serverElapsed > liveProgressBaseElapsed + (now - liveProgressSyncTime) / 1000) {
+    // Re-sync to the server clock when it moves ahead of our local ticker.
+    liveProgressBaseElapsed = serverElapsed;
+    liveProgressSyncTime = now;
   }
+  const localElapsed = liveProgressBaseElapsed + (
+    liveProgressRadio && !liveProgressRadio.paused
+      ? Math.max(0, now - liveProgressSyncTime) / 1000
+      : 0
+  );
+  const elapsed = Math.max(serverElapsed, localElapsed);
+  const duration = Number(liveClock?.duration)
+    || Number(nowPlaying?.duration)
+    || parseDurationString(onDemandDuration?.textContent || '');
+  // Live feeds sometimes omit track length. Keep the same elapsed/duration
+  // calculation as the desktop player, with a conservative estimate only
+  // while the feed has no duration to report.
+  setPlaybackProgress(elapsed, duration || 240);
 }
 
 function setPlaybackProgress(elapsed, duration) {
@@ -468,8 +505,15 @@ function setPlaybackProgress(elapsed, duration) {
     : 0;
 
   playbackProgressFill.style.width = `${percent}%`;
+  if (onDemandMiniProgressFill) {
+    const miniPercent = percent > 0 ? Math.max(0.5, Math.min(98, percent)) : 0;
+    onDemandMiniProgressFill.style.display = 'block';
+    onDemandMiniProgressFill.style.width = `${miniPercent}%`;
+  }
+  onDemandMiniProgressBar?.classList.remove('is-live');
   if (playbackProgressThumb) playbackProgressThumb.style.left = `${percent}%`;
   playbackProgressBar.setAttribute('aria-valuenow', String(Math.round(percent)));
+  onDemandMiniProgressBar?.setAttribute('aria-valuenow', String(Math.round(percent)));
 }
 
 /* Resolves the seconds a pointer x-position maps to, clamped to the track. */
@@ -496,20 +540,27 @@ function repaintScrub() {
 /* On-demand only: live radio is not seekable, so pointerdown is ignored there. */
 function beginScrub(event, bar) {
   if (!window.onDemandPlaybackActive || !onDemandAudio.getAttribute('src')) return;
+  if (event.pointerType === 'mouse' && event.button !== 0) return;
 
   const seconds = getScrubSecondsFromPointer(event.clientX, bar);
   if (seconds === null) return;
 
+  event.preventDefault();
   isScrubbing = true;
   scrubTargetSeconds = seconds;
   scrubbingBar = bar;
+  scrubPointerId = event.pointerId;
   bar.classList.add('is-scrubbing');
-  bar.setPointerCapture?.(event.pointerId);
+  try {
+    bar.setPointerCapture?.(event.pointerId);
+  } catch {
+    // Some embedded mobile browsers do not support capture on a progressbar.
+  }
   repaintScrub();
 }
 
 function moveScrub(event) {
-  if (!isScrubbing || !scrubbingBar) return;
+  if (!isScrubbing || !scrubbingBar || event.pointerId !== scrubPointerId) return;
 
   const seconds = getScrubSecondsFromPointer(event.clientX, scrubbingBar);
   if (seconds === null) return;
@@ -522,6 +573,7 @@ function moveScrub(event) {
 function resetScrub() {
   isScrubbing = false;
   scrubTargetSeconds = 0;
+  scrubPointerId = null;
   scrubbingBar?.classList.remove('is-scrubbing');
   playbackProgressBar?.classList.remove('is-scrubbing');
   scrubbingBar = null;
@@ -530,11 +582,17 @@ function resetScrub() {
 /* The mini clock reads this so its readout follows the drag too. */
 window.getDemandScrubSeconds = () => (isScrubbing ? scrubTargetSeconds : NaN);
 
-function commitScrub() {
+function commitScrub(event) {
   if (!isScrubbing || !onDemandAudio.getAttribute('src')) return;
+  if (event?.pointerId !== undefined && event.pointerId !== scrubPointerId) return;
+  if (event && scrubbingBar) {
+    const finalSeconds = getScrubSecondsFromPointer(event.clientX, scrubbingBar);
+    if (finalSeconds !== null) scrubTargetSeconds = finalSeconds;
+  }
   isScrubbing = false;
   scrubbingBar?.classList.remove('is-scrubbing');
   scrubbingBar = null;
+  scrubPointerId = null;
 
   // Nudge a few milliseconds past the target so the readout is not off by a
   // rounding step once the seek lands.
@@ -556,7 +614,8 @@ function bindScrubBar(bar) {
   bar.addEventListener('pointerdown', (event) => beginScrub(event, bar));
   bar.addEventListener('pointermove', moveScrub);
   bar.addEventListener('pointerup', commitScrub);
-  bar.addEventListener('pointercancel', commitScrub);
+  bar.addEventListener('pointercancel', resetScrub);
+  bar.addEventListener('lostpointercapture', resetScrub);
 }
 
 bindScrubBar(playbackProgressBar);
@@ -1403,8 +1462,10 @@ async function restoreOnDemandSession() {
     updatePlaybackProgress();
     playedTrackIds.add(stored.trackId);
     prefetchRelatedTracks(stored.trackId);
-    // Restore the saved transport state and position after the stream loads.
-    setOnDemandPlaying(shouldResume);
+    // Reflect the media element's real state. Mobile browsers can reject the
+    // post-refresh play() call without a user gesture even when the saved
+    // session says it had been playing before the reload.
+    setOnDemandPlaying(!onDemandAudio.paused && !onDemandAudio.ended);
   } catch (error) {
     console.error('Unable to restore on-demand playback:', error);
     // A failed restore must not silently drop the listener back to the radio:

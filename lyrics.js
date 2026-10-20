@@ -36,6 +36,15 @@ let trackClockPlaybackSessionId = 0;
 
 const lrclibCache = new Map();
 
+function parseTrackDurationSeconds(value) {
+  const numeric = Number(value);
+  if (Number.isFinite(numeric) && numeric > 0) return numeric;
+  if (typeof value !== 'string' || !value.includes(':')) return 0;
+  const parts = value.split(':').map(Number);
+  if (!parts.length || parts.some((part) => !Number.isFinite(part) || part < 0)) return 0;
+  return parts.reduce((total, part) => total * 60 + part, 0);
+}
+
 function normalizeTrackTitle(value) {
   return value
     ?.normalize('NFKD')
@@ -510,19 +519,15 @@ function updateLyrics(
       : 0;
   }
 
-  const duration =
-    Number(nowPlaying?.duration);
-
-  if (
-    Number.isFinite(duration) &&
-    duration > 0
-  ) {
-    trackDurationSeconds =
-      duration;
-  } else {
-    trackDurationSeconds =
-      0;
-  }
+  const explicitDuration =
+    parseTrackDurationSeconds(nowPlaying?.duration) ||
+    parseTrackDurationSeconds(song?.duration) ||
+    parseTrackDurationSeconds(song?.trackTimeMillis ? Number(song.trackTimeMillis) / 1000 : 0);
+  const remaining = parseTrackDurationSeconds(nowPlaying?.remaining);
+  const inferredDuration = remaining > 0
+    ? getAudibleTrackElapsed() + remaining
+    : 0;
+  trackDurationSeconds = explicitDuration || inferredDuration;
 
   const hasLyrics =
     Boolean(lyrics);

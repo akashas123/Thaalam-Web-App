@@ -206,6 +206,7 @@ function setVisualState(isPlaying) {
   document.body.classList.toggle('mini-player-visible', hasStartedPlayback);
   miniPlayer?.classList.toggle('is-playing', isPlaying);
   if (miniPlayer) miniPlayer.hidden = !hasStartedPlayback;
+  playButton?.setAttribute('aria-label', isPlaying ? 'Pause' : 'Play');
   miniPlayerToggle?.setAttribute('aria-label', isPlaying ? 'Pause' : 'Play');
   if (isPlaying) showPauseIcon();
   else showPlayIcon();
@@ -286,7 +287,6 @@ function updateMiniPlayerTime() {
       : onDemandClock.elapsed;
     miniPlayerElapsed.textContent = formatMiniTime(elapsed);
     miniPlayerDuration.textContent = formatMiniTime(onDemandClock.duration);
-    updateMiniPlayerProgress(elapsed, onDemandClock.duration);
     return;
   }
   const clock = window.getAudibleTrackClock?.();
@@ -305,30 +305,10 @@ function updateMiniPlayerTime() {
       : rawElapsed;
     miniPlayerElapsed.textContent = formatMiniTime(elapsed);
     miniPlayerDuration.textContent = formatMiniTime(duration);
-    updateMiniPlayerProgress(elapsed, duration);
     return;
   }
   miniPlayerElapsed.textContent = document.getElementById('trackElapsed')?.textContent || '0:00';
   miniPlayerDuration.textContent = document.getElementById('trackDuration')?.textContent || '0:00';
-  updateMiniPlayerProgress(0, 0);
-}
-
-/* Paints the mini seek bar. When the track length is unknown it falls back to
-   the static "live" indicator rather than a moving fill. */
-function updateMiniPlayerProgress(elapsed, duration) {
-  if (!miniPlayerProgress || !miniPlayerProgressFill) return;
-  const safeDuration = Number(duration) || 0;
-  const safeElapsed = Number(elapsed) || 0;
-  if (safeDuration <= 0) {
-    miniPlayerProgress.classList.add('is-live');
-    miniPlayerProgressFill.style.width = '';
-    miniPlayerProgress.setAttribute('aria-valuenow', '0');
-    return;
-  }
-  miniPlayerProgress.classList.remove('is-live');
-  const percent = Math.min(100, Math.max(0, (safeElapsed / safeDuration) * 100));
-  miniPlayerProgressFill.style.width = `${percent}%`;
-  miniPlayerProgress.setAttribute('aria-valuenow', String(Math.round(percent)));
 }
 
 /* The mini transport/action buttons reuse the full player's own controls so the
@@ -385,6 +365,8 @@ function syncMiniPlayerControls() {
 
   // The mini seek bar is only interactive for on-demand tracks.
   miniPlayerProgress?.classList.toggle('is-seekable', onDemandActive);
+  miniPlayer?.classList.toggle('is-on-demand', onDemandActive);
+  miniNextButton?.classList.toggle('is-on-demand', onDemandActive);
   const prevButton = document.getElementById('onDemandPrevButton');
   const nextButton = document.getElementById('onDemandNextButton');
   const likeButton = document.getElementById('onDemandLikeButton');
