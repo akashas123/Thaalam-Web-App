@@ -11,7 +11,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=327">
+  <link rel="stylesheet" href="style.css?v=328">
   <link rel="icon" type="image/png" href="icon-512.png?v=4">
   <link rel="apple-touch-icon" href="icon-192.png?v=4">
 
@@ -1486,6 +1486,10 @@
         url ? `url("${url.replace(/"/g, '%22')}")` : 'none'
       );
       document.body.classList.toggle('has-home-art', Boolean(url));
+      document.body.classList.toggle(
+        'has-search-art',
+        Boolean(url) && document.body.classList.contains('mobile-search-active') && activeGenre.startsWith('search:')
+      );
     }
 
     function sampleHomeTint(url) {

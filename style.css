@@ -5699,14 +5699,32 @@ img {
     display: none;
   }
 
-  /* Carry Home's artwork wash through the bottom of the mobile search view;
-     otherwise the empty end of the results scroll area exposes the body's
-     flat black background behind the translucent navigation. */
-  body.view-home.mobile-search-active.has-home-art::before {
+  /* Search starts dark and borrows a wash only from its own committed song
+     results. Library also stays dark until Liked Songs is opened. */
+  body.mobile-search-active.view-home {
+    background: #05070d !important;
+  }
+
+  body.mobile-search-active.view-home.has-home-glow.has-search-art {
+    background:
+      radial-gradient(ellipse 88% 52% at 0% 0%, color-mix(in srgb, var(--home-tint) 58%, transparent), transparent 100%),
+      #05070d !important;
+  }
+
+  body.mobile-search-active.view-home::before,
+  body.view-library.has-home-art::before {
+    opacity: 0;
+  }
+
+  body.mobile-search-active.view-home.has-search-art::before {
     height: 100dvh;
     opacity: 0.32;
     -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 68%, transparent 100%);
     mask-image: linear-gradient(to bottom, #000 0%, #000 68%, transparent 100%);
+  }
+
+  body.view-library {
+    background: #05070d !important;
   }
 
   body.mobile-search-active.view-home .home-page .site-page-content,
