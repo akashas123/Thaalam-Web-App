@@ -187,6 +187,7 @@ body.view-about {
   cursor: pointer;
   background: var(--album-dominant-color, #05070d);
   opacity: 1;
+  transition: background-color 800ms cubic-bezier(0.4, 0, 0.2, 1);
   will-change: background-color;
 
   backface-visibility: hidden;
@@ -219,7 +220,9 @@ body.view-about [class~="album-background"] {
 body.view-now-playing [class~="album-background"] {
   opacity: 1;
   visibility: visible;
-  transition: opacity 0.3s ease;
+  transition:
+    opacity 0.3s ease,
+    background-color 800ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 body::after {
@@ -4708,6 +4711,7 @@ body.has-lyrics .lyrics-panel {
     align-items: center;
     border: 0;
     background: var(--album-dominant-color, #05070d) !important;
+    transition: background-color 800ms cubic-bezier(0.4, 0, 0.2, 1);
     color: #fff;
     cursor: pointer;
     backdrop-filter: none;

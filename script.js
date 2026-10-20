@@ -28,12 +28,44 @@ const miniVolumeSlider = document.getElementById('miniVolumeSlider');
 const miniVolumeValue = document.getElementById('miniVolumeValue');
 const root = document.documentElement;
 
+let browserThemeAnimation = 0;
+
 function syncBrowserThemeColor() {
   const themeColor = document.querySelector('meta[name="theme-color"]');
   if (!themeColor) return;
 
-  const albumColor = getComputedStyle(root).getPropertyValue('--album-dominant-color').trim();
-  themeColor.setAttribute('content', albumColor || '#05070d');
+  const parseHexColor = (hex) => {
+    const match = /^#?([\da-f]{6})$/i.exec(hex.trim());
+    if (!match) return [5, 7, 13];
+    return [0, 2, 4].map((offset) => parseInt(match[1].slice(offset, offset + 2), 16));
+  };
+  const from = parseHexColor(themeColor.content);
+  const to = parseHexColor(getComputedStyle(root).getPropertyValue('--album-dominant-color'));
+  const startedAt = performance.now();
+  const duration = 800;
+
+  window.cancelAnimationFrame(browserThemeAnimation);
+  const animate = (now) => {
+    const progress = Math.min(1, (now - startedAt) / duration);
+    let low = 0;
+    let high = 1;
+    for (let iteration = 0; iteration < 12; iteration += 1) {
+      const t = (low + high) / 2;
+      const inverse = 1 - t;
+      const x = 3 * inverse * inverse * t * 0.4 + 3 * inverse * t * t * 0.2 + t * t * t;
+      if (x < progress) low = t;
+      else high = t;
+    }
+    const t = (low + high) / 2;
+    const inverse = 1 - t;
+    const eased = 3 * inverse * inverse * t * 0 + 3 * inverse * t * t * 1 + t * t * t;
+    const color = rgbToHex(...from.map((channel, index) => channel + (to[index] - channel) * eased));
+    themeColor.setAttribute('content', color);
+
+    if (progress < 1) browserThemeAnimation = window.requestAnimationFrame(animate);
+  };
+
+  browserThemeAnimation = window.requestAnimationFrame(animate);
 }
 
 syncBrowserThemeColor();
