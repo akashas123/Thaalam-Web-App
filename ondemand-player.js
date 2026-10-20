@@ -974,15 +974,41 @@ function enqueueOnDemandSong(song) {
 }
 
 function updateTransportButtonState() {
+  const hasQueuedPrevious = onDemandQueueIndex > 0;
+  const hasQueuedNext = onDemandQueueIndex >= 0 && onDemandQueueIndex < onDemandQueue.length - 1;
+  const hasRelatedNext = relatedTrackCursor < relatedTrackCache.length;
+  const canGoPrevious = window.onDemandPlaybackActive && hasQueuedPrevious;
+  const canGoNext = window.onDemandPlaybackActive && (hasQueuedNext || hasRelatedNext);
+
   if (onDemandPrevButton) {
-    onDemandPrevButton.disabled = onDemandQueueIndex <= 0;
+    onDemandPrevButton.disabled = !canGoPrevious;
   }
   if (onDemandNextButton) {
     // Next stays enabled while unplayed related tracks remain, so the listener
     // can move on before the current song ends.
-    const hasQueuedNext = onDemandQueueIndex >= 0 && onDemandQueueIndex < onDemandQueue.length - 1;
-    const hasRelatedNext = relatedTrackCursor < relatedTrackCache.length;
-    onDemandNextButton.disabled = onDemandQueueIndex < 0 || (!hasQueuedNext && !hasRelatedNext);
+    onDemandNextButton.disabled = !canGoNext;
+  }
+
+  // Chrome enables notification transport buttons only when these actions are
+  // registered. Keep their availability in sync with the same queue state as
+  // the in-app buttons, and remove them when returning to live radio.
+  if (navigator.mediaSession?.setActionHandler) {
+    try {
+      navigator.mediaSession.setActionHandler(
+        'previoustrack',
+        canGoPrevious ? () => skipOnDemandSong(-1) : null
+      );
+    } catch {
+      // Some browsers expose Media Session without supporting every action.
+    }
+    try {
+      navigator.mediaSession.setActionHandler(
+        'nexttrack',
+        canGoNext ? () => skipOnDemandSong(1) : null
+      );
+    } catch {
+      // Some browsers expose Media Session without supporting every action.
+    }
   }
 }
 
@@ -1258,6 +1284,7 @@ async function startOnDemandSong(song, { preserveQueue = false, openNowPlaying =
   updateTransportButtonState();
   resetScrub();
   window.onDemandPlaybackActive = true;
+  updateTransportButtonState();
   savePlaybackMode('on-demand');
   updateNowPlayingSubtitle(true);
   window.setOnDemandAudioQuality?.(true);
@@ -1521,6 +1548,7 @@ function returnToLive() {
   // Preserve the saved queue and current track while Live is active.
   window.onDemandPlaying = false;
   window.onDemandPlaybackActive = false;
+  updateTransportButtonState();
   updateNowPlayingSubtitle(false);
   window.setOnDemandAudioQuality?.(false);
   document.body.classList.remove('on-demand-active');
