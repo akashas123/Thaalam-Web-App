@@ -30,7 +30,7 @@ const root = document.documentElement;
 
 let browserThemeAnimation = 0;
 
-function syncBrowserThemeColor() {
+function syncBrowserThemeColor(duration = 800) {
   const themeColor = document.querySelector('meta[name="theme-color"]');
   if (!themeColor) return;
 
@@ -40,9 +40,16 @@ function syncBrowserThemeColor() {
     return [0, 2, 4].map((offset) => parseInt(match[1].slice(offset, offset + 2), 16));
   };
   const from = parseHexColor(themeColor.content);
-  const to = parseHexColor(getComputedStyle(root).getPropertyValue('--album-dominant-color'));
+  const nowPlayingOpen = document.body.classList.contains('view-now-playing');
+  const target = nowPlayingOpen
+    ? getComputedStyle(root).getPropertyValue('--album-dominant-color').trim()
+    : '#05070d';
+  const to = parseHexColor(target);
+  if (duration <= 0) {
+    themeColor.setAttribute('content', rgbToHex(...to));
+    return;
+  }
   const startedAt = performance.now();
-  const duration = 800;
 
   window.cancelAnimationFrame(browserThemeAnimation);
   const animate = (now) => {
@@ -68,7 +75,17 @@ function syncBrowserThemeColor() {
   browserThemeAnimation = window.requestAnimationFrame(animate);
 }
 
-syncBrowserThemeColor();
+let browserThemeWasNowPlaying = document.body?.classList.contains('view-now-playing') || false;
+const browserThemeObserver = new MutationObserver(() => {
+  const nowPlayingOpen = document.body.classList.contains('view-now-playing');
+  if (nowPlayingOpen === browserThemeWasNowPlaying) return;
+  browserThemeWasNowPlaying = nowPlayingOpen;
+  syncBrowserThemeColor(300);
+});
+if (document.body) {
+  browserThemeObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  syncBrowserThemeColor(0);
+}
 
 document.addEventListener('contextmenu', (event) => {
   event.preventDefault();
