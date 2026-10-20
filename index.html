@@ -11,13 +11,13 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=352">
+  <link rel="stylesheet" href="style.css?v=360">
   <link rel="icon" type="image/png" href="icon-512.png?v=4">
   <link rel="apple-touch-icon" href="icon-192.png?v=4">
 
   <style>
     .tagline[class~="marquee"] span {
-      animation-duration: 45s;
+      animation-duration: 32s;
       animation-delay: 0s;
       animation-iteration-count: infinite;
     }
@@ -26,7 +26,7 @@
       display: flex;
       width: max-content;
       gap: 3rem;
-      animation: marqueeLoop 45s linear infinite;
+      animation: marqueeLoop 32s linear infinite;
     }
 
     body.paused-gradient .tagline[class~="marquee"] > span {
@@ -39,13 +39,18 @@
     }
 
     @keyframes marqueeLoop {
-      from {
+      0%, 12% {
         transform: translateX(0);
       }
 
-      to {
-        transform: translateX(calc(-50% - 1.5rem));
+      88% {
+        transform: translateX(-50%);
       }
+
+      89%, 100% {
+        transform: translateX(-50%);
+      }
+
     }
 
     @media (min-width: 56.25rem) and (pointer: fine) {
@@ -2857,6 +2862,18 @@
         // Same zero-width measurement issue as showView(): re-measure the
         // now-playing marquee once the restored view is visible.
         window.updateMarquee?.();
+        // A mini-player rise can leave the newly shown marquee animations at
+        // their old timeline position (or before their animation style was
+        // first applied). Rewind and resume active marquee animations after
+        // the visible layout has been measured.
+        requestAnimationFrame(() => {
+          document.getElementById('playerView')?.getAnimations({ subtree: true })
+            .forEach((animation) => {
+              if (animation.playState === 'paused') return;
+              animation.cancel();
+              animation.play();
+            });
+        });
       });
       if (storedView === 'home') {
         if (activeGenre.startsWith('search:')) loadCatalog(activeGenre, activeSearchTerm);
@@ -2933,6 +2950,14 @@
         // title/artist marquee classes were stripped off. Re-measure now
         // that Now Playing is visible or long titles stay clipped.
         window.updateMarquee?.();
+        requestAnimationFrame(() => {
+          document.getElementById('playerView')?.getAnimations({ subtree: true })
+            .forEach((animation) => {
+              if (animation.playState === 'paused') return;
+              animation.cancel();
+              animation.play();
+            });
+        });
       });
 
       if (view === 'about') loadAboutArtistPortraits();

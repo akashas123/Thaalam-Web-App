@@ -531,7 +531,7 @@ function updateMiniPlayerMarquees() {
       element.classList.add('is-marquee');
       element.style.setProperty(
         '--mini-marquee-duration',
-        `${Math.max(18, (scrollWidth + 150) / 24)}s`
+        `${Math.max(14, (scrollWidth + 120) / 30)}s`
       );
     }
   });
@@ -1137,21 +1137,35 @@ document.addEventListener('DOMContentLoaded', () => {
         tagline.classList.toggle('artist-marquee', artistDistance > 1);
         nowPlayingEl.style.setProperty('--title-marquee-distance', `${-titleDistance}px`);
         nowPlayingEl.style.setProperty('--artist-marquee-distance', `${-artistDistance}px`);
-        nowPlayingEl.style.setProperty('--title-marquee-duration', `${Math.max(18, (titleWidth + 180) / 24)}s`);
-        nowPlayingEl.style.setProperty('--artist-marquee-duration', `${Math.max(18, (artistWidth + 180) / 24)}s`);
+        nowPlayingEl.style.setProperty('--title-marquee-duration', `${Math.max(14, (titleWidth + 140) / 30)}s`);
+        nowPlayingEl.style.setProperty('--artist-marquee-duration', `${Math.max(14, (artistWidth + 140) / 30)}s`);
         return;
       }
 
-      tagline.classList.remove('marquee');
-      tagline.classList.remove('title-marquee', 'artist-marquee');
+      tagline.classList.remove('marquee', 'title-marquee', 'artist-marquee');
       requestAnimationFrame(() => {
-        const likeButton = tagline.querySelector('.on-demand-like-button');
-        const likeSpace = likeButton
-          ? likeButton.offsetWidth + parseFloat(getComputedStyle(likeButton).marginLeft || '0')
-          : 0;
-        if (nowPlayingEl.scrollWidth > tagline.clientWidth - likeSpace) {
-          tagline.classList.add('marquee');
+        if (!document.body.classList.contains('on-demand-active')) {
+          if (nowPlayingEl.scrollWidth > tagline.clientWidth) tagline.classList.add('marquee');
+          return;
         }
+
+        const availableWidth = nowPlayingEl.clientWidth;
+        const measureText = (text, pseudo) => {
+          const styles = getComputedStyle(nowPlayingEl, pseudo);
+          const measure = document.createElement('span');
+          measure.textContent = text;
+          measure.style.cssText = `position:absolute;visibility:hidden;white-space:nowrap;font:${styles.font};letter-spacing:${styles.letterSpacing};`;
+          tagline.appendChild(measure);
+          const width = measure.getBoundingClientRect().width;
+          measure.remove();
+          return width;
+        };
+        const titleWidth = measureText(nowPlayingEl.dataset.trackTitle || '', '::before');
+        const artistWidth = measureText(nowPlayingEl.dataset.trackArtist || '', '::after');
+        tagline.classList.toggle('title-marquee', titleWidth > availableWidth + 1);
+        tagline.classList.toggle('artist-marquee', artistWidth > availableWidth + 1);
+        nowPlayingEl.style.setProperty('--title-marquee-duration', `${Math.max(14, (titleWidth + 140) / 30)}s`);
+        nowPlayingEl.style.setProperty('--artist-marquee-duration', `${Math.max(14, (artistWidth + 140) / 30)}s`);
       });
     };
     window.updateMarquee();

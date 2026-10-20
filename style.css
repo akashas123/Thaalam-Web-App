@@ -5,6 +5,88 @@
   overflow: hidden;
 }
 
+/* On-demand metadata uses pseudo-elements on narrow layouts. Keep the same
+   one-pass marquee and short reset pause used by live metadata and the dock. */
+@media (max-width: 56.1875rem), (pointer: coarse) {
+  body.mini-player-visible .mini-player-meta,
+  body.mini-player-visible .mini-player-track {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  body.mini-player-visible .mini-player-title,
+  body.mini-player-visible .mini-player-artist {
+    position: relative;
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  body.mini-player-visible .mini-player-title.is-marquee,
+  body.mini-player-visible .mini-player-artist.is-marquee {
+    color: transparent !important;
+    text-shadow: none;
+    text-overflow: clip;
+    -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 0.65rem), transparent 100%);
+    mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 0.65rem), transparent 100%);
+  }
+
+  body.mini-player-visible .mini-player-title.is-marquee::before,
+  body.mini-player-visible .mini-player-artist.is-marquee::before {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: max-content;
+    white-space: nowrap;
+    color: inherit;
+    content: attr(data-marquee-text) "\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0" attr(data-marquee-text) "\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0";
+    animation: mobileMiniPlayerMarquee var(--mini-marquee-duration, 18s) linear infinite;
+  }
+
+  body.mini-player-visible .mini-player-title.is-marquee::before { color: #fff; }
+  body.mini-player-visible .mini-player-artist.is-marquee::before { color: rgba(255, 255, 255, 0.92); }
+
+  body.mini-player-visible .mini-player:not(.is-playing) .mini-player-title.is-marquee::before,
+  body.mini-player-visible .mini-player:not(.is-playing) .mini-player-artist.is-marquee::before {
+    animation-play-state: paused;
+  }
+
+  @keyframes mobileMiniPlayerMarquee {
+    0%, 12% { transform: translateX(0); }
+    88%, 100% { transform: translateX(-50%); }
+  }
+
+  body.view-now-playing.on-demand-active .tagline.title-marquee #nowPlaying::before,
+  body.view-now-playing.on-demand-active .tagline.artist-marquee #nowPlaying::after {
+    width: max-content;
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: nowrap;
+    animation: onDemandMetadataMarquee var(--title-marquee-duration, 32s) linear infinite !important;
+  }
+
+  body.view-now-playing.on-demand-active .tagline.title-marquee #nowPlaying::before {
+    content: attr(data-track-title) "\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0" attr(data-track-title) "\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0";
+  }
+
+  body.view-now-playing.on-demand-active .tagline.artist-marquee #nowPlaying::after {
+    content: attr(data-track-artist) "\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0" attr(data-track-artist) "\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0";
+  }
+
+  body.view-now-playing.on-demand-active .tagline.paused.title-marquee #nowPlaying::before,
+  body.view-now-playing.on-demand-active .tagline.paused.artist-marquee #nowPlaying::after {
+    animation-play-state: paused !important;
+  }
+}
+
+@keyframes onDemandMetadataMarquee {
+  0%, 12% { transform: translateX(0); }
+  88%, 100% { transform: translateX(-50%); }
+}
+
 /* The liked-folder header and back row belong to the mobile Library flow.
    Hide them on wide layouts even if a mobile folder state survives resizing. */
 @media (min-width: 56.1876rem) {
@@ -1013,7 +1095,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
     white-space: nowrap;
     color: inherit;
     content: attr(data-marquee-text) "\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0" attr(data-marquee-text) "\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0";
-    animation: miniPlayerMarquee var(--mini-marquee-duration, 24s) linear infinite;
+    animation: miniPlayerMarquee var(--mini-marquee-duration, 18s) linear infinite;
   }
 
   .mini-player-title.is-marquee,
@@ -1035,8 +1117,8 @@ body.view-rises-from-mini.view-now-playing .player-view {
   }
 
   @keyframes miniPlayerMarquee {
-    from { transform: translateX(0); }
-    to { transform: translateX(-50%); }
+    0%, 12% { transform: translateX(0); }
+    88%, 100% { transform: translateX(-50%); }
   }
 
   .mini-player-title {
@@ -4136,7 +4218,6 @@ body.has-lyrics .lyrics-panel {
     text-overflow: ellipsis;
     white-space: nowrap;
     animation: none !important;
-    transform: none !important;
   }
 
   body.view-now-playing.on-demand-active #nowPlaying::before {
@@ -5229,13 +5310,13 @@ body.has-lyrics .lyrics-panel {
   body.view-now-playing .tagline.title-marquee #nowPlaying::before {
     white-space: nowrap;
     content: attr(data-track-title) "\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0" attr(data-track-title) "\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0";
-    animation: desktopTitleMarquee var(--title-marquee-duration, 14s) linear infinite;
+    animation: desktopTitleMarquee var(--title-marquee-duration, 11s) linear infinite;
   }
 
   body.view-now-playing .tagline.artist-marquee #nowPlaying::after {
     white-space: nowrap;
     content: attr(data-track-artist) "\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0" attr(data-track-artist) "\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0";
-    animation: desktopArtistMarquee var(--artist-marquee-duration, 12s) linear infinite;
+    animation: desktopArtistMarquee var(--artist-marquee-duration, 9s) linear infinite;
   }
 
   body.view-now-playing .tagline.paused.title-marquee #nowPlaying::before,
@@ -5248,13 +5329,13 @@ body.has-lyrics .lyrics-panel {
   }
 
   @keyframes desktopTitleMarquee {
-    from { transform: translateX(0); }
-    to { transform: translateX(-50%); }
+    0%, 12% { transform: translateX(0); }
+    88%, 100% { transform: translateX(-50%); }
   }
 
   @keyframes desktopArtistMarquee {
-    from { transform: translateX(0); }
-    to { transform: translateX(-50%); }
+    0%, 12% { transform: translateX(0); }
+    88%, 100% { transform: translateX(-50%); }
   }
 
   body.view-now-playing #nowPlaying > span {
