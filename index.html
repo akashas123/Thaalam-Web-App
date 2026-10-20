@@ -22,7 +22,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=392">
+  <link rel="stylesheet" href="style.css?v=395">
   <link rel="icon" type="image/png" href="icon-512.png?v=4">
   <link rel="apple-touch-icon" href="icon-192.png?v=4">
 
@@ -1531,49 +1531,47 @@
           const context = canvas.getContext('2d', { willReadFrequently: true });
           context.drawImage(probe, 0, 0, 32, 32);
           const pixels = context.getImageData(0, 0, 32, 32).data;
-          // Saturation-weighted average: vivid pixels (curtains, stage lights,
-          // skin tones) count more than flat grey/black washes, so the glow
-          // actually matches the cover instead of collapsing to dark grey.
-          let rSum = 0;
-          let gSum = 0;
-          let bSum = 0;
-          let wSum = 0;
+          // Use the most common color cluster so the whole genre view takes
+          // the cover's majority color, like the Now Playing backdrop.
+          const buckets = new Map();
           for (let index = 0; index < pixels.length; index += 4) {
             const r = pixels[index];
             const g = pixels[index + 1];
             const b = pixels[index + 2];
-            const mx = Math.max(r, g, b);
-            const mn = Math.min(r, g, b);
-            const sat = mx - mn;
-            const luma = (r + g + b) / 3;
-            // Ignore near-black letterboxing and near-white glare spikes.
-            if (luma < 10 || luma > 245) continue;
-            const weight = 0.2 + sat / 255;
-            rSum += r * weight;
-            gSum += g * weight;
-            bSum += b * weight;
-            wSum += weight;
+            const brightness = (r + g + b) / 3;
+            if (brightness < 12 || brightness > 248) continue;
+            const key = `${r >> 4},${g >> 4},${b >> 4}`;
+            const bucket = buckets.get(key) || { count: 0, r: 0, g: 0, b: 0 };
+            bucket.count += 1;
+            bucket.r += r;
+            bucket.g += g;
+            bucket.b += b;
+            buckets.set(key, bucket);
           }
-          if (!wSum) return;
-          let red = rSum / wSum;
-          let green = gSum / wSum;
-          let blue = bSum / wSum;
-          // Re-saturate around grey so muted averages regain the cover hue,
-          // then lift so dark/grey covers still glow on the near-black bg.
-          // Grey covers (low saturation) get a white floor so the wash reads
-          // as a soft grey-white glow instead of disappearing into the bg.
-          const grey = (red + green + blue) / 3;
-          const boost = 1.7;
-          red = grey + (red - grey) * boost;
-          green = grey + (green - grey) * boost;
-          blue = grey + (blue - grey) * boost;
-          const spread = Math.max(red, green, blue) - Math.min(red, green, blue);
-          const lift = (channel) => channel * 0.72 + 58 * 0.28;
-          let channels = [lift(red), lift(green), lift(blue)];
-          if (spread < 22) {
-            channels = channels.map((channel) => Math.max(channel, 118));
+          const dominant = [...buckets.values()].sort((a, b) => b.count - a.count)[0];
+          if (!dominant) return;
+          const average = [dominant.r, dominant.g, dominant.b].map((channel) => channel / dominant.count);
+          const brightness = average.reduce((sum, channel) => sum + channel, 0) / 3;
+          const channels = average.map((channel) => channel * Math.min(1.65, Math.max(0.78, 138 / brightness)));
+          const luminance = (scale) => {
+            const linear = channels.map((channel) => {
+              const value = (channel * scale) / 255;
+              return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+            });
+            return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
+          };
+          let scale = 1;
+          if (luminance(scale) > 0.1) {
+            let low = 0;
+            let high = 1;
+            for (let iteration = 0; iteration < 14; iteration += 1) {
+              const middle = (low + high) / 2;
+              if (luminance(middle) <= 0.1) low = middle;
+              else high = middle;
+            }
+            scale = low;
           }
-          const hex = channels
+          const hex = channels.map((channel) => channel * scale)
             .map((channel) => Math.max(0, Math.min(255, Math.round(channel)))
               .toString(16).padStart(2, '0'))
             .join('');

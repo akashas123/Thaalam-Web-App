@@ -168,10 +168,10 @@ body.view-home::before {
   transition: opacity 0.8s ease;
 }
 
-/* Blurred art shows the moment a cover URL exists (CSS backgrounds have no
-   CORS probe, so this never flickers). Empty grids keep it at 0 = flat dark. */
+/* The sampled majority color supplies the single-hue glow. Keep the source
+   artwork itself hidden so it cannot introduce extra colors into the wash. */
 body.view-home.has-home-art::before {
-  opacity: 0.32;
+  opacity: 0;
 }
 
 body:not(.view-now-playing) { background-color: #05070d; }
@@ -5775,9 +5775,7 @@ img {
 
   body.mobile-search-active.view-home.has-search-art::before {
     height: 100dvh;
-    opacity: 0.32;
-    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 68%, transparent 100%);
-    mask-image: linear-gradient(to bottom, #000 0%, #000 68%, transparent 100%);
+    opacity: 0;
   }
 
   body.view-library {
