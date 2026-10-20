@@ -4145,8 +4145,8 @@ body.has-lyrics .lyrics-panel {
   body.view-now-playing .mobile-player-minimize {
     position: absolute;
     z-index: 11;
-    top: max(1.2rem, env(safe-area-inset-top, 0px));
-    left: 0.75rem;
+    top: max(1.7rem, env(safe-area-inset-top, 0px));
+    left: 1.4rem;
     display: grid;
     width: 2.35rem;
     height: 2.35rem;
@@ -4155,6 +4155,10 @@ body.has-lyrics .lyrics-panel {
     border-radius: 0;
     background: transparent;
     color: #fff;
+  }
+
+  body.view-now-playing .album-art-card {
+    margin-top: 0.15rem;
   }
 
   body.view-now-playing .player-controls {
@@ -4875,6 +4879,32 @@ body.has-lyrics .lyrics-panel {
     max-width: 100%;
     text-align: center;
     overflow-wrap: anywhere;
+  }
+
+  body.view-now-playing .app {
+    width: min(27rem, calc(100vw - 2rem));
+    max-width: none;
+    margin: clamp(3.5rem, 9dvh, 5rem) auto 0;
+    padding: 0 0.5rem;
+    transform: none;
+  }
+
+  body.view-now-playing .album-art-card {
+    width: min(100%, 24rem, max(8rem, calc(100dvh - 21rem)));
+    max-width: 100%;
+    margin: 0 auto clamp(1rem, 2.5dvh, 1.5rem);
+  }
+
+  body.view-now-playing .now-playing-track {
+    margin-bottom: clamp(0.75rem, 1.8dvh, 1.1rem);
+  }
+
+  body.view-now-playing .live-row {
+    margin-bottom: clamp(0.8rem, 1.8dvh, 1.2rem);
+  }
+
+  body.view-now-playing .track-time {
+    margin-top: 0.25rem;
   }
 }
 
