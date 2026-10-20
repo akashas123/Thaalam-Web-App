@@ -11,7 +11,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=302">
+  <link rel="stylesheet" href="style.css?v=304">
   <link rel="icon" type="image/png" href="icon-512.png?v=4">
   <link rel="apple-touch-icon" href="icon-192.png?v=4">
 
@@ -2798,9 +2798,9 @@
 
     document.getElementById('miniPlayer')?.addEventListener('click', (event) => {
       if (desktopNavigation.matches || !document.body.classList.contains('mini-player-visible')) return;
-      // Keep the dedicated play/pause button as a transport control. All other
-      // taps on the compact player open the full Now Playing screen.
-      if (event.target.closest('#miniPlayerToggle, .mini-player-like, input, [role="progressbar"]')) return;
+      // Dedicated transport/action controls keep their own behaviour. Every
+      // other tap on the compact player opens the full Now Playing screen.
+      if (event.target.closest('#miniPlayerToggle, #miniPrevButton, #miniNextButton, .mini-player-like, #miniInfoButton, #miniVolumeButton, input, [role="progressbar"]')) return;
       if (document.body.classList.contains('view-now-playing')) return;
       showView('now-playing', { riseFromMiniPlayer: true });
     });

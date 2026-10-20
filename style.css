@@ -4158,7 +4158,7 @@ body.has-lyrics .lyrics-panel {
   }
 
   body.view-now-playing .album-art-card {
-    margin-top: 0.15rem;
+    margin-top: 0;
   }
 
   body.view-now-playing .player-controls {
@@ -5476,17 +5476,17 @@ img {
     height: clamp(2.25rem, 8vw + 0.7rem, 2.6rem);
   }
 
-  /* Gap between the minimize arrow and the album art. The arrow is
-     absolutely positioned, so the player needs top padding to clear it.
-     clamp() with dvh keeps it proportional on all phone sizes. */
+  /* Tight gap between the minimize arrow and the album art. The arrow is
+     absolutely positioned, so the player needs just enough top padding to
+     clear it. clamp() with dvh keeps it proportional on all phone sizes. */
   body.view-now-playing .app {
-    padding-top: clamp(1.75rem, 1.25rem + 3dvh, 3rem);
+    padding-top: clamp(0.5rem, 0.35rem + 1dvh, 1rem);
   }
 
   /* Gap between the album art and the song metadata below it. Overrides the
      art card's shorthand margin above (same block order => wins). */
   body.view-now-playing .album-art-card {
-    margin-bottom: clamp(1.25rem, 1rem + 3dvh, 2.5rem);
+    margin-bottom: clamp(1.75rem, 1.4rem + 4dvh, 3.25rem);
   }
 
   /* Breathing room between the transport buttons (.app / .player-controls)
