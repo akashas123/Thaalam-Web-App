@@ -28,7 +28,7 @@ function applyNowPlayingMetadata(data) {
   const artist = song.artist?.trim() || 'Thaalam 24x7';
   const album = song.album?.trim() || 'Thaalam 24x7';
   const artwork = song.art?.trim() || fallbackArtwork;
-  document.title = `${title} - ${artist} | Thaalam 24x7`;
+  document.title = `${title} - ${artist}`;
   if (song.art?.trim()) setFavicon(artwork);
 
   if (navigator.mediaSession && 'MediaMetadata' in window) {
