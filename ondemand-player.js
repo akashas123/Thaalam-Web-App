@@ -22,7 +22,7 @@ const onDemandMiniProgressFill = document.getElementById('miniPlayerProgressFill
 const playbackProgressBar = document.getElementById('progressBar');
 const playbackProgressFill = document.getElementById('progressFill');
 const playbackProgressThumb = document.getElementById('progressThumb');
-const liveProgressRadio = document.getElementById('radio');
+const miniPlayerForProgress = document.getElementById('miniPlayer');
 const onDemandPrevButton = document.getElementById('onDemandPrevButton');
 const onDemandNextButton = document.getElementById('onDemandNextButton');
 
@@ -481,7 +481,7 @@ function updatePlaybackProgress() {
     liveProgressSyncTime = now;
   }
   const localElapsed = liveProgressBaseElapsed + (
-    liveProgressRadio && !liveProgressRadio.paused
+    miniPlayerForProgress?.classList.contains('is-playing')
       ? Math.max(0, now - liveProgressSyncTime) / 1000
       : 0
   );

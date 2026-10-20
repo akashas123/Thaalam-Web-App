@@ -4232,12 +4232,12 @@ body.has-lyrics .lyrics-panel {
   .mobile-genre-track-row::-webkit-scrollbar { display: none; }
   .mobile-genre-row { min-width: 0; flex: 0 0 auto; overflow: visible; }
   .mobile-genre-row h2 { margin-bottom: 0.6rem; color: #fff; font-size: 1rem; font-weight: 650; }
-  .mobile-genre-track-row { display: flex; gap: 0.7rem; overflow-x: auto; padding: 0 0 0.25rem; scrollbar-width: none; }
-  .mobile-genre-track { width: 7rem; flex: 0 0 7rem; }
-  .mobile-genre-track-art { display: block; width: 7rem; min-width: 7rem; height: 7rem; min-height: 7rem; aspect-ratio: 1 / 1; flex: 0 0 7rem; overflow: hidden; border: 0; border-radius: 0.55rem; background: #111 url('album-placeholder.svg?v=3') center / cover no-repeat; }
+  .mobile-genre-track-row { display: flex; gap: 1rem; overflow-x: auto; padding: 0 0 0.25rem; scrollbar-width: none; }
+  .mobile-genre-track { width: 8rem; flex: 0 0 8rem; }
+  .mobile-genre-track-art { display: block; width: 8rem; min-width: 8rem; height: 8rem; min-height: 8rem; aspect-ratio: 1 / 1; flex: 0 0 8rem; overflow: hidden; border: 0; border-radius: 0.55rem; background: #111 url('album-placeholder.svg?v=3') center / cover no-repeat; }
   .mobile-genre-track-art img { display: block; width: 100%; height: 100%; aspect-ratio: 1 / 1; object-fit: cover; opacity: 0; transition: opacity 0.16s ease; }
   .mobile-genre-track-art.has-artwork img { opacity: 1; }
-  .mobile-genre-loading-art { width: 7rem; height: 7rem; border-radius: 0.55rem; background: #111 url('album-placeholder.svg?v=3') center / cover no-repeat; }
+  .mobile-genre-loading-art { width: 8rem; height: 8rem; border-radius: 0.55rem; background: #111 url('album-placeholder.svg?v=3') center / cover no-repeat; }
   .mobile-genre-track-title { margin-top: 0.4rem; overflow: hidden; color: #fff; font-size: 0.75rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
   .mobile-genre-track-artist { margin-top: 0.16rem; overflow: hidden; color: rgba(255,255,255,.62); font-size: 0.68rem; text-overflow: ellipsis; white-space: nowrap; }
   .mobile-genre-row-message { padding: 0.8rem 0; color: rgba(255,255,255,.58); font-size: 0.78rem; }
@@ -4753,7 +4753,7 @@ body.has-lyrics .lyrics-panel {
   body.mini-player-visible.view-home .mini-player-clock,
   body.mini-player-visible.view-library .mini-player-clock { display: none; }
   body.mini-player-visible.view-home .mini-player-progress,
-  body.mini-player-visible.view-library .mini-player-progress { display: block; width: 100%; height: 0.13rem; flex: 1 1 100%; background: rgba(255,255,255,.18); box-shadow: none; }
+  body.mini-player-visible.view-library .mini-player-progress { display: block; width: 100%; height: 0.13rem; flex: 1 1 100%; background: transparent; box-shadow: none; }
   body.mini-player-visible.view-home .mini-player-progress.is-seekable,
   body.mini-player-visible.view-library .mini-player-progress.is-seekable { touch-action: none; }
   body.mini-player-visible.view-home .mini-player-progress-fill,
