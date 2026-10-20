@@ -7,7 +7,7 @@
 
 /* On-demand metadata uses pseudo-elements on narrow layouts. Keep the same
    one-pass marquee and short reset pause used by live metadata and the dock. */
-@media (max-width: 56.1875rem) {
+@media (max-width: 56.1875rem) and (pointer: coarse) {
   body.mini-player-visible .mini-player-meta,
   body.mini-player-visible .mini-player-track {
     min-width: 0;
@@ -89,7 +89,7 @@
 
 /* The liked-folder header and back row belong to the mobile Library flow.
    Hide them on wide layouts even if a mobile folder state survives resizing. */
-@media (min-width: 56.1876rem) {
+@media (min-width: 56.1876rem), (pointer: fine) {
   .library-playlist-heading,
   .liked-songs-view-title {
     display: none !important;
@@ -574,7 +574,7 @@ body.view-about .site-page.about-page {
   }
 }
 
-@media (min-width: 56.25rem) {
+@media (min-width: 56.25rem), (pointer: fine) {
   /* Now Playing's sideways slide is desktop-only. On mobile the page is the
      launch view — showView() no-ops there and the body class never switches —
      so the global rule only made the player card and lyrics slide in on every
@@ -620,7 +620,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
   }
 }
 
-@media (min-width: 56.25rem) {
+@media (min-width: 56.25rem), (pointer: fine) {
   body.view-rises-from-mini.view-now-playing #nowPlayingHeading {
     animation: nowPlayingHeadingRiseIn 0.8s cubic-bezier(0.4, 0, 0.2, 1);
   }
@@ -630,7 +630,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
   display: none;
 }
 
-@media (min-width: 56.25rem) {
+@media (min-width: 56.25rem), (pointer: fine) {
   .desktop-profile-button {
     position: fixed;
     z-index: 6;
@@ -2383,7 +2383,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
   }
 }
 
-@media (min-width: 56.25rem) {
+@media (min-width: 56.25rem), (pointer: fine) {
   .now-playing-heading {
   display: none;
 }
@@ -4122,7 +4122,7 @@ body.on-demand-active .transport-btn:disabled {
   display: none;
 }
 
-@media (min-width: 56.25rem) {
+@media (min-width: 56.25rem), (pointer: fine) {
   body.has-lyrics:not(.synced-lyrics)
   .lyrics-content {
     max-height: 68vh;
@@ -4186,13 +4186,21 @@ body.has-lyrics .lyrics-panel {
     translateX(clamp(0.5rem, 1vw, 1rem));
 }
 
-@media (min-width: 56.25rem) {
+@media (min-width: 56.25rem), (pointer: fine) {
   body.has-lyrics .app {
     transform: translateX(0);
   }
 }
 
-@media (max-width: 56.1875rem) {
+@media (max-width: 56.1875rem) and (pointer: coarse) {
+  body.view-now-playing.on-demand-active .live-row .progress-bar::before {
+    left: -1.5rem;
+    width: calc(100% + 3rem);
+    height: 9rem;
+    z-index: 4;
+    pointer-events: auto;
+  }
+
   body.view-now-playing.on-demand-active .now-playing-track {
     display: block;
     min-height: 2.8rem;
@@ -4487,7 +4495,7 @@ body.has-lyrics .lyrics-panel {
     height: calc(100dvh - 4rem - env(safe-area-inset-bottom, 0px));
     align-content: start;
     gap: 1.1rem;
-    padding: 1.15rem 1rem 0;
+    padding: 6rem 1rem 0;
     text-align: left;
   }
 
@@ -4496,7 +4504,8 @@ body.has-lyrics .lyrics-panel {
   }
 
   .library-header h1 { font-size: 1.65rem; line-height: 1.15; }
-  body.view-library .liked-playlist-card { display: flex; width: 100%; min-height: 5rem; align-items: center; gap: 0.8rem; padding: 0.65rem; border: 0 !important; border-radius: 0.9rem; outline: 0; background: transparent !important; box-shadow: none !important; color: #fff; text-align: left; cursor: pointer; }
+  .library-subtitle { max-width: 22rem; margin: 0.4rem 0 0; color: rgba(255,255,255,.64); font-size: 0.82rem; line-height: 1.45; }
+  body.view-library .liked-playlist-card { display: flex; width: 100%; min-height: 5rem; margin-top: 2rem; align-items: center; gap: 0.8rem; padding: 0.65rem; border: 0 !important; border-radius: 0.9rem; outline: 0; background: transparent !important; box-shadow: none !important; color: #fff; text-align: left; cursor: pointer; }
   .liked-playlist-art { display: grid; width: 3.7rem; height: 3.7rem; flex: 0 0 3.7rem; place-items: center; border-radius: 0.55rem; background: linear-gradient(145deg, #f45d77, #772c70 75%); }
   .liked-playlist-art svg { width: 1.8rem; height: 1.8rem; fill: #fff; }
   .liked-playlist-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 0.25rem; }
@@ -4849,15 +4858,15 @@ body.has-lyrics .lyrics-panel {
   body.mini-player-visible.view-home .mini-player-artist,
   body.mini-player-visible.view-library .mini-player-artist { color: rgba(255,255,255,.62); font-size: 0.68rem; }
   body.mini-player-visible.view-home .mini-player-seek,
-  body.mini-player-visible.view-library .mini-player-seek { position: absolute; top: 0; right: 0; bottom: auto; left: 0; z-index: 20; display: flex; width: auto; height: 0.13rem; max-width: none; gap: 0; overflow: visible; }
+  body.mini-player-visible.view-library .mini-player-seek { position: absolute; top: 0; right: 0; bottom: auto; left: 0; z-index: 20; display: flex; width: auto; height: 0.2rem; max-width: none; gap: 0; overflow: visible; pointer-events: auto; }
   body.mini-player-visible.view-home .mini-player-clock,
   body.mini-player-visible.view-library .mini-player-clock { display: none; }
   body.mini-player-visible.view-home .mini-player-progress,
-  body.mini-player-visible.view-library .mini-player-progress { display: block; width: 100%; height: 0.13rem; flex: 1 1 100%; background: rgba(255,255,255,.18); box-shadow: none; }
+  body.mini-player-visible.view-library .mini-player-progress { position: relative; display: block; width: 100%; height: 0.2rem; flex: 1 1 100%; overflow: hidden; background: rgba(255,255,255,.32); box-shadow: none; }
   body.mini-player-visible.view-home .mini-player-progress.is-seekable,
   body.mini-player-visible.view-library .mini-player-progress.is-seekable { touch-action: none; }
   body.mini-player-visible.view-home .mini-player-progress-fill,
-  body.mini-player-visible.view-library .mini-player-progress-fill { display: block; background: #fff; box-shadow: 0 0 0.35rem rgba(255,255,255,.45); }
+  body.mini-player-visible.view-library .mini-player-progress-fill { position: absolute; z-index: 1; top: 0; bottom: 0; left: 0; display: block !important; min-width: 0.45rem; background: #fff; box-shadow: 0 0 0.4rem rgba(255,255,255,.9); }
   body.mini-player-visible.view-home .mini-player-like,
   body.mini-player-visible.view-library .mini-player-like { display: grid; width: 2.1rem; height: 2.4rem; grid-column: 2; grid-row: 1; place-items: center; border: 0; background: transparent; color: #fff; }
   body.mini-player-visible.view-home .mini-player-like svg,
@@ -5163,7 +5172,7 @@ body.has-lyrics .lyrics-panel {
 }
 
 /* Desktop listening layout: artwork beside the complete player controls. */
-@media (min-width: 56.25rem) {
+@media (min-width: 56.25rem), (pointer: fine) {
   body.view-now-playing .app {
     top: 0;
     display: grid;
@@ -5630,7 +5639,7 @@ img {
   }
 }
 
-@media (max-width: 56.1875rem) {
+@media (max-width: 56.1875rem) and (pointer: coarse) {
   /* Home's height already excludes the mini-player and bottom nav. The shared
      page padding was shrinking the shelf viewport a second time and covering
      the last album row above the mini-player. */
@@ -5678,7 +5687,7 @@ img {
 
 /* Narrow-screen-only refinements (width query only — no `pointer: coarse`,
    so touchscreen laptops/desktops never match and desktop stays untouched). */
-@media (max-width: 56.1875rem) {
+@media (max-width: 56.1875rem) and (pointer: coarse) {
   @keyframes mobileTabPanelSlideIn {
     from {
       opacity: 0.72;
@@ -5707,14 +5716,20 @@ img {
   }
 
   body.view-home.library-playlist-open .home-page .site-page-content {
-    padding-top: 1.15rem !important;
+    padding-top: 6rem !important;
   }
 
   body.library-playlist-open .library-playlist-heading {
     position: relative;
     width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
     justify-content: flex-start;
-    gap: 0;
+    gap: 0.4rem;
+  }
+
+  body.library-playlist-open .liked-folder-subtitle {
+    margin-top: 0;
   }
 
   body.library-playlist-open .library-playlist-heading h1 {
@@ -5760,6 +5775,14 @@ img {
     align-items: center;
     gap: 0.45rem;
     margin: 0;
+  }
+
+  body.view-home.library-playlist-open #genreResults.favourites-list-layout .genre-play-button {
+    background: transparent !important;
+  }
+
+  body.view-home.library-playlist-open #genreResults.favourites-list-layout .genre-play-button svg {
+    visibility: hidden;
   }
 
   body.view-home.library-playlist-open .liked-folder-toolbar .favourite-sort-control {

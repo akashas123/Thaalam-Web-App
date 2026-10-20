@@ -514,7 +514,10 @@ function setPlaybackProgress(elapsed, duration) {
     : 0;
 
   playbackProgressFill.style.width = `${percent}%`;
-  if (onDemandMiniProgressFill) {
+  // The shared mini-player clock in script.js owns live progress. Keeping
+  // this routine as the only mini-fill writer for On-Demand prevents its
+  // separate live estimate from fighting the live clock on pause/resume.
+  if (onDemandMiniProgressFill && window.onDemandPlaybackActive) {
     const miniPercent = percent > 0 ? Math.max(0.5, Math.min(98, percent)) : 0;
     onDemandMiniProgressFill.style.display = 'block';
     onDemandMiniProgressFill.style.width = `${miniPercent}%`;

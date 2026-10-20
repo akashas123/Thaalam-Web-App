@@ -52,7 +52,7 @@ document.addEventListener('click', (event) => {
   // Mobile mini-player surfaces are clickable navigation targets, including
   // their non-button padding. Let the event bubble to #miniPlayer's handler.
   if (
-    window.matchMedia('(max-width: 56.1875rem)').matches &&
+    window.matchMedia('(max-width: 56.1875rem) and (pointer: coarse)').matches &&
     event.target.closest('#miniPlayer')
   ) return;
   if (!event.target.closest('button')) {
@@ -271,8 +271,19 @@ function formatMiniTime(seconds) {
   return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
 }
 
-/* Last live clock reading, used to freeze the mini timer while paused. */
-let lastLiveClockValue = 0;
+function updateMiniPlayerProgress(elapsed, duration) {
+  if (!miniPlayerProgressFill) return;
+  const safeDuration = Number(duration);
+  const safeElapsed = Number(elapsed);
+  const percent = Number.isFinite(safeDuration) && safeDuration > 0 && Number.isFinite(safeElapsed)
+    ? Math.min(100, Math.max(0, (safeElapsed / safeDuration) * 100))
+    : 0;
+  miniPlayerProgressFill.style.display = 'block';
+  // Keep a small white leading edge visible even at the very start of a
+  // track; on narrow mobile bars a sub-pixel fill can otherwise disappear.
+  miniPlayerProgressFill.style.width = `${Math.max(1.5, percent)}%`;
+  miniPlayerProgress?.setAttribute('aria-valuenow', String(Math.round(percent)));
+}
 
 function updateMiniPlayerTime() {
   if (!miniPlayerElapsed || !miniPlayerDuration) return;
@@ -287,28 +298,36 @@ function updateMiniPlayerTime() {
       : onDemandClock.elapsed;
     miniPlayerElapsed.textContent = formatMiniTime(elapsed);
     miniPlayerDuration.textContent = formatMiniTime(onDemandClock.duration);
+    updateMiniPlayerProgress(elapsed, onDemandClock.duration);
     return;
   }
+  // Keep the exact rendered live position while paused. The live clock can
+  // still be re-synced by incoming metadata, which otherwise makes the mini
+  // fill jump between the frozen point and the stream's reported position.
+  if (radio?.paused || window.awaitingFreshHlsPosition) return;
+
   const clock = window.getAudibleTrackClock?.();
   if (clock) {
-    // Freeze the mini timer/fill at the last audible reading while the stream
-    // is paused. On resume, lyrics.js holds the clock until the fresh
-    // now-playing snapshot re-syncs it to the live playback position.
-    const paused = Boolean(radio?.paused);
-    const rawElapsed = paused ? lastLiveClockValue : clock.elapsed;
-    if (!paused) lastLiveClockValue = rawElapsed;
     // Clamp to the duration so the live mini clock never reads past the end
     // of the song currently on air (matches the Now Playing readout).
     const duration = Number(clock.duration) || 0;
-    const elapsed = duration > 0
-      ? Math.min(rawElapsed, duration)
-      : rawElapsed;
+    const elapsed = duration > 0 ? Math.min(clock.elapsed, duration) : clock.elapsed;
     miniPlayerElapsed.textContent = formatMiniTime(elapsed);
     miniPlayerDuration.textContent = formatMiniTime(duration);
+    updateMiniPlayerProgress(elapsed, duration);
     return;
   }
-  miniPlayerElapsed.textContent = document.getElementById('trackElapsed')?.textContent || '0:00';
-  miniPlayerDuration.textContent = document.getElementById('trackDuration')?.textContent || '0:00';
+  const elapsedText = document.getElementById('trackElapsed')?.textContent || '0:00';
+  const durationText = document.getElementById('trackDuration')?.textContent || '0:00';
+  miniPlayerElapsed.textContent = elapsedText;
+  miniPlayerDuration.textContent = durationText;
+  const parseMiniTime = (value) => {
+    const parts = String(value).trim().split(':').map(Number);
+    return parts.length === 2 && parts.every(Number.isFinite)
+      ? parts[0] * 60 + parts[1]
+      : NaN;
+  };
+  updateMiniPlayerProgress(parseMiniTime(elapsedText), parseMiniTime(durationText));
 }
 
 /* The mini transport/action buttons reuse the full player's own controls so the
@@ -1110,7 +1129,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const tagline = document.querySelector('.tagline');
   if (tagline && nowPlayingEl) {
     window.updateMarquee = () => {
-      if (window.matchMedia('(min-width: 56.25rem)').matches) {
+      if (window.matchMedia('(min-width: 56.25rem), (pointer: fine)').matches) {
         const likeButton = tagline.querySelector('.on-demand-like-button');
         const likeSpace = likeButton
           ? likeButton.offsetWidth + parseFloat(getComputedStyle(likeButton).marginLeft || '0')
