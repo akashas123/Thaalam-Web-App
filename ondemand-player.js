@@ -6,6 +6,9 @@ const onDemandStation = document.getElementById('stationName');
 const onDemandTrack = document.getElementById('nowPlaying');
 const onDemandModeLabel = document.querySelector('.live-text');
 const returnToLiveButton = document.getElementById('returnToLiveButton');
+const liveModeButton = document.getElementById('liveModeButton');
+const onDemandModeButton = document.getElementById('onDemandModeButton');
+const playerModeToggle = document.querySelector('.player-mode-toggle');
 const onDemandPlayButton = document.getElementById('playButton');
 const onDemandMiniToggle = document.getElementById('miniPlayerToggle');
 const onDemandElapsed = document.getElementById('trackElapsed');
@@ -79,11 +82,12 @@ function updateNowPlayingSubtitle(isOnDemand) {
   }
 }
 
-/* On-demand state survives refreshes and closed tabs. The saved track and
-   queue are restored paused; only "Back to Live" clears the saved session.
+/* On-demand state survives refreshes and closed tabs. The selected mode,
+   transport state, saved position and queue are restored from local storage.
    v1 held YouTube video ids that this player can no longer play, so the key
    was bumped and stale v1/v2-era payloads are dropped on read. */
 const ON_DEMAND_STORAGE_KEY = 'thaalam-on-demand-session-v2';
+const PLAYBACK_MODE_STORAGE_KEY = 'thaalam-playback-mode-v1';
 const LEGACY_ON_DEMAND_STORAGE_KEYS = ['thaalam-on-demand-session-v1'];
 const MUSIC_SEARCH_CACHE_PREFIX = 'thaalam-jiosaavn-search-v1:';
 const MUSIC_SEARCH_CACHE_TTL = 6 * 60 * 60 * 1000;
@@ -96,6 +100,21 @@ const ON_DEMAND_DEBUG = true;
 const logOnDemand = (...parts) => {
   if (ON_DEMAND_DEBUG) console.log('[on-demand]', ...parts);
 };
+
+function savePlaybackMode(mode) {
+  try {
+    localStorage.setItem(PLAYBACK_MODE_STORAGE_KEY, mode);
+  } catch {
+  }
+}
+
+function readPlaybackMode() {
+  try {
+    return localStorage.getItem(PLAYBACK_MODE_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
+}
 
 function getMusicSearchCache(query) {
   try {
@@ -1171,6 +1190,7 @@ async function startOnDemandSong(song, { preserveQueue = false, openNowPlaying =
   updateTransportButtonState();
   resetScrub();
   window.onDemandPlaybackActive = true;
+  savePlaybackMode('on-demand');
   updateNowPlayingSubtitle(true);
   window.setOnDemandAudioQuality?.(true);
   document.body.classList.add('on-demand-active');
@@ -1293,8 +1313,8 @@ function toggleOnDemandPlayback(shouldPlay) {
   }
 }
 
-/* Restores the saved on-demand track and navigation queue after a refresh or
-   reopen, but waits for an explicit Play action before producing audio. */
+/* Restores the saved on-demand track, queue and transport state after a
+   refresh or reopen. */
 async function restoreOnDemandSession() {
   logOnDemand('restoreOnDemandSession() called');
   const stored = readOnDemandSession();
@@ -1303,14 +1323,9 @@ async function restoreOnDemandSession() {
     return;
   }
 
-  if (window.matchMedia('(max-width: 56.1875rem), (pointer: coarse)').matches) {
-    logOnDemand('discarding restored on-demand session on mobile');
-    clearOnDemandSession();
-    window.togglePlay?.();
-    return;
-  }
-
   const song = stored.song;
+  savePlaybackMode('on-demand');
+  const shouldResume = stored.playing === true;
   // Keep the session's navigation history across refreshes. Entries without a
   // track name are dropped; entries missing a resolved stream re-search on tap.
   const savedQueue = Array.isArray(stored.queue)
@@ -1377,7 +1392,7 @@ async function restoreOnDemandSession() {
     trackCandidateIndex = 0;
     rerresolvedTrackId = '';
     updateOnDemandMetadata(song, { id: stored.trackId, thumbnail: song.artworkUrl100 || '' });
-    await loadTrack(trackCandidates[0], requestId, stored.position || 0, false);
+    await loadTrack(trackCandidates[0], requestId, stored.position || 0, shouldResume);
     logOnDemand('loadTrack() resolved; src =', Boolean(onDemandAudio.getAttribute('src')),
       'state =', onDemandAudio.paused ? 'paused' : 'playing');
     if (requestId !== songRequestId || !window.onDemandPlaybackActive) {
@@ -1388,9 +1403,8 @@ async function restoreOnDemandSession() {
     updatePlaybackProgress();
     playedTrackIds.add(stored.trackId);
     prefetchRelatedTracks(stored.trackId);
-    // A restored session is always cued. The Play button resumes from the
-    // saved position and keeps the restored queue available for navigation.
-    setOnDemandPlaying(false);
+    // Restore the saved transport state and position after the stream loads.
+    setOnDemandPlaying(shouldResume);
   } catch (error) {
     console.error('Unable to restore on-demand playback:', error);
     // A failed restore must not silently drop the listener back to the radio:
@@ -1414,11 +1428,16 @@ function returnToLive() {
     logOnDemand('  -> no-op, on-demand was not active');
     return;
   }
+  savePlaybackMode('live');
   songRequestId += 1;
   // Stop and release the stream so nothing keeps buffering in the background.
   pendingShouldPlay = false;
   pendingStartSeconds = -1;
   onDemandAudio.pause();
+  setOnDemandPlaying(false);
+  // Keep the last on-demand track, its playhead and queue so the mode pill can
+  // restore it as a paused session when the listener switches back.
+  persistCurrentOnDemandSession();
   onDemandAudio.removeAttribute('src');
   onDemandAudio.load();
   resetScrub();
@@ -1429,11 +1448,7 @@ function returnToLive() {
   relatedTrackCache = [];
   relatedTrackCursor = 0;
   isFetchingRelated = false;
-  onDemandFavouriteQueueLength = 0;
-  // The only path off on-demand, so it is also the only place that clears the
-  // stored session.
-  clearOnDemandSession();
-  setCurrentOnDemandTrack(null, '');
+  // Preserve the saved queue and current track while Live is active.
   window.onDemandPlaying = false;
   window.onDemandPlaybackActive = false;
   updateNowPlayingSubtitle(false);
@@ -1513,6 +1528,29 @@ window.getOnDemandTrackClock = () => {
 };
 
 returnToLiveButton.addEventListener('click', returnToLive);
+liveModeButton?.addEventListener('click', () => {
+  if (window.onDemandPlaybackActive) returnToLive();
+});
+onDemandModeButton?.addEventListener('click', () => {
+  if (window.onDemandPlaybackActive) return;
+  if (readOnDemandSession()) {
+    void restoreOnDemandSession();
+    return;
+  }
+  onDemandArtwork?.click();
+});
+
+const syncModeToggle = () => {
+  const onDemand = Boolean(window.onDemandPlaybackActive);
+  playerModeToggle?.classList.toggle('is-on-demand', onDemand);
+  liveModeButton?.setAttribute('aria-pressed', String(!onDemand));
+  onDemandModeButton?.setAttribute('aria-pressed', String(onDemand));
+};
+syncModeToggle();
+new MutationObserver(syncModeToggle).observe(document.body, {
+  attributes: true,
+  attributeFilter: ['class']
+});
 let lastPositionSaveAt = 0;
 window.setInterval(() => {
   updatePlaybackProgress();
@@ -1529,11 +1567,15 @@ window.addEventListener('pagehide', persistCurrentOnDemandSession);
 if (document.readyState === 'loading') {
   logOnDemand('readyState=loading, waiting for DOMContentLoaded to restore');
   document.addEventListener('DOMContentLoaded', () => {
-    logOnDemand('DOMContentLoaded fired -> restoring');
+    if (readPlaybackMode() === 'live') {
+      logOnDemand('DOMContentLoaded fired -> keeping Live mode');
+      return;
+    }
+    logOnDemand('DOMContentLoaded fired -> restoring On-Demand mode');
     void restoreOnDemandSession();
   });
 } else {
-  void restoreOnDemandSession();
+  if (readPlaybackMode() !== 'live') void restoreOnDemandSession();
 }
 
 

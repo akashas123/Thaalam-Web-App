@@ -21,7 +21,6 @@ let lastLyricsWereSynced = false;
 let hasFetchedLyrics = false;
 let streamIsActive = false;
 let playbackStartedOnMobile = false;
-let mobilePlayerViewChosen = false;
 let mobileTouchStartY = 0;
 let mobileTouchStartedInLyrics = false;
 let lyricsLookupSongId = '';
@@ -308,21 +307,6 @@ function updateActiveLyric() {
     activeIndex >= 0 &&
     activeIndex !== activeLyricIndex
   ) {
-    if (
-      window.matchMedia(
-        '(max-width: 56.1875rem), (pointer: coarse)'
-      ).matches &&
-      mobilePlayerViewChosen &&
-      !onDemand
-    ) {
-      mobilePlayerViewChosen = false;
-
-      lyricsPanel.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start'
-      });
-    }
-
     smoothlyRevealLyric(
       syncedLines[activeIndex].element
     );
@@ -445,15 +429,6 @@ function handleSongLyricsView(
       'aria-expanded',
       'true'
     );
-
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        lyricsPanel.scrollIntoView({
-          behavior: 'smooth',
-          block: 'start'
-        });
-      });
-    });
 
     return;
   }
@@ -795,14 +770,6 @@ function expandLyricsAfterPlaybackStarts() {
     'true'
   );
 
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      lyricsPanel.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start'
-      });
-    });
-  });
 }
 
 function handleMobileWheel(event) {
@@ -813,8 +780,6 @@ function handleMobileWheel(event) {
     !event.target.closest?.('#lyricsContent') &&
     event.deltaY < 0
   ) {
-    mobilePlayerViewChosen = true;
-
     window.scrollTo({
       top: 0,
       left: 0,
@@ -854,8 +819,6 @@ function handleMobileTouchEnd(event) {
     movedDown &&
     window.scrollY > 48
   ) {
-    mobilePlayerViewChosen = true;
-
     window.scrollTo({
       top: 0,
       left: 0,

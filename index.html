@@ -11,7 +11,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=270">
+  <link rel="stylesheet" href="style.css?v=287">
   <link rel="icon" type="image/png" href="icon-512.png?v=4">
   <link rel="apple-touch-icon" href="icon-192.png?v=4">
 
@@ -446,6 +446,10 @@
 
     <div class="album-art-card">
       <img id="albumArtImg" src="album-placeholder.svg?v=3" alt="Album artwork placeholder">
+      <div class="player-mode-toggle" role="group" aria-label="Playback mode">
+        <button class="player-mode-option" id="liveModeButton" type="button" aria-pressed="true">Live</button>
+        <button class="player-mode-option" id="onDemandModeButton" type="button" aria-pressed="false">On-Demand</button>
+      </div>
     </div>
 
     <div class="station-row" id="stationRow">
@@ -453,7 +457,7 @@
         Thaalam 24x7
       </div>
       <button class="return-to-live-button" id="returnToLiveButton" type="button" hidden>
-        Back to Live
+        Live
       </button>
     </div>
 
@@ -796,12 +800,12 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=55"></script>
-  <script src="ondemand-player.js?v=4"></script>
+  <script src="ondemand-player.js?v=7"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=8"></script>
   <script src="player-controls.js?v=37"></script>
-  <script src="lyrics.js?v=38"></script>
+  <script src="lyrics.js?v=39"></script>
   <script src="/google-auth-config.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script>
@@ -2796,7 +2800,7 @@
       if (desktopNavigation.matches || !document.body.classList.contains('mini-player-visible')) return;
       // Keep the dedicated play/pause button as a transport control. All other
       // taps on the compact player open the full Now Playing screen.
-      if (event.target.closest('#miniPlayerToggle, input, [role="progressbar"]')) return;
+      if (event.target.closest('#miniPlayerToggle, .mini-player-like, input, [role="progressbar"]')) return;
       if (document.body.classList.contains('view-now-playing')) return;
       showView('now-playing', { riseFromMiniPlayer: true });
     });

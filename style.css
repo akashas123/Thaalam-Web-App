@@ -2450,9 +2450,84 @@ body.view-rises-from-mini.view-now-playing .player-view {
   position: relative;
 }
 
+.player-mode-toggle {
+  position: absolute;
+  z-index: 7;
+  top: 0.75rem;
+  left: 50%;
+  display: grid;
+  width: 8.6rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  padding: 0.12rem;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  background: rgba(8, 12, 18, 0.38);
+  box-shadow: 0 0.2rem 0.7rem rgba(0, 0, 0, 0.2);
+  transform: translateX(-50%);
+  pointer-events: auto;
+  backdrop-filter: blur(0.7rem);
+  -webkit-backdrop-filter: blur(0.7rem);
+}
+
+.player-mode-toggle::before {
+  position: absolute;
+  z-index: 0;
+  top: 0.12rem;
+  bottom: 0.12rem;
+  left: 0.12rem;
+  width: calc(50% - 0.12rem);
+  border: 1px solid rgba(255, 255, 255, 0.17);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.14);
+  content: "";
+  transition: transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.player-mode-toggle.is-on-demand::before {
+  transform: translateX(100%);
+}
+
+.player-mode-option {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  min-height: 1.55rem;
+  padding: 0.2rem 0.35rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  font: inherit;
+  font-size: 0.63rem;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 180ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.player-mode-option[aria-pressed="true"] {
+  color: #fff;
+}
+
+.player-mode-option:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .player-mode-toggle::before,
+  .player-mode-option {
+    transition: none;
+  }
+}
+
 [class~="album-art-card"] img {
   width: 100%;
   height: 100%;
+  border-radius: inherit;
 
   position: relative;
   z-index: 5;
@@ -2560,6 +2635,14 @@ body.view-rises-from-mini.view-now-playing .player-view {
   align-items: center;
   gap: 0.65rem;
   margin-bottom: 0.25rem;
+}
+
+.station-row[hidden] {
+  display: none !important;
+}
+
+body.on-demand-active .station-row {
+  display: none !important;
 }
 
 [class~="tagline"] {
@@ -4002,11 +4085,67 @@ body.has-lyrics .lyrics-panel {
 }
 
 @media (max-width: 56.1875rem), (pointer: coarse) {
+  body.view-now-playing.on-demand-active .now-playing-track {
+    display: block;
+    min-height: 2.8rem;
+    padding-right: 3.25rem;
+    overflow: visible;
+    white-space: normal;
+    text-align: left;
+  }
+
+  body.view-now-playing.on-demand-active #nowPlaying {
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    gap: 0.16rem;
+    overflow: hidden;
+    color: transparent;
+    font-size: 0;
+    white-space: normal;
+    animation: none !important;
+    transform: none !important;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  body.view-now-playing.on-demand-active #nowPlaying::before,
+  body.view-now-playing.on-demand-active #nowPlaying::after {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    animation: none !important;
+    transform: none !important;
+  }
+
+  body.view-now-playing.on-demand-active #nowPlaying::before {
+    color: #fff;
+    content: attr(data-track-title);
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+
+  body.view-now-playing.on-demand-active #nowPlaying::after {
+    color: rgba(255, 255, 255, 0.72);
+    content: attr(data-track-artist);
+    font-size: 0.82rem;
+    font-weight: 400;
+    line-height: 1.35;
+  }
+
+  body.view-now-playing.on-demand-active .on-demand-like-button {
+    top: 0;
+    right: 0;
+    transform: none;
+  }
 
   body.view-now-playing .mobile-player-minimize {
-    position: fixed;
+    position: absolute;
     z-index: 11;
-    top: max(0.65rem, env(safe-area-inset-top, 0px));
+    top: max(1.2rem, env(safe-area-inset-top, 0px));
     left: 0.75rem;
     display: grid;
     width: 2.35rem;
@@ -4016,6 +4155,40 @@ body.has-lyrics .lyrics-panel {
     border-radius: 0;
     background: transparent;
     color: #fff;
+  }
+
+  body.view-now-playing .player-controls {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    column-gap: 0;
+    justify-content: stretch;
+    width: min(100%, 27rem);
+  }
+
+  body.view-now-playing .player-controls > button {
+    justify-self: center;
+    margin: 0;
+  }
+
+  body.view-now-playing .player-controls #onDemandPrevButton,
+  body.view-now-playing .player-controls #thumbsDownButton {
+    grid-column: 1;
+  }
+
+  body.view-now-playing .player-controls #songInfoButton {
+    grid-column: 2;
+  }
+
+  body.view-now-playing .player-controls #playButton {
+    grid-column: 3;
+  }
+
+  body.view-now-playing .player-controls #sleepTimerButton {
+    grid-column: 4;
+  }
+
+  body.view-now-playing .player-controls #onDemandNextButton,
+  body.view-now-playing .player-controls #thumbsUpButton {
+    grid-column: 5;
   }
 
   .mobile-player-minimize svg {
@@ -4034,7 +4207,7 @@ body.has-lyrics .lyrics-panel {
     flex: 1 1 auto;
     flex-direction: column;
     gap: 1.2rem;
-    padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(7rem + env(safe-area-inset-bottom, 0px));
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior-y: contain;
@@ -4136,6 +4309,7 @@ body.has-lyrics .lyrics-panel {
     color: rgba(255, 255, 255, 0.68);
     font: inherit;
     font-size: 0.68rem;
+    transform: translateY(-0.45rem);
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
   }
@@ -4398,12 +4572,17 @@ body.has-lyrics .lyrics-panel {
     bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
     left: 0;
     display: grid;
-    min-height: 4.25rem;
-    padding: 0.45rem 0.75rem;
-    grid-template-columns: minmax(0, 1fr) 2.75rem;
+    min-height: 3.75rem;
+    padding: 0.45rem 0.75rem 0.2rem;
+    grid-template-columns: minmax(0, 1fr) 2.25rem 2.25rem;
     align-items: center;
     border: 0;
-    background: transparent !important;
+    background: linear-gradient(
+      105deg,
+      color-mix(in srgb, var(--c1) 48%, #05070d) 0%,
+      color-mix(in srgb, var(--c2) 34%, #05070d) 54%,
+      #05070d 100%
+    ) !important;
     color: #fff;
     cursor: pointer;
     backdrop-filter: none;
@@ -4416,12 +4595,22 @@ body.has-lyrics .lyrics-panel {
   body.mini-player-visible.view-library .mini-player-ctrl,
   body.mini-player-visible.view-home .mini-player-actions,
   body.mini-player-visible.view-library .mini-player-actions { display: none; }
+  body.mini-player-visible.view-home .mini-player-actions,
+  body.mini-player-visible.view-library .mini-player-actions { display: contents; }
+  body.mini-player-visible.view-home #miniInfoButton,
+  body.mini-player-visible.view-library #miniInfoButton,
+  body.mini-player-visible.view-home #miniVolumeButton,
+  body.mini-player-visible.view-library #miniVolumeButton,
+  body.mini-player-visible.view-home #miniVolumeSlider,
+  body.mini-player-visible.view-library #miniVolumeSlider,
+  body.mini-player-visible.view-home #miniVolumeValue,
+  body.mini-player-visible.view-library #miniVolumeValue { display: none; }
   body.mini-player-visible.view-home .mini-player-center,
-  body.mini-player-visible.view-library .mini-player-center { grid-column: 1; grid-row: 1; min-width: 0; }
+  body.mini-player-visible.view-library .mini-player-center { grid-column: 1; grid-row: 1; min-width: 0; overflow: visible; }
   body.mini-player-visible.view-home .mini-player-now,
   body.mini-player-visible.view-library .mini-player-now { display: flex; min-width: 0; align-items: center; gap: 0.65rem; }
   body.mini-player-visible.view-home .mini-player-art,
-  body.mini-player-visible.view-library .mini-player-art { display: block; width: 3.25rem; height: 3.25rem; flex: 0 0 3.25rem; border: 0; border-radius: 0.25rem; background: transparent; }
+  body.mini-player-visible.view-library .mini-player-art { display: block; width: 2.75rem; height: 2.75rem; flex: 0 0 2.75rem; border: 0; border-radius: 0.25rem; background: transparent; }
   body.mini-player-visible.view-home .mini-player-art img,
   body.mini-player-visible.view-library .mini-player-art img { width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
   body.mini-player-visible.view-home .mini-player-meta,
@@ -4435,9 +4624,19 @@ body.has-lyrics .lyrics-panel {
   body.mini-player-visible.view-home .mini-player-artist,
   body.mini-player-visible.view-library .mini-player-artist { color: rgba(255,255,255,.62); font-size: 0.68rem; }
   body.mini-player-visible.view-home .mini-player-seek,
-  body.mini-player-visible.view-library .mini-player-seek { display: none; }
+  body.mini-player-visible.view-library .mini-player-seek { position: absolute; top: auto; right: 0.75rem; bottom: 0.12rem; left: 0.75rem; z-index: 4; display: flex; width: auto; max-width: none; gap: 0; }
+  body.mini-player-visible.view-home .mini-player-clock,
+  body.mini-player-visible.view-library .mini-player-clock { display: none; }
+  body.mini-player-visible.view-home .mini-player-progress,
+  body.mini-player-visible.view-library .mini-player-progress { height: 0.24rem; background: rgba(255,255,255,.58); box-shadow: 0 0 0.2rem rgba(255,255,255,.25); }
+  body.mini-player-visible.view-home .mini-player-progress-fill,
+  body.mini-player-visible.view-library .mini-player-progress-fill { background: #fff; box-shadow: 0 0 0.35rem rgba(255,255,255,.45); }
+  body.mini-player-visible.view-home .mini-player-like,
+  body.mini-player-visible.view-library .mini-player-like { display: grid; width: 2.1rem; height: 2.4rem; grid-column: 2; grid-row: 1; place-items: center; border: 0; background: transparent; color: #fff; }
+  body.mini-player-visible.view-home .mini-player-like svg,
+  body.mini-player-visible.view-library .mini-player-like svg { width: 1.2rem; height: 1.2rem; fill: none; stroke: currentColor; stroke-width: 1.8; }
   body.mini-player-visible.view-home .mini-player-toggle,
-  body.mini-player-visible.view-library .mini-player-toggle { position: relative; display: grid; width: 2.5rem; height: 2.5rem; grid-column: 2; grid-row: 1; place-items: center; border: 0; border-radius: 50%; background: transparent; color: #fff; }
+  body.mini-player-visible.view-library .mini-player-toggle { position: relative; display: grid; width: 2.25rem; height: 2.4rem; grid-column: 3; grid-row: 1; place-items: center; border: 0; border-radius: 50%; background: transparent; color: #fff; }
   body.mini-player-visible.view-home .mini-player-toggle svg,
   body.mini-player-visible.view-library .mini-player-toggle svg { width: 1.35rem; height: 1.35rem; fill: currentColor; }
 
@@ -5182,7 +5381,7 @@ img {
   }
 
   body.mini-player-visible.view-home .mobile-genre-shelves {
-    padding-bottom: calc(8.25rem + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(11.25rem + env(safe-area-inset-bottom, 0px));
   }
 
   body:not(.view-now-playing) .lyrics-panel {
