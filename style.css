@@ -4877,9 +4877,9 @@ body.has-lyrics .lyrics-panel {
     width:
       min(26.25rem, calc(100% - 2.75rem));
 
-    height: auto;
+    height: 55vh;
 
-    max-height: 50vh;
+    max-height: 55vh;
 
     margin:
       0 auto 1rem;
@@ -4955,7 +4955,8 @@ body.has-lyrics .lyrics-panel {
 
   body.has-lyrics
   .lyrics-content {
-    max-height: 8.5rem;
+    height: calc(55vh - 4rem);
+    max-height: none;
 
     overflow-y: auto;
 
@@ -4964,16 +4965,18 @@ body.has-lyrics .lyrics-panel {
 
   body.has-lyrics
   .lyrics-content {
-    font-size: 0.92rem;
+    font-size: 1.14rem;
 
-    font-weight: 400;
+    font-weight: 700;
 
     line-height: 1.9;
   }
 
   body.has-lyrics
   .lyrics-line {
-    font-weight: 400;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.58);
+    opacity: 1;
   }
 
   body.has-lyrics
@@ -4983,9 +4986,9 @@ body.has-lyrics .lyrics-panel {
 
   body.has-lyrics
   .lyrics-line.is-active {
-    font-size: 1.04em;
-
-    font-weight: 600;
+    font-size: 1.65em;
+    color: #fff;
+    font-weight: 800;
   }
 
   body.has-lyrics.synced-lyrics
@@ -5007,7 +5010,7 @@ body.has-lyrics .lyrics-panel {
   .lyrics-content {
     display: block;
 
-    max-height: 8.5rem;
+    max-height: none;
   }
 
   /* Adding the "Back to Live" button turned the schedule label into a flex
