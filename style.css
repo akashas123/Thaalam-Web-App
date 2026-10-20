@@ -2285,6 +2285,10 @@ body.view-rises-from-mini.view-now-playing .player-view {
 
 }
 
+.genre-remove-favourite-heart {
+  display: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   body.view-now-playing .player-view,
   body.view-now-playing #nowPlayingHeading,
@@ -5711,6 +5715,25 @@ img {
   body.view-home.library-playlist-open .genre-results.favourites-list-layout .genre-info-button,
   body.view-home.library-playlist-open .genre-results.favourites-list-layout .genre-remove-favourite-button {
     display: none !important;
+  }
+
+  .genre-remove-favourite-heart { display: none; }
+  body.view-home.library-playlist-open .genre-results.favourites-list-layout .genre-remove-favourite-heart {
+    display: grid;
+    width: 2.25rem;
+    height: 2.5rem;
+    place-items: center;
+    border: 0;
+    background: transparent;
+    color: #ff3f69;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body.view-home.library-playlist-open .genre-results.favourites-list-layout .genre-remove-favourite-heart svg {
+    width: 1.2rem;
+    height: 1.2rem;
+    fill: currentColor;
   }
 
   /* Mobile Search must never fall back to the genre grid, including while a

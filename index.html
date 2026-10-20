@@ -11,7 +11,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=350">
+  <link rel="stylesheet" href="style.css?v=352">
   <link rel="icon" type="image/png" href="icon-512.png?v=4">
   <link rel="apple-touch-icon" href="icon-192.png?v=4">
 
@@ -1707,9 +1707,21 @@
           window.removeFavoriteRating?.(song.trackKey);
         });
 
+        const mobileFavouriteHeartButton = document.createElement('button');
+        mobileFavouriteHeartButton.className = 'genre-remove-favourite-heart';
+        mobileFavouriteHeartButton.type = 'button';
+        mobileFavouriteHeartButton.setAttribute('aria-label', `Remove ${song.trackName || 'song'} from liked songs`);
+        mobileFavouriteHeartButton.title = 'Remove from liked songs';
+        mobileFavouriteHeartButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78Z"/></svg>';
+        mobileFavouriteHeartButton.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          window.removeFavoriteRating?.(song.trackKey);
+        });
+
         const listActions = document.createElement('div');
         listActions.className = 'genre-card-list-actions';
-        listActions.append(infoButton, removeFavouriteButton);
+        listActions.append(infoButton, removeFavouriteButton, mobileFavouriteHeartButton);
 
         const artworkFrame = document.createElement('span');
         artworkFrame.className = 'genre-card-art-frame';
