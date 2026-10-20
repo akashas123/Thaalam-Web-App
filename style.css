@@ -4714,6 +4714,20 @@ body.has-lyrics .lyrics-panel {
       translateY(-2rem);
   }
 
+  /* Lock the player card in the same spot when there are no lyrics.
+     Without this the .app falls back to the plain no-lyrics margin above
+     while the lyrics case uses the raised margin, so the album + controls
+     visibly jump down whenever a track has no lyrics. */
+  body.view-now-playing:not(.has-lyrics) .app {
+    margin:
+      clamp(5rem, 13vh, 8rem)
+      auto
+      0;
+
+    transform:
+      translateY(-2rem);
+  }
+
   body.has-lyrics .lyrics-panel {
     display: block;
 
@@ -5419,6 +5433,89 @@ img {
     visibility: hidden !important;
     opacity: 0 !important;
     pointer-events: none !important;
+  }
+}
+
+/* Narrow-screen-only refinements (width query only — no `pointer: coarse`,
+   so touchscreen laptops/desktops never match and desktop stays untouched). */
+@media (max-width: 56.1875rem) {
+  /* De-congest the transport row on small phones: the base mobile grid uses
+     5 equal columns with column-gap: 0, so the side buttons crowd the big
+     play button. Add breathing room between columns + side padding, and
+     shrink buttons slightly on very narrow screens (tap targets stay ≥44px
+     / 2.75rem per WCAG). */
+  body.view-now-playing .player-controls {
+    column-gap: clamp(0.35rem, 2vw, 0.75rem);
+    width: min(100%, 27rem);
+    padding-inline: clamp(0.5rem, 3vw, 1rem);
+    box-sizing: border-box;
+  }
+
+  body.view-now-playing .player-controls .play-btn {
+    width: 3.5rem;
+    height: 3.5rem;
+    width: clamp(2.75rem, 13.5vw + 0.6rem, 3.5rem);
+    height: clamp(2.75rem, 13.5vw + 0.6rem, 3.5rem);
+    border-radius: clamp(0.65rem, 3.5vw + 0.25rem, 0.9rem);
+  }
+
+  body.view-now-playing .player-controls .play-btn svg {
+    width: clamp(1.05rem, 5vw + 0.3rem, 1.4rem);
+    height: clamp(1.05rem, 5vw + 0.3rem, 1.4rem);
+  }
+
+  body.view-now-playing .player-controls .side-control,
+  body.view-now-playing .player-controls .rating-btn,
+  body.view-now-playing .player-controls .transport-btn {
+    width: clamp(2.25rem, 8vw + 0.7rem, 2.6rem);
+    height: clamp(2.25rem, 8vw + 0.7rem, 2.6rem);
+  }
+
+  /* Gap between the minimize arrow and the album art. The arrow is
+     absolutely positioned, so the player needs top padding to clear it.
+     clamp() with dvh keeps it proportional on all phone sizes. */
+  body.view-now-playing .app {
+    padding-top: clamp(1.75rem, 1.25rem + 3dvh, 3rem);
+  }
+
+  /* Gap between the album art and the song metadata below it. Overrides the
+     art card's shorthand margin above (same block order => wins). */
+  body.view-now-playing .album-art-card {
+    margin-bottom: clamp(1.25rem, 1rem + 3dvh, 2.5rem);
+  }
+
+  /* Breathing room between the transport buttons (.app / .player-controls)
+     and the lyrics card. clamp() scales it: roomier on tall phones, compact
+     on short ones. */
+  body.has-lyrics .lyrics-panel {
+    margin:
+      clamp(1.25rem, 1rem + 3dvh, 2.5rem) auto 1rem;
+  }
+
+  /* Keep the Live / On-Demand pill inside the (sometimes very small) album
+     art on phones. min() shrinks it fluidly with the card. The toggle is a
+     size container so the labels scale with it via cqi units instead of
+     staying fixed-size and overflowing the shrunken pill. */
+  body.view-now-playing .player-mode-toggle {
+    width: min(7.25rem, calc(100% - 1.5rem));
+    top: 0.55rem;
+    padding: 0.1rem;
+    container-type: inline-size;
+  }
+
+  body.view-now-playing .player-mode-toggle::before {
+    top: 0.1rem;
+    bottom: 0.1rem;
+    left: 0.1rem;
+    width: calc(50% - 0.1rem);
+  }
+
+  body.view-now-playing .player-mode-option {
+    min-height: 1.35rem;
+    padding: 0.15rem 0.25rem;
+    font-size: 0.58rem;
+    font-size: clamp(0.4rem, 8cqi, 0.58rem);
+    line-height: 1.2;
   }
 }
 
