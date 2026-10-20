@@ -4688,7 +4688,8 @@ body.has-lyrics .lyrics-panel {
     display: none;
   }
 
-  body.has-lyrics {
+  body.has-lyrics,
+  body.view-now-playing:not(.has-lyrics) {
     display: flex;
 
     flex-direction: column;
@@ -4705,20 +4706,6 @@ body.has-lyrics .lyrics-panel {
   }
 
   body.has-lyrics .app {
-    margin:
-      clamp(5rem, 13vh, 8rem)
-      auto
-      0;
-
-    transform:
-      translateY(-2rem);
-  }
-
-  /* Lock the player card in the same spot when there are no lyrics.
-     Without this the .app falls back to the plain no-lyrics margin above
-     while the lyrics case uses the raised margin, so the album + controls
-     visibly jump down whenever a track has no lyrics. */
-  body.view-now-playing:not(.has-lyrics) .app {
     margin:
       clamp(5rem, 13vh, 8rem)
       auto
@@ -4919,6 +4906,24 @@ body.has-lyrics .lyrics-panel {
 
   body.view-now-playing .track-time {
     margin-top: 0.25rem;
+  }
+
+  /* Lock the player position whether lyrics exist or not. body.has-lyrics
+     gives .app a raised margin (5rem/13vh) while the plain no-lyrics rule
+     above uses a lower one (3.5rem/9dvh), so the album + controls jump down
+     on lyric-less tracks. This placed AFTER both rules (same specificity as
+     the no-lyrics one, higher than the lyrics one for view-now-playing)
+     forces one identical position either way. The lyrics panel then appears
+     below in its own reserved gap without pushing the player. */
+  body.view-now-playing.has-lyrics .app,
+  body.view-now-playing:not(.has-lyrics) .app {
+    margin:
+      clamp(5rem, 13vh, 8rem)
+      auto
+      0;
+
+    transform:
+      translateY(-2rem);
   }
 }
 
