@@ -1128,7 +1128,8 @@ body.view-rises-from-mini.view-now-playing .player-view {
 
   .mini-player-artist {
     margin-top: 0.15rem;
-    color: rgba(255, 255, 255, 0.68);
+    color: rgba(255, 255, 255, 0.95);
+    font-weight: 600;
     font-size: 0.78rem;
   }
 
@@ -4391,9 +4392,9 @@ body.has-lyrics .lyrics-panel {
     border: 0;
     background: linear-gradient(
       to bottom,
-      rgba(28, 31, 36, 0) 0%,
-      rgba(28, 31, 36, 0.32) 38%,
-      rgba(28, 31, 36, 0.82) 100%
+      rgba(0, 0, 0, 0.62) 0%,
+      rgba(0, 0, 0, 0.9) 38%,
+      rgba(0, 0, 0, 1) 100%
     ) !important;
     color: rgba(255, 255, 255, 0.68);
     backdrop-filter: none;
@@ -4416,16 +4417,17 @@ body.has-lyrics .lyrics-panel {
     border: 0;
     border-radius: 0.75rem;
     background: transparent;
-    color: rgba(255, 255, 255, 0.68);
+    color: rgba(255, 255, 255, 0.95);
     font: inherit;
     font-size: 0.68rem;
+    font-weight: 600;
     transform: translateY(-0.45rem);
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
   }
 
   .mobile-nav button.is-current {
-    color: #fff;
+    color: rgba(255, 255, 255, 0.95);
     font-weight: 600;
   }
 
@@ -4437,6 +4439,7 @@ body.has-lyrics .lyrics-panel {
   .mobile-nav svg {
     width: 1.2rem;
     height: 1.2rem;
+    color: rgba(255, 255, 255, 0.95);
     fill: none;
     stroke: currentColor;
     stroke-linecap: round;
