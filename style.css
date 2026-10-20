@@ -2607,6 +2607,12 @@ body.view-rises-from-mini.view-now-playing .player-view {
   color: #fff;
 }
 
+.player-mode-option:disabled {
+  color: #777 !important;
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+
 .player-mode-option:focus-visible {
   outline: 2px solid #fff;
   outline-offset: 2px;

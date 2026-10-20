@@ -1035,13 +1035,10 @@ async function updateNowPlaying() {
     if (!radio?.paused && data?.now_playing?.song) {
       window.lastAudibleNowPlayingData = data;
     }
-    window.dispatchEvent(new CustomEvent('thaalam:nowplaying', {
-      detail: data
-    }));
-
     const nowPlaying = data?.now_playing;
     const song = nowPlaying?.song;
     window.currentNowPlayingSong = song || null;
+    window.dispatchEvent(new CustomEvent('thaalam:nowplaying', { detail: data }));
 
     if (nowPlaying?.is_live && nowPlaying?.streamer_name) {
       paintStationLabel(`LIVE • ${nowPlaying.streamer_name}`);

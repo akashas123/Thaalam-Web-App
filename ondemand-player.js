@@ -1634,6 +1634,7 @@ liveModeButton?.addEventListener('click', () => {
 });
 onDemandModeButton?.addEventListener('click', () => {
   if (window.onDemandPlaybackActive) return;
+  if (onDemandModeButton.disabled) return;
   if (readOnDemandSession()) {
     void restoreOnDemandSession();
     return;
@@ -1643,11 +1644,27 @@ onDemandModeButton?.addEventListener('click', () => {
 
 const syncModeToggle = () => {
   const onDemand = Boolean(window.onDemandPlaybackActive);
+  const session = readOnDemandSession();
+  const hasLiveQueue = onDemandQueue.length > 0 &&
+    onDemandQueueIndex >= 0 && onDemandQueueIndex < onDemandQueue.length;
+  const savedQueue = Array.isArray(session?.queue) ? session.queue : [];
+  const hasSavedQueue = savedQueue.length > 0 &&
+    Number.isInteger(session?.queueIndex) &&
+    session.queueIndex >= 0 && session.queueIndex < savedQueue.length;
+  const hasOnDemandData = Boolean(
+    (onDemand && currentOnDemandSong?.trackName && hasLiveQueue) ||
+    (!onDemand && hasSavedQueue)
+  );
   playerModeToggle?.classList.toggle('is-on-demand', onDemand);
   liveModeButton?.setAttribute('aria-pressed', String(!onDemand));
   onDemandModeButton?.setAttribute('aria-pressed', String(onDemand));
+  if (onDemandModeButton) {
+    onDemandModeButton.disabled = !onDemand && !hasOnDemandData;
+    onDemandModeButton.setAttribute('aria-disabled', String(onDemandModeButton.disabled));
+  }
 };
 syncModeToggle();
+window.addEventListener('thaalam:nowplaying', syncModeToggle);
 new MutationObserver(syncModeToggle).observe(document.body, {
   attributes: true,
   attributeFilter: ['class']
