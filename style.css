@@ -187,7 +187,6 @@ body.view-about {
   cursor: pointer;
   background: var(--album-dominant-color, #05070d);
   opacity: 1;
-  transition: background-color 1.2s ease;
   will-change: background-color;
 
   backface-visibility: hidden;
@@ -220,7 +219,7 @@ body.view-about [class~="album-background"] {
 body.view-now-playing [class~="album-background"] {
   opacity: 1;
   visibility: visible;
-  transition: background-color 1.2s ease;
+  transition: opacity 0.3s ease;
 }
 
 body::after {

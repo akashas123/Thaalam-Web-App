@@ -32,16 +32,11 @@ function syncBrowserThemeColor() {
   const themeColor = document.querySelector('meta[name="theme-color"]');
   if (!themeColor) return;
 
-  const nowPlayingOpen = document.body.classList.contains('view-now-playing');
   const albumColor = getComputedStyle(root).getPropertyValue('--album-dominant-color').trim();
-  themeColor.setAttribute('content', nowPlayingOpen ? (albumColor || '#05070d') : '#000000');
+  themeColor.setAttribute('content', albumColor || '#05070d');
 }
 
-const browserThemeObserver = new MutationObserver(syncBrowserThemeColor);
-if (document.body) {
-  browserThemeObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
-  syncBrowserThemeColor();
-}
+syncBrowserThemeColor();
 
 document.addEventListener('contextmenu', (event) => {
   event.preventDefault();
