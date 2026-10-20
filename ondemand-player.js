@@ -16,6 +16,7 @@ const onDemandDuration = document.getElementById('trackDuration');
 const onDemandMiniTitle = document.getElementById('miniPlayerTitle');
 const onDemandMiniArtist = document.getElementById('miniPlayerArtist');
 const nowPlayingSubtitle = document.getElementById('nowPlayingSubtitle');
+const nowPlayingAutoplayContext = document.getElementById('nowPlayingAutoplayContext');
 const onDemandMiniArtwork = document.getElementById('miniPlayerArt');
 const onDemandMiniProgressBar = document.getElementById('miniPlayerProgress');
 const onDemandMiniProgressFill = document.getElementById('miniPlayerProgressFill');
@@ -86,6 +87,16 @@ function updateNowPlayingSubtitle(isOnDemand) {
         ? 'Songs you favourited'
         : 'Discover music through Autoplay')
       : 'Discover music through Live';
+  }
+  if (nowPlayingAutoplayContext) {
+    const firstSong = onDemandQueue[0]?.trackName;
+    const showAutoplayOrigin = isOnDemand &&
+      onDemandQueueSource !== 'favourites' &&
+      Boolean(firstSong);
+    nowPlayingAutoplayContext.hidden = !showAutoplayOrigin;
+    nowPlayingAutoplayContext.textContent = showAutoplayOrigin
+      ? `Autoplay started from “${firstSong}”`
+      : '';
   }
 }
 
@@ -1198,7 +1209,6 @@ function advanceToSimilarSong() {
    stream, so it skips the search round-trip that startOnDemandSong performs. */
 async function playRelatedTrack(track) {
   onDemandQueueSource = 'autoplay';
-  updateNowPlayingSubtitle(true);
   const artworkPromise = prefetchTrackArtwork(track);
   const song = relatedTrackToSong(track);
   const requestId = ++songRequestId;
@@ -1206,6 +1216,7 @@ async function playRelatedTrack(track) {
   selectedDuration = track.durationSeconds || parseDurationString(track.duration) || 0;
   onDemandQueue.push(song);
   onDemandQueueIndex = onDemandQueue.length - 1;
+  updateNowPlayingSubtitle(true);
   updateTransportButtonState();
 
   resetScrub();

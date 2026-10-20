@@ -64,7 +64,7 @@
 
     }
 
-    @media (min-width: 56.25rem), (pointer: fine) {
+    @media (min-width: 56.25rem) {
 
       .desktop-nav-links {
         position: relative;
@@ -107,11 +107,11 @@
       }
     }
   
-    @media (min-width: 56.25rem), (pointer: fine) {
+    @media (min-width: 56.25rem) {
       body.view-now-playing #nowPlayingHeading {
         display: block !important;
         position: absolute !important;
-        top: calc(4rem + clamp(1.25rem, 3.5vw, 2rem) - 1.25rem) !important;
+        top: calc(4rem + clamp(1.25rem, 3.5vw, 2rem) - 1.25rem + clamp(5rem, 9vh, 6rem)) !important;
         left: 50% !important;
         z-index: 8 !important;
         width: min(58rem + clamp(2rem, 4vw, 4rem) + min(27rem, 29vw), 100vw - 2rem);
@@ -175,7 +175,7 @@
     // reset to Home on refresh so playback does not take over the screen.
     (function () {
       try {
-        const desktop = window.matchMedia('(min-width: 56.25rem), (pointer: fine)').matches;
+        const desktop = window.matchMedia('(min-width: 56.25rem)').matches;
         if (!desktop) {
           window.localStorage.setItem('thaalam-active-view-v1', 'home');
           document.body.classList.remove('view-now-playing');
@@ -458,6 +458,7 @@
     <header class="now-playing-heading" id="nowPlayingHeading">
       <h1>Now playing</h1>
       <p id="nowPlayingSubtitle">Discover music through Live</p>
+      <p id="nowPlayingAutoplayContext" class="now-playing-autoplay-context" hidden></p>
     </header>
   <button class="mobile-player-minimize" id="mobilePlayerMinimize" type="button" aria-label="Minimize player" title="Minimize player">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
@@ -830,7 +831,7 @@
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script>
     const desktopNavigation =
-      window.matchMedia('(min-width: 56.25rem), (pointer: fine)');
+      window.matchMedia('(min-width: 56.25rem)');
     const playerView = document.getElementById('playerView');
     const nowPlayingHeading = document.getElementById('nowPlayingHeading');
     const stationName = document.getElementById('stationName');

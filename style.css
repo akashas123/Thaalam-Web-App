@@ -7,7 +7,7 @@
 
 /* On-demand metadata uses pseudo-elements on narrow layouts. Keep the same
    one-pass marquee and short reset pause used by live metadata and the dock. */
-@media (max-width: 56.1875rem) and (pointer: coarse) {
+@media (max-width: 56.1875rem) {
   body.mini-player-visible .mini-player-meta,
   body.mini-player-visible .mini-player-track {
     min-width: 0;
@@ -89,7 +89,7 @@
 
 /* The liked-folder header and back row belong to the mobile Library flow.
    Hide them on wide layouts even if a mobile folder state survives resizing. */
-@media (min-width: 56.1876rem), (pointer: fine) {
+@media (min-width: 56.25rem) {
   .library-playlist-heading,
   .liked-songs-view-title {
     display: none !important;
@@ -478,7 +478,7 @@ body.view-about .site-page.about-page {
   }
 }
 
-@media (min-width: 56.25rem), (pointer: fine) {
+@media (min-width: 56.25rem) {
   /* Now Playing's sideways slide is desktop-only. On mobile the page is the
      launch view — showView() no-ops there and the body class never switches —
      so the global rule only made the player card and lyrics slide in on every
@@ -524,7 +524,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
   }
 }
 
-@media (min-width: 56.25rem), (pointer: fine) {
+@media (min-width: 56.25rem) {
   body.view-rises-from-mini.view-now-playing #nowPlayingHeading {
     animation: nowPlayingHeadingRiseIn 0.8s cubic-bezier(0.4, 0, 0.2, 1);
   }
@@ -534,7 +534,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
   display: none;
 }
 
-@media (min-width: 56.25rem), (pointer: fine) {
+@media (min-width: 56.25rem) {
   .desktop-profile-button {
     position: fixed;
     z-index: 6;
@@ -1512,7 +1512,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
        with the page instead of staying pinned over the player. At scroll 0 it
        sits exactly where the fixed heading did. */
     position: absolute;
-    top: calc(4rem + clamp(1.25rem, 3.5vw, 2rem) - 1.25rem);
+    top: calc(4rem + clamp(1.25rem, 3.5vw, 2rem) - 1.25rem + clamp(5rem, 9vh, 6rem));
     left: 50%;
     z-index: 4;
     display: block;
@@ -1543,6 +1543,13 @@ body.view-rises-from-mini.view-now-playing .player-view {
     color: rgba(255, 255, 255, 0.75);
     font-size: clamp(1rem, 1.5vw, 1.2rem);
     line-height: 1.6;
+  }
+
+  #nowPlayingHeading #nowPlayingAutoplayContext {
+    margin: 3rem 0 0;
+    color: rgba(255, 255, 255, 0.68);
+    font-size: clamp(0.8rem, 1vw, 0.95rem);
+    line-height: 1.4;
   }
 
   .home-page .site-page-content {
@@ -2287,7 +2294,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
   }
 }
 
-@media (min-width: 56.25rem), (pointer: fine) {
+@media (min-width: 56.25rem) {
   .now-playing-heading {
   display: none;
 }
@@ -4026,7 +4033,7 @@ body.on-demand-active .transport-btn:disabled {
   display: none;
 }
 
-@media (min-width: 56.25rem), (pointer: fine) {
+@media (min-width: 56.25rem) {
   body.has-lyrics:not(.synced-lyrics)
   .lyrics-content {
     max-height: 68vh;
@@ -4090,13 +4097,13 @@ body.has-lyrics .lyrics-panel {
     translateX(clamp(0.5rem, 1vw, 1rem));
 }
 
-@media (min-width: 56.25rem), (pointer: fine) {
+@media (min-width: 56.25rem) {
   body.has-lyrics .app {
     transform: translateX(0);
   }
 }
 
-@media (max-width: 56.1875rem) and (pointer: coarse) {
+@media (max-width: 56.1875rem) {
   body.view-now-playing.on-demand-active .live-row .progress-bar::before {
     left: -1.5rem;
     width: calc(100% + 3rem);
@@ -5075,7 +5082,7 @@ body.has-lyrics .lyrics-panel {
 }
 
 /* Desktop listening layout: artwork beside the complete player controls. */
-@media (min-width: 56.25rem), (pointer: fine) {
+@media (min-width: 56.25rem) {
   body.view-now-playing .app {
     top: 0;
     display: grid;
@@ -5387,7 +5394,7 @@ body.has-lyrics .lyrics-panel {
   body.view-now-playing {
     /* Mirrors the heading's `top` (see .now-playing-heading and the inline
        rule in index.html). */
-    --now-playing-heading-top: calc(4rem + clamp(1.25rem, 3.5vw, 2rem) - 1.25rem);
+    --now-playing-heading-top: calc(4rem + clamp(1.25rem, 3.5vw, 2rem) - 1.25rem + clamp(5rem, 9vh, 6rem));
     --now-playing-content-top: calc(var(--now-playing-heading-bottom, 12rem) + 1.5rem);
     /* Height left for the player once the heading is reserved. Used only to cap
        the square album art so it can't grow tall enough to overflow. */
@@ -5542,7 +5549,7 @@ img {
   }
 }
 
-@media (max-width: 56.1875rem) and (pointer: coarse) {
+@media (max-width: 56.1875rem) {
   /* Home's height already excludes the mini-player and bottom nav. The shared
      page padding was shrinking the shelf viewport a second time and covering
      the last album row above the mini-player. */
@@ -5590,7 +5597,7 @@ img {
 
 /* Narrow-screen-only refinements (width query only — no `pointer: coarse`,
    so touchscreen laptops/desktops never match and desktop stays untouched). */
-@media (max-width: 56.1875rem) and (pointer: coarse) {
+@media (max-width: 56.1875rem) {
   @keyframes mobileTabPanelSlideIn {
     from {
       opacity: 0.72;
