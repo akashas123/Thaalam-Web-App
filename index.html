@@ -801,7 +801,7 @@
   </aside>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
-  <script src="script.js?v=55"></script>
+  <script src="script.js?v=56"></script>
   <script src="ondemand-player.js?v=7"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
@@ -2908,6 +2908,7 @@
       // rise class only once `view-now-playing` is gone (both flips land in
       // one recalc, so the horizontal slide can never restart mid-exit).
       setMiniPlayerRise(riseFromMiniPlayer && view === 'now-playing');
+      if (view === 'now-playing' && !desktopNavigation.matches) saveMobileNavigationSnapshot();
       storeActiveView(view === 'library' ? 'home' : view);
       requestAnimationFrame(() => {
         window.updateMiniPlayerMarquees?.();
@@ -2941,9 +2942,9 @@
 
     document.getElementById('miniPlayer')?.addEventListener('click', (event) => {
       if (desktopNavigation.matches || !document.body.classList.contains('mini-player-visible')) return;
-      // The compact player is an entry point to Now Playing across its whole
-      // surface. Keep direct manipulation controls usable without navigating.
-      if (event.target.closest('input, [role="progressbar"]')) return;
+      // The compact player opens Now Playing from its open surface, while its
+      // transport and action buttons keep their own tap behaviour.
+      if (event.target.closest('.mini-player-transport button, .mini-player-actions button, input, [role="progressbar"]')) return;
       if (document.body.classList.contains('view-now-playing')) return;
       showView('now-playing', { riseFromMiniPlayer: true });
     });
@@ -2951,6 +2952,8 @@
     const mobileDestinationButtons = document.querySelectorAll('[data-mobile-destination]');
     let mobileReturnState = null;
     let nextMobileTabSlideDirection = 1;
+    let mobileHistoryReady = false;
+    let restoringMobileHistory = false;
     function setMobileDestination(destination) {
       mobileDestinationButtons.forEach((button) => {
         const selected = button.dataset.mobileDestination === destination;
@@ -2959,6 +2962,78 @@
         else button.removeAttribute('aria-current');
       });
     }
+    function getMobileNavigationSnapshot() {
+      const view = document.body.classList.contains('view-now-playing')
+        ? 'now-playing'
+        : document.body.classList.contains('view-library')
+          ? 'library'
+          : 'home';
+      return {
+        view,
+        destination: Array.from(mobileDestinationButtons)
+          .find((button) => button.classList.contains('is-current'))
+          ?.dataset.mobileDestination || 'home',
+        likedSongsOpen: document.body.classList.contains('library-playlist-open'),
+        searching: document.body.classList.contains('mobile-search-active'),
+        genre: activeGenre,
+        searchTerm: catalogSearchInput?.value || ''
+      };
+    }
+    function saveMobileNavigationSnapshot() {
+      if (!mobileHistoryReady || restoringMobileHistory || !mobileFolderToolbarQuery.matches) return;
+      const state = history.state && typeof history.state === 'object' ? history.state : {};
+      history.pushState({ ...state, thaalamMobileNavigation: getMobileNavigationSnapshot() }, '', location.href);
+    }
+    function restoreMobileNavigationSnapshot(snapshot) {
+      const state = snapshot || {};
+      const view = ['home', 'library', 'now-playing'].includes(state.view) ? state.view : 'home';
+      const destination = ['home', 'search', 'library'].includes(state.destination)
+        ? state.destination
+        : 'home';
+      document.body.classList.toggle('library-playlist-open', Boolean(state.likedSongsOpen));
+      document.body.classList.toggle('mobile-search-active', Boolean(state.searching));
+      document.getElementById('likedSongsHeader').hidden = !state.likedSongsOpen;
+      moveLikedFolderControls(Boolean(state.likedSongsOpen));
+      setMobileDestination(destination);
+      homeSubtitle.textContent = state.searching
+        ? 'Explore songs by search'
+        : state.likedSongsOpen ? 'Songs you favourited on this device' : 'Explore songs by genre';
+      if (view === 'now-playing') {
+        showView('now-playing', { riseFromMiniPlayer: true });
+        return;
+      }
+      showView(view);
+      if (state.searching) {
+        if (state.searchTerm) {
+          catalogSearchInput.value = state.searchTerm;
+          searchCatalog(state.searchTerm);
+        } else if (activeGenre !== 'international') {
+          loadGenre('international');
+        }
+      } else if (state.likedSongsOpen) {
+        document.querySelector('[data-genre="you-like"]')?.click();
+      } else if (state.genre && state.genre !== 'international') {
+        document.querySelector(`[data-genre="${CSS.escape(state.genre)}"]`)?.click();
+      } else if (activeGenre !== 'international') {
+        loadGenre('international');
+      }
+    }
+    window.addEventListener('popstate', (event) => {
+      if (!mobileFolderToolbarQuery.matches || !mobileHistoryReady) return;
+      const snapshot = event.state?.thaalamMobileNavigation;
+      if (snapshot) {
+        restoringMobileHistory = true;
+        try {
+          restoreMobileNavigationSnapshot(snapshot);
+        } finally {
+          restoringMobileHistory = false;
+        }
+        return;
+      }
+      // Keep the first Back gesture inside the app when there is no earlier
+      // Thaalam screen in the current browser history.
+      history.pushState({ thaalamMobileNavigation: getMobileNavigationSnapshot() }, '', location.href);
+    });
     mobileDestinationButtons.forEach((button) => {
       button.addEventListener('click', () => {
         const destination = button.dataset.mobileDestination;
@@ -2994,6 +3069,7 @@
         if (destination !== previousDestination) {
           animateMobilePanel(nextMobileTabSlideDirection);
           nextMobileTabSlideDirection *= -1;
+          saveMobileNavigationSnapshot();
         }
       });
     });
@@ -3007,13 +3083,19 @@
         document.querySelector('[data-genre="you-like"]')?.click();
       });
       animateMobilePanel(1);
+      saveMobileNavigationSnapshot();
     });
     document.getElementById('closeLikedSongs')?.addEventListener('click', () => {
       moveLikedFolderControls(false);
       showView('library');
       animateMobilePanel(-1);
+      saveMobileNavigationSnapshot();
     });
     document.getElementById('mobilePlayerMinimize')?.addEventListener('click', () => {
+      if (mobileFolderToolbarQuery.matches && history.state?.thaalamMobileNavigation?.view === 'now-playing') {
+        history.back();
+        return;
+      }
       const target = mobileReturnState || {
         view: 'home',
         destination: 'home',
@@ -3025,6 +3107,7 @@
       document.getElementById('likedSongsHeader').hidden = !target.likedSongsOpen;
       if (target.view === 'library' && !target.likedSongsOpen) {
         showView('library');
+        saveMobileNavigationSnapshot();
         return;
       }
       document.body.classList.toggle('library-playlist-open', target.likedSongsOpen);
@@ -3038,6 +3121,7 @@
           tab?.click();
         }
       });
+      saveMobileNavigationSnapshot();
     });
 
     viewButtons.forEach((button) => {
@@ -3052,6 +3136,13 @@
     });
 
     restoreActiveView();
+    if (mobileFolderToolbarQuery.matches) {
+      const initialMobileState = getMobileNavigationSnapshot();
+      const initialHistoryState = history.state && typeof history.state === 'object' ? history.state : {};
+      history.replaceState({ ...initialHistoryState, thaalamMobileNavigation: initialMobileState }, '', location.href);
+      history.pushState({ ...initialHistoryState, thaalamMobileNavigation: initialMobileState }, '', location.href);
+      mobileHistoryReady = true;
+    }
     positionNavPill();
     // Web fonts can change the tab label widths, so re-measure once they land.
     document.fonts?.ready.then(positionNavPill);

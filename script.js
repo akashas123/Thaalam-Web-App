@@ -49,6 +49,12 @@ document.addEventListener('selectstart', (event) => {
 });
 
 document.addEventListener('click', (event) => {
+  // Mobile mini-player surfaces are clickable navigation targets, including
+  // their non-button padding. Let the event bubble to #miniPlayer's handler.
+  if (
+    window.matchMedia('(max-width: 56.1875rem)').matches &&
+    event.target.closest('#miniPlayer')
+  ) return;
   if (!event.target.closest('button')) {
     event.preventDefault();
     event.stopImmediatePropagation();
