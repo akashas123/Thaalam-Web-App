@@ -11,7 +11,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=255">
+  <link rel="stylesheet" href="style.css?v=270">
   <link rel="icon" type="image/png" href="icon-512.png?v=4">
   <link rel="apple-touch-icon" href="icon-192.png?v=4">
 
@@ -155,13 +155,17 @@
 <body class="view-now-playing">
 
   <script>
-    // Freshly opening the app (new tab, or reopening after closing it) always
-    // lands on Home. An in-tab refresh still restores the page you were on. The
-    // two are told apart with a per-tab sessionStorage marker: it survives a
-    // refresh but is cleared when the tab/app is closed.
+    // Home is the landing page on every device. A saved Now Playing view is
+    // reset to Home on refresh so playback does not take over the screen.
     (function () {
       try {
-        if (!window.matchMedia('(min-width: 56.25rem) and (pointer: fine)').matches) return;
+        const desktop = window.matchMedia('(min-width: 56.25rem) and (pointer: fine)').matches;
+        if (!desktop) {
+          window.localStorage.setItem('thaalam-active-view-v1', 'home');
+          document.body.classList.remove('view-now-playing');
+          document.body.classList.add('view-home');
+          return;
+        }
         if (window.sessionStorage.getItem('thaalam-session-v1') === null) {
           // Fresh open/reopen: land on Home and reset the persisted view so an
           // in-session refresh stays on Home too.
@@ -172,12 +176,17 @@
           return;
         }
         // Refresh within the same session: keep the page you were on.
-        const storedView = window.localStorage.getItem('thaalam-active-view-v1');
-        if (storedView !== 'home' && storedView !== 'about') return;
+        let storedView = window.localStorage.getItem('thaalam-active-view-v1');
+        if (storedView !== 'home' && storedView !== 'about') {
+          storedView = 'home';
+          window.localStorage.setItem('thaalam-active-view-v1', storedView);
+        }
         document.body.classList.remove('view-now-playing');
         document.body.classList.add(`view-${storedView}`);
       } catch {
-        // Private mode or blocked storage: keep the Now Playing landing page.
+        // Private mode or blocked storage: use Home as the landing page.
+        document.body.classList.remove('view-now-playing');
+        document.body.classList.add('view-home');
       }
     })();
   </script>
@@ -854,11 +863,12 @@
       placeStationForViewport();
       placeStreamQualityForViewport();
       if (!desktopNavigation.matches) {
-        // Home / About are desktop-only views. Shrinking from one leaves the
-        // body stuck on view-home/view-about, which hides the live
-        // album-background and paints the flat Home backdrop behind the
-        // player. Mobile is always Now Playing, so force it back.
-        applyView('now-playing');
+        // Home is the default landing view on mobile, including after a
+        // viewport change from desktop.
+        applyView('home');
+        storeActiveView('home');
+        setMobileDestination('home');
+        void loadMobileHomeGenres();
         requestAnimationFrame(() => {
           window.updateMiniPlayerMarquees?.();
           window.updateMarquee?.();
@@ -2633,11 +2643,9 @@
     function readActiveView() {
       try {
         const storedView = localStorage.getItem(ACTIVE_VIEW_KEY);
-        return storedView === 'home' || storedView === 'about'
-          ? storedView
-          : 'now-playing';
+        return storedView === 'home' || storedView === 'about' ? storedView : 'home';
       } catch {
-        return 'now-playing';
+        return 'home';
       }
     }
 
@@ -2672,12 +2680,16 @@
       if (view === 'now-playing') setMobileDestination('');
     }
 
-    // A refresh keeps the page you were on, and a first visit still lands on Now
-    // Playing because nothing has been stored yet.
+    // Start mobile sessions on Home, and use Home when no desktop view is saved.
     function restoreActiveView() {
-      if (!desktopNavigation.matches) return;
+      if (!desktopNavigation.matches) {
+        applyView('home');
+        storeActiveView('home');
+        setMobileDestination('home');
+        void loadMobileHomeGenres();
+        return;
+      }
       const storedView = readActiveView();
-      if (storedView === 'now-playing') return;
       applyView(storedView);
       requestAnimationFrame(() => {
         window.updateMiniPlayerMarquees?.();
@@ -2779,6 +2791,15 @@
     }
 
     window.showView = showView;
+
+    document.getElementById('miniPlayer')?.addEventListener('click', (event) => {
+      if (desktopNavigation.matches || !document.body.classList.contains('mini-player-visible')) return;
+      // Keep the dedicated play/pause button as a transport control. All other
+      // taps on the compact player open the full Now Playing screen.
+      if (event.target.closest('#miniPlayerToggle, input, [role="progressbar"]')) return;
+      if (document.body.classList.contains('view-now-playing')) return;
+      showView('now-playing', { riseFromMiniPlayer: true });
+    });
 
     const mobileDestinationButtons = document.querySelectorAll('[data-mobile-destination]');
     let mobileReturnState = null;
