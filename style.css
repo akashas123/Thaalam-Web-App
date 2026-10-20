@@ -7,7 +7,7 @@
 
 /* On-demand metadata uses pseudo-elements on narrow layouts. Keep the same
    one-pass marquee and short reset pause used by live metadata and the dock. */
-@media (max-width: 56.1875rem), (pointer: coarse) {
+@media (max-width: 56.1875rem) {
   body.mini-player-visible .mini-player-meta,
   body.mini-player-visible .mini-player-track {
     min-width: 0;
@@ -574,7 +574,7 @@ body.view-about .site-page.about-page {
   }
 }
 
-@media (min-width: 56.25rem) and (pointer: fine) {
+@media (min-width: 56.25rem) {
   /* Now Playing's sideways slide is desktop-only. On mobile the page is the
      launch view — showView() no-ops there and the body class never switches —
      so the global rule only made the player card and lyrics slide in on every
@@ -620,7 +620,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
   }
 }
 
-@media (min-width: 56.25rem) and (pointer: fine) {
+@media (min-width: 56.25rem) {
   body.view-rises-from-mini.view-now-playing #nowPlayingHeading {
     animation: nowPlayingHeadingRiseIn 0.8s cubic-bezier(0.4, 0, 0.2, 1);
   }
@@ -630,7 +630,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
   display: none;
 }
 
-@media (min-width: 56.25rem) and (pointer: fine) {
+@media (min-width: 56.25rem) {
   .desktop-profile-button {
     position: fixed;
     z-index: 6;
@@ -2383,7 +2383,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
   }
 }
 
-@media (min-width: 56.25rem) and (pointer: fine) {
+@media (min-width: 56.25rem) {
   .now-playing-heading {
   display: none;
 }
@@ -4122,7 +4122,7 @@ body.on-demand-active .transport-btn:disabled {
   display: none;
 }
 
-@media (min-width: 56.25rem) and (pointer: fine) {
+@media (min-width: 56.25rem) {
   body.has-lyrics:not(.synced-lyrics)
   .lyrics-content {
     max-height: 68vh;
@@ -4186,13 +4186,13 @@ body.has-lyrics .lyrics-panel {
     translateX(clamp(0.5rem, 1vw, 1rem));
 }
 
-@media (min-width: 56.25rem) and (pointer: fine) {
+@media (min-width: 56.25rem) {
   body.has-lyrics .app {
     transform: translateX(0);
   }
 }
 
-@media (max-width: 56.1875rem), (pointer: coarse) {
+@media (max-width: 56.1875rem) {
   body.view-now-playing.on-demand-active .now-playing-track {
     display: block;
     min-height: 2.8rem;
@@ -5163,7 +5163,7 @@ body.has-lyrics .lyrics-panel {
 }
 
 /* Desktop listening layout: artwork beside the complete player controls. */
-@media (min-width: 56.25rem) and (pointer: fine) {
+@media (min-width: 56.25rem) {
   body.view-now-playing .app {
     top: 0;
     display: grid;
@@ -5591,7 +5591,7 @@ img {
   user-drag: none;
 }
 
-@media (min-width: 56.25rem) and (max-width: 75rem) and (pointer: fine) {
+@media (min-width: 56.25rem) and (max-width: 75rem) {
   body.view-now-playing .now-playing-track > .on-demand-like-button {
     left: 0;
   }
@@ -5630,7 +5630,7 @@ img {
   }
 }
 
-@media (max-width: 56.1875rem), (pointer: coarse) {
+@media (max-width: 56.1875rem) {
   /* Home's height already excludes the mini-player and bottom nav. The shared
      page padding was shrinking the shelf viewport a second time and covering
      the last album row above the mini-player. */

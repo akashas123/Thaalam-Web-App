@@ -11,7 +11,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=367">
+  <link rel="stylesheet" href="style.css?v=368">
   <link rel="icon" type="image/png" href="icon-512.png?v=4">
   <link rel="apple-touch-icon" href="icon-192.png?v=4">
 
@@ -53,7 +53,7 @@
 
     }
 
-    @media (min-width: 56.25rem) and (pointer: fine) {
+    @media (min-width: 56.25rem) {
 
       .desktop-nav-links {
         position: relative;
@@ -96,7 +96,7 @@
       }
     }
   
-    @media (min-width: 56.25rem) and (pointer: fine) {
+    @media (min-width: 56.25rem) {
       body.view-now-playing #nowPlayingHeading {
         display: block !important;
         position: absolute !important;
@@ -164,7 +164,7 @@
     // reset to Home on refresh so playback does not take over the screen.
     (function () {
       try {
-        const desktop = window.matchMedia('(min-width: 56.25rem) and (pointer: fine)').matches;
+        const desktop = window.matchMedia('(min-width: 56.25rem)').matches;
         if (!desktop) {
           window.localStorage.setItem('thaalam-active-view-v1', 'home');
           document.body.classList.remove('view-now-playing');
@@ -806,7 +806,7 @@
   </aside>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
-  <script src="script.js?v=65"></script>
+  <script src="script.js?v=66"></script>
   <script src="ondemand-player.js?v=20"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
@@ -817,7 +817,7 @@
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script>
     const desktopNavigation =
-      window.matchMedia('(min-width: 56.25rem) and (pointer: fine)');
+      window.matchMedia('(min-width: 56.25rem)');
     const playerView = document.getElementById('playerView');
     const nowPlayingHeading = document.getElementById('nowPlayingHeading');
     const stationName = document.getElementById('stationName');
@@ -901,7 +901,7 @@
     // as list rows (info button beside the details) where the
     // body.mobile-search-active rules apply, and as grid tiles elsewhere.
     const mobileSearchListQuery =
-      window.matchMedia('(max-width: 56.1875rem), (pointer: coarse)');
+      window.matchMedia('(max-width: 56.1875rem)');
     const favouriteSortControl = document.getElementById('favouriteSortControl');
     const favouriteSortSelect = document.getElementById('favouriteSort');
     const likedFolderToolbar = document.getElementById('likedFolderToolbar');
