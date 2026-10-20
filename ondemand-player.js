@@ -440,7 +440,10 @@ function updatePlaybackProgress() {
     let duration = selectedDuration;
     if (onDemandAudio.getAttribute('src')) {
       elapsed = onDemandAudio.currentTime || 0;
-      duration = onDemandAudio.duration || duration;
+      const mediaDuration = Number(onDemandAudio.duration);
+      duration = Number.isFinite(mediaDuration) && mediaDuration > 0
+        ? mediaDuration
+        : duration;
     }
 
     // While dragging, report the pointer's target instead of the player's
@@ -498,8 +501,14 @@ function updatePlaybackProgress() {
 function setPlaybackProgress(elapsed, duration) {
   if (!playbackProgressBar || !playbackProgressFill) return;
 
-  const safeDuration = Number(duration) || 0;
-  const safeElapsed = Math.max(0, Number(elapsed) || 0);
+  const durationValue = Number(duration);
+  const elapsedValue = Number(elapsed);
+  const safeDuration = Number.isFinite(durationValue) && durationValue > 0
+    ? durationValue
+    : 0;
+  const safeElapsed = Number.isFinite(elapsedValue)
+    ? Math.max(0, elapsedValue)
+    : 0;
   const percent = safeDuration > 0
     ? Math.min(100, (safeElapsed / safeDuration) * 100)
     : 0;
@@ -1582,9 +1591,12 @@ if (onDemandArtwork) {
 window.getOnDemandTrackClock = () => {
   if (!window.onDemandPlaybackActive) return null;
   const hasSource = Boolean(onDemandAudio.getAttribute('src'));
+  const mediaDuration = Number(onDemandAudio.duration);
   return {
     elapsed: hasSource ? onDemandAudio.currentTime || 0 : 0,
-    duration: hasSource ? onDemandAudio.duration || selectedDuration : selectedDuration
+    duration: hasSource && Number.isFinite(mediaDuration) && mediaDuration > 0
+      ? mediaDuration
+      : selectedDuration
   };
 };
 

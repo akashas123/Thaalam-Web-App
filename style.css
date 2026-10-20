@@ -4753,7 +4753,7 @@ body.has-lyrics .lyrics-panel {
   body.mini-player-visible.view-home .mini-player-clock,
   body.mini-player-visible.view-library .mini-player-clock { display: none; }
   body.mini-player-visible.view-home .mini-player-progress,
-  body.mini-player-visible.view-library .mini-player-progress { display: block; width: 100%; height: 0.13rem; flex: 1 1 100%; background: transparent; box-shadow: none; }
+  body.mini-player-visible.view-library .mini-player-progress { display: block; width: 100%; height: 0.13rem; flex: 1 1 100%; background: rgba(255,255,255,.18); box-shadow: none; }
   body.mini-player-visible.view-home .mini-player-progress.is-seekable,
   body.mini-player-visible.view-library .mini-player-progress.is-seekable { touch-action: none; }
   body.mini-player-visible.view-home .mini-player-progress-fill,
