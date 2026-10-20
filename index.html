@@ -11,7 +11,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=242">
+  <link rel="stylesheet" href="style.css?v=255">
   <link rel="icon" type="image/png" href="icon-512.png?v=4">
   <link rel="apple-touch-icon" href="icon-192.png?v=4">
 
@@ -214,6 +214,10 @@
 
   <main class="site-page home-page" id="homePage" aria-labelledby="homeTitle">
     <div class="site-page-content">
+      <header class="library-playlist-heading" id="likedSongsHeader" hidden>
+        <button type="button" id="closeLikedSongs" aria-label="Back to Library">‹</button>
+        <h1>Liked Songs</h1>
+      </header>
       <header class="home-catalog-header">
         <div>
           <h1 id="homeTitle" tabindex="-1">Browse music</h1>
@@ -230,6 +234,7 @@
           <div class="catalog-suggestions" id="catalogSuggestions" role="listbox" aria-label="Song suggestions" hidden></div>
         </form>
       </header>
+      <div class="mobile-genre-shelves" id="mobileGenreShelves" aria-label="Browse songs by genre"></div>
       <div class="genre-tabs" role="tablist" aria-label="Music genres">
         <button class="genre-tab is-selected" type="button" role="tab" aria-selected="true" aria-controls="genreResults" tabindex="0" data-genre="international">International</button>
         <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="hindi">Hindi</button>
@@ -255,6 +260,24 @@
       </div>
       <div class="genre-results" id="genreResults" role="tabpanel" aria-live="polite">
       </div>
+    </div>
+  </main>
+
+  <main class="site-page library-page" id="libraryPage" aria-labelledby="libraryTitle">
+    <div class="site-page-content">
+      <header class="library-header">
+        <h1 id="libraryTitle" tabindex="-1">Your Library</h1>
+      </header>
+      <button class="liked-playlist-card" id="openLikedPlaylist" type="button">
+        <span class="liked-playlist-art" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78Z"/></svg>
+        </span>
+        <span class="liked-playlist-copy">
+          <strong>Liked Songs</strong>
+          <span>Your favourite tracks</span>
+        </span>
+        <span class="liked-playlist-chevron" aria-hidden="true">›</span>
+      </button>
     </div>
   </main>
 
@@ -370,6 +393,21 @@
     </div>
   </aside>
 
+  <nav class="mobile-nav" id="mobileNav" aria-label="Main navigation">
+    <button type="button" data-mobile-destination="home">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg>
+      <span>Home</span>
+    </button>
+    <button type="button" data-mobile-destination="search">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.6"/><path d="m16 16 4.3 4.3"/></svg>
+      <span>Search</span>
+    </button>
+    <button type="button" data-mobile-destination="library">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14v18l-7-4-7 4z"/></svg>
+      <span>Library</span>
+    </button>
+  </nav>
+
   <dialog class="control-dialog install-app-dialog" id="installAppDialog" aria-labelledby="installAppTitle">
     <form method="dialog">
       <button class="dialog-close" aria-label="Close install prompt">&times;</button>
@@ -392,6 +430,9 @@
       <h1>Now playing</h1>
       <p id="nowPlayingSubtitle">Discover music through Live</p>
     </header>
+  <button class="mobile-player-minimize" id="mobilePlayerMinimize" type="button" aria-label="Minimize player" title="Minimize player">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+  </button>
   <div class="app player-view" id="playerView">
 
     <div class="album-art-card">
@@ -757,8 +798,6 @@
   <script>
     const desktopNavigation =
       window.matchMedia('(min-width: 56.25rem) and (pointer: fine)');
-    const mobilePlayerLayout =
-      window.matchMedia('(max-width: 56.1875rem), (pointer: coarse)');
     const playerView = document.getElementById('playerView');
     const nowPlayingHeading = document.getElementById('nowPlayingHeading');
     const stationName = document.getElementById('stationName');
@@ -811,17 +850,7 @@
     }
     window.addEventListener('load', publishHeadingBottom);
     document.fonts?.ready.then(publishHeadingBottom);
-    const returnToLiveOnMobile = () => {
-      if (mobilePlayerLayout.matches && window.onDemandPlaybackActive) {
-        window.returnToLive?.();
-      }
-    };
-    mobilePlayerLayout.addEventListener('change', returnToLiveOnMobile);
-    window.addEventListener('resize', returnToLiveOnMobile, { passive: true });
     desktopNavigation.addEventListener('change', () => {
-      // On-demand controls are desktop-only. Returning to the mobile layout
-      // resumes live radio automatically.
-      returnToLiveOnMobile();
       placeStationForViewport();
       placeStreamQualityForViewport();
       if (!desktopNavigation.matches) {
@@ -1772,6 +1801,94 @@
         });
     }
 
+    const mobileHomeGenreRows = [
+      { title: 'International', key: 'international' },
+      { title: 'Hindi', key: 'hindi' },
+      { title: 'Malayalam', key: 'malayalam' },
+      { title: 'Tamil', key: 'tamil' }
+    ];
+    let mobileHomeGenresLoaded = false;
+    let mobileHomeGenresRequest = 0;
+
+    function renderMobileHomeGenreRow(category, songs) {
+      const section = document.createElement('section');
+      section.className = 'mobile-genre-row';
+      section.setAttribute('aria-label', `${category.title} songs`);
+      const heading = document.createElement('h2');
+      heading.textContent = category.title;
+      const trackRow = document.createElement('div');
+      trackRow.className = 'mobile-genre-track-row';
+      songs.slice(0, 10).forEach((song) => {
+        const card = document.createElement('article');
+        card.className = 'mobile-genre-track';
+        const play = document.createElement('button');
+        play.type = 'button';
+        play.className = 'mobile-genre-track-art';
+        play.setAttribute('aria-label', `Play ${song.trackName || 'song'} on demand`);
+        const artwork = document.createElement('img');
+        const placeholderArtwork = 'album-placeholder.svg?v=3';
+        const artworkUrl = song.artworkUrl100
+          ? song.artworkUrl100.replace(/^http:/, 'https:').replace(/\d+x\d+bb\./, '600x600bb.')
+          : placeholderArtwork;
+        artwork.addEventListener('load', () => play.classList.add('has-artwork'));
+        artwork.addEventListener('error', () => {
+          if (artwork.dataset.fallbackApplied) {
+            play.classList.add('has-artwork');
+            return;
+          }
+          artwork.dataset.fallbackApplied = 'true';
+          artwork.src = placeholderArtwork;
+        });
+        artwork.src = artworkUrl;
+        artwork.alt = '';
+        artwork.loading = 'lazy';
+        play.appendChild(artwork);
+        play.addEventListener('click', () => {
+          window.startOnDemandSong?.(song, { openNowPlaying: false });
+        });
+        const title = document.createElement('p');
+        title.className = 'mobile-genre-track-title';
+        title.textContent = song.trackName || 'Unknown song';
+        const artist = document.createElement('p');
+        artist.className = 'mobile-genre-track-artist';
+        artist.textContent = song.artistName || 'Unknown artist';
+        card.append(play, title, artist);
+        trackRow.appendChild(card);
+      });
+      if (!songs.length) {
+        const empty = document.createElement('p');
+        empty.className = 'mobile-genre-row-message';
+        empty.textContent = 'Could not load songs. Try again later.';
+        trackRow.appendChild(empty);
+      }
+      section.append(heading, trackRow);
+      return section;
+    }
+
+    async function loadMobileHomeGenres() {
+      const shelves = document.getElementById('mobileGenreShelves');
+      if (!shelves || mobileHomeGenresLoaded) return;
+      mobileHomeGenresLoaded = true;
+      const requestId = ++mobileHomeGenresRequest;
+      shelves.replaceChildren();
+      const placeholders = mobileHomeGenreRows.map((category) => {
+        const section = document.createElement('section');
+        section.className = 'mobile-genre-row';
+        const loadingArt = '<article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art" aria-hidden="true"></div></article>'.repeat(4);
+        section.innerHTML = `<h2>${category.title}</h2><div class="mobile-genre-track-row">${loadingArt}</div>`;
+        shelves.appendChild(section);
+        return section;
+      });
+      const results = await Promise.all(mobileHomeGenreRows.map((category) =>
+        searchGenreChart(genreFeedIds[category.key], requestId, 10).catch(() => [])
+      ));
+      if (requestId !== mobileHomeGenresRequest) return;
+      updateHomeTint(results[0] || []);
+      results.forEach((songs, index) => {
+        placeholders[index].replaceWith(renderMobileHomeGenreRow(mobileHomeGenreRows[index], songs));
+      });
+    }
+
     // Prefer official title matches over "(From "Album")" album references:
     // a query matching the song's core title (parentheticals stripped) ranks
     // first; songs matching only via the "(From ...)" suffix or album name are
@@ -2526,7 +2643,7 @@
 
     // Tab order used for slide direction: advancing rightwards along the nav
     // brings the new page in from the right, going back from the left.
-    const VIEW_ORDER = ['home', 'now-playing', 'about'];
+    const VIEW_ORDER = ['home', 'now-playing', 'about', 'library'];
 
     function applyView(view) {
       const previousView = VIEW_ORDER.find((name) =>
@@ -2545,10 +2662,14 @@
       document.body.classList.remove(
         'view-home',
         'view-about',
-        'view-now-playing'
+        'view-now-playing',
+        'view-library'
       );
       document.body.classList.add(`view-${view}`);
+      if (view === 'library') document.body.classList.add('view-home');
+      if (view !== 'home') document.body.classList.remove('library-playlist-open');
       markCurrentView(view);
+      if (view === 'now-playing') setMobileDestination('');
     }
 
     // A refresh keeps the page you were on, and a first visit still lands on Now
@@ -2601,10 +2722,22 @@
     }
 
     function showView(view, { riseFromMiniPlayer = false } = {}) {
-      if (!desktopNavigation.matches) return Promise.resolve();
       // Re-selecting the current page should not repeat page-specific work.
       if (document.body.classList.contains(`view-${view}`)) {
         return Promise.resolve();
+      }
+
+      if (view === 'now-playing' && !desktopNavigation.matches) {
+        const activeDestination = Array.from(mobileDestinationButtons)
+          .find((button) => button.classList.contains('is-current'))
+          ?.dataset.mobileDestination;
+        mobileReturnState = {
+          view: document.body.classList.contains('view-library') ? 'library' : 'home',
+          destination: activeDestination || (document.body.classList.contains('view-library') ? 'library' : 'home'),
+          likedSongsOpen: document.body.classList.contains('library-playlist-open'),
+          genre: activeGenre,
+          searchTerm: catalogSearchInput?.value || ''
+        };
       }
 
       // Switching is only a class flip: the nav pill slides to the new tab
@@ -2616,7 +2749,7 @@
       // rise class only once `view-now-playing` is gone (both flips land in
       // one recalc, so the horizontal slide can never restart mid-exit).
       setMiniPlayerRise(riseFromMiniPlayer && view === 'now-playing');
-      storeActiveView(view);
+      storeActiveView(view === 'library' ? 'home' : view);
       requestAnimationFrame(() => {
         window.updateMiniPlayerMarquees?.();
         // updateMarquee() measures the tagline width, which is 0 while the
@@ -2627,13 +2760,18 @@
       });
 
       if (view === 'about') loadAboutArtistPortraits();
-      if (view === 'home') scheduleHomeRefresh();
+      if (view === 'home') {
+        scheduleHomeRefresh();
+        if (!desktopNavigation.matches) void loadMobileHomeGenres();
+      }
       document.getElementById(
         view === 'home'
           ? 'homePage'
-          : view === 'about'
-            ? 'aboutPage'
-            : 'playerView'
+          : view === 'library'
+            ? 'libraryPage'
+            : view === 'about'
+              ? 'aboutPage'
+              : 'playerView'
       )
         ?.querySelector('h1')
         ?.focus({ preventScroll: true });
@@ -2641,6 +2779,76 @@
     }
 
     window.showView = showView;
+
+    const mobileDestinationButtons = document.querySelectorAll('[data-mobile-destination]');
+    let mobileReturnState = null;
+    function setMobileDestination(destination) {
+      mobileDestinationButtons.forEach((button) => {
+        const selected = button.dataset.mobileDestination === destination;
+        button.classList.toggle('is-current', selected);
+        if (selected) button.setAttribute('aria-current', 'page');
+        else button.removeAttribute('aria-current');
+      });
+    }
+    mobileDestinationButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        const destination = button.dataset.mobileDestination;
+        setMobileDestination(destination);
+        if (destination === 'home') {
+          const cameFromLikedSongs = document.body.classList.contains('library-playlist-open');
+          document.body.classList.remove('library-playlist-open');
+          document.body.classList.remove('mobile-search-active');
+          if (catalogSearchInput?.value) clearCatalogSearch();
+          showView('home');
+          if (cameFromLikedSongs) {
+            document.querySelector('[data-genre="international"]')?.click();
+          }
+        } else if (destination === 'search') {
+          document.body.classList.remove('library-playlist-open');
+          document.body.classList.add('mobile-search-active');
+          showView('home').then(() => requestAnimationFrame(() => catalogSearchInput?.focus()));
+        } else if (destination === 'library') {
+          document.body.classList.remove('mobile-search-active');
+          showView('library');
+        }
+      });
+    });
+
+    document.getElementById('openLikedPlaylist')?.addEventListener('click', () => {
+      setMobileDestination('library');
+      document.body.classList.add('library-playlist-open');
+      showView('home').then(() => {
+        document.querySelector('[data-genre="you-like"]')?.click();
+      });
+    });
+    document.getElementById('closeLikedSongs')?.addEventListener('click', () => {
+      showView('library');
+    });
+    document.getElementById('mobilePlayerMinimize')?.addEventListener('click', () => {
+      const target = mobileReturnState || {
+        view: 'home',
+        destination: 'home',
+        likedSongsOpen: false,
+        genre: 'international',
+        searchTerm: ''
+      };
+      setMobileDestination(target.destination);
+      if (target.view === 'library' && !target.likedSongsOpen) {
+        showView('library');
+        return;
+      }
+      document.body.classList.toggle('library-playlist-open', target.likedSongsOpen);
+      document.body.classList.toggle('mobile-search-active', target.destination === 'search');
+      showView('home').then(() => {
+        if (target.searchTerm) {
+          catalogSearchInput.value = target.searchTerm;
+          searchCatalog(target.searchTerm);
+        } else {
+          const tab = document.querySelector(`[data-genre="${target.genre || 'international'}"]`);
+          tab?.click();
+        }
+      });
+    });
 
     viewButtons.forEach((button) => {
       button.addEventListener('click', () => {
@@ -2836,6 +3044,7 @@
       };
 
       const showProfile = (user) => {
+        profileButton.classList.add('is-signed-in');
         const firstName = String(user.name || '').trim().split(/\s+/)[0];
         const greeting = getTimeGreeting();
         welcomeGreeting.textContent = firstName ? `${greeting}, ${firstName}` : greeting;
@@ -2864,6 +3073,7 @@
       };
 
       const showGuest = () => {
+        profileButton.classList.remove('is-signed-in');
         welcomeGreeting.hidden = true;
         profileButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"></path></svg>';
         profileButton.setAttribute('aria-label', 'Account and sync information');
