@@ -11,7 +11,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=304">
+  <link rel="stylesheet" href="style.css?v=308">
   <link rel="icon" type="image/png" href="icon-512.png?v=4">
   <link rel="apple-touch-icon" href="icon-192.png?v=4">
 
@@ -890,6 +890,11 @@
     const genreTabList = document.querySelector('.genre-tabs');
     const genreResults =
       document.getElementById('genreResults');
+    // Same query as the mobile media block in style.css: search results render
+    // as list rows (info button beside the details) where the
+    // body.mobile-search-active rules apply, and as grid tiles elsewhere.
+    const mobileSearchListQuery =
+      window.matchMedia('(max-width: 56.1875rem), (pointer: coarse)');
     const favouriteSortControl = document.getElementById('favouriteSortControl');
     const favouriteSortSelect = document.getElementById('favouriteSort');
     const favouriteLayoutButtons = document.querySelectorAll('[data-favourite-layout]');
@@ -985,6 +990,10 @@
     // background refreshes, or searches.
     let genreTabShuffle = false;
     let genreShuffleTimer = 0;
+    // Songs from the most recent renderGenreResults() call, kept so crossing
+    // the mobile/desktop media query can rebuild search cards in the other
+    // structure without a refetch.
+    let lastGenreResultsSongs = [];
     // Keep in sync with genreTileShuffle in style.css: 20 capped 36ms steps
     // + 720ms duration + buffer.
     const GENRE_SHUFFLE_MS = 1600;
@@ -1496,12 +1505,24 @@
 
     function renderGenreResults(songs) {
       if (activeGenre.startsWith('search:')) genreResults.scrollTop = 0;
+      lastGenreResultsSongs = songs;
       const wasBusy = genreResults.getAttribute('aria-busy') === 'true';
       genreResults.setAttribute('aria-busy', 'false');
       genreResults.classList.toggle(
         'favourites-list-layout',
         activeGenre === 'you-like' && favouriteLayout === 'list'
       );
+      // Search cards keep grid-tile DOM on desktop (info button overlaid on
+      // the thumbnail) and become list rows where the mobile
+      // body.mobile-search-active CSS applies — the media query mirrors the
+      // style.css block exactly, so structure and styling never disagree.
+      const searchListLayout =
+        activeGenre.startsWith('search:') && mobileSearchListQuery.matches;
+      // Marker for the mobile search list CSS (style.css inside the mobile
+      // media block). Cleared whenever results are a genre/favourites render,
+      // so a cleared search that falls back to the International grid drops
+      // the row styling along with the row DOM.
+      genreResults.classList.toggle('search-list-layout', searchListLayout);
       // One-shot: armed by an intentional tab switch, spent by this rebuild —
       // the identical-grid skip and the empty state disarm it as well.
       const shuffle = genreTabShuffle;
@@ -1525,7 +1546,7 @@
       // Identity of everything the cards actually show, in display order.
       // The liked-songs rescue passes patch titles/artwork on the same
       // objects, so those fields must bust the key and force a rebuild.
-      const renderKey = `${activeGenre}:${activeGenre === 'you-like' ? favouriteLayout : 'grid'}:` + orderedSongs
+      const renderKey = `${activeGenre}:${activeGenre === 'you-like' ? favouriteLayout : searchListLayout ? 'search-list' : 'grid'}:` + orderedSongs
         .map((song) => [
           song.trackId ?? `${song.trackName}|${song.artistName}`,
           song.trackViewUrl || '',
@@ -1636,7 +1657,12 @@
           : '';
         artworkFrame.appendChild(artwork);
         const isFavouriteList = activeGenre === 'you-like' && favouriteLayout === 'list';
-        if (isFavouriteList) {
+        if (searchListLayout) {
+          // Mobile search rows are chrome-free: no play/info buttons — a
+          // stretched <button> appended below covers the whole row (artwork +
+          // metadata) as one tap target.
+          media.append(artworkFrame);
+        } else if (isFavouriteList) {
           media.append(artworkFrame, playButton);
         } else if (activeGenre === 'you-like') {
           media.append(artworkFrame, playButton, infoButton, removeFavouriteButton);
@@ -1654,7 +1680,9 @@
         artist.textContent = song.artistName || 'Unknown artist';
         details.append(title, artist);
 
-        if (song.trackViewUrl) {
+        // Search rows skip the iTunes Store link: the metadata tap plays the
+        // song instead of navigating away.
+        if (song.trackViewUrl && !searchListLayout) {
           const link = document.createElement('a');
           link.className = 'genre-card-link';
           link.href = song.trackViewUrl.replace(/^http:/, 'https:');
@@ -1667,6 +1695,35 @@
           card.append(media, details);
         }
         if (isFavouriteList) card.append(listActions);
+        if (searchListLayout) {
+          // Tap anywhere on the row plays. The handler cannot live on the card
+          // itself: script.js installs a capture-phase document click guard
+          // that stopImmediatePropagation()s every click not originating
+          // inside a <button>, so card-level listeners never fire. A stretched
+          // <button> covering the whole row is the sanctioned pattern (it also
+          // makes the row keyboard-focusable). The active track toggles
+          // pause/play (same pairing as the favourites play button); anything
+          // else starts in the mini player without leaving search.
+          const tapButton = document.createElement('button');
+          tapButton.type = 'button';
+          tapButton.className = 'genre-card-tap';
+          tapButton.setAttribute('aria-label', `Play ${song.trackName || 'song'}`);
+          tapButton.addEventListener('click', () => {
+            const current = window.onDemandPlaybackActive
+              ? window.getCurrentOnDemandSong?.()
+              : null;
+            if (isSameFavouriteTrack({
+              trackKey: song.trackKey,
+              trackName: song.trackName,
+              artistName: song.artistName
+            }, current)) {
+              window.toggleOnDemandPlayback?.();
+              return;
+            }
+            window.startOnDemandSong?.(song, { openNowPlaying: false });
+          });
+          card.append(tapButton);
+        }
 
         genreResults.appendChild(card);
         if (artworkUrl) {
@@ -1696,6 +1753,17 @@
       }
       updateHomeTint(orderedSongs);
     }
+
+    // Crossing the mobile/desktop boundary swaps the search card structure
+    // (info button inside the thumbnail vs. beside the details), so rebuild
+    // search results from the last rendered song list. The render key carries
+    // the layout mode, which forces a real rebuild instead of the
+    // identical-grid skip.
+    mobileSearchListQuery.addEventListener?.('change', () => {
+      if (activeGenre.startsWith('search:')) {
+        renderGenreResults(lastGenreResultsSongs);
+      }
+    });
 
     function showGenreLoading() {
       genreResults.replaceChildren();

@@ -4469,6 +4469,14 @@ body.has-lyrics .lyrics-panel {
     font-size: 0.9rem;
   }
 
+  /* Hide the browser's native search clear control; the form's clear button
+     is the single visible × on mobile. */
+  .catalog-search input[type="search"]::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    appearance: none;
+    display: none;
+  }
+
   .catalog-search > button {
     display: grid;
     flex: 0 0 2rem;
@@ -4567,6 +4575,95 @@ body.has-lyrics .lyrics-panel {
   .genre-results.favourites-list-layout .genre-play-button { top: 50%; right: auto; bottom: auto; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,.48); }
   .genre-results.favourites-list-layout .genre-info-button { position: static; width: 2rem; height: 2rem; background: transparent; }
   .genre-card-list-actions { display: flex; align-items: center; gap: 0.25rem; }
+
+  /* Mobile search: hide the genre pills (International / Hindi / ...) — the
+     search page is type-to-search only. Scoped to mobile-search-active so
+     Home browse + desktop keep their tabs. */
+  body.mobile-search-active .genre-tabs {
+    display: none;
+  }
+
+  /* Mobile search results render as chrome-free rows (small art + title/
+     artist), not grid tiles — no play/info buttons; tapping anywhere on the
+     row plays. The marker class is set only by renderGenreResults() for search
+     on this exact media query, so the DOM structure and styling always
+     agree. Desktop keeps the grid: these rules live inside the mobile-only
+     media block. */
+  .genre-results.search-list-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: minmax(3.75rem, auto);
+    gap: 0.2rem;
+  }
+
+  .genre-results.search-list-layout .genre-card {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0.7rem;
+    min-height: 3.75rem;
+    padding: 0.35rem 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  /* Whole-row tap target: script.js's capture-phase click guard swallows any
+     click that doesn't originate inside a <button>, so the row's play action
+     lives on this transparent stretched button instead of the card. It sits
+     above the art/text, making the entire row one tappable, focusable play
+     control (artwork + metadata both covered). */
+  .genre-results.search-list-layout .genre-card-tap {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    padding: 0;
+    border: 0;
+    border-radius: inherit;
+    background: transparent;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .genre-results.search-list-layout .genre-card-tap:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.85);
+    outline-offset: -2px;
+  }
+
+  .genre-results.search-list-layout .genre-card-media {
+    width: clamp(2.65rem, 11vw, 3rem);
+    height: clamp(2.65rem, 11vw, 3rem);
+    aspect-ratio: 1;
+    flex: 0 0 auto;
+    border-radius: 0.45rem;
+    cursor: pointer;
+  }
+
+  .genre-results.search-list-layout .genre-card-details {
+    display: grid;
+    min-width: 0;
+    gap: 0.15rem;
+    padding: 0.35rem 0;
+  }
+
+  .genre-results.search-list-layout .genre-card-title,
+  .genre-results.search-list-layout .genre-card-artist {
+    min-height: 1em;
+    margin: 0;
+    line-height: 1.25;
+  }
+
+  /* Now-playing highlight for search rows — same palette the favourites
+     list uses for its active track (class is toggled by
+     refreshFavouriteListPlaybackState(), which already covers search cards). */
+  .genre-results.search-list-layout .genre-card.is-active-track .genre-card-title {
+    color: #ff3f69;
+    text-shadow: none;
+  }
+
+  .genre-results.search-list-layout .genre-card.is-active-track .genre-card-artist {
+    color: rgba(255, 116, 145, 0.96);
+    text-shadow: none;
+  }
 
   body.mini-player-visible.view-home .mini-player,
   body.mini-player-visible.view-library .mini-player {
@@ -5444,6 +5541,17 @@ img {
 /* Narrow-screen-only refinements (width query only — no `pointer: coarse`,
    so touchscreen laptops/desktops never match and desktop stays untouched). */
 @media (max-width: 56.1875rem) {
+  /* End the search viewport at the mini-player, so results scroll above it
+     without needing a visible blank spacer at the bottom of the list. */
+  body.mini-player-visible.view-home.mobile-search-active .home-page .site-page-content {
+    height: calc(100dvh - 7.75rem - env(safe-area-inset-bottom, 0px));
+  }
+
+  body.mini-player-visible.view-home.mobile-search-active .genre-results.search-list-layout {
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }
+
   /* De-congest the transport row on small phones: the base mobile grid uses
      5 equal columns with column-gap: 0, so the side buttons crowd the big
      play button. Add breathing room between columns + side padding, and
