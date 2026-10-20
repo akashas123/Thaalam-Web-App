@@ -28,6 +28,21 @@ const miniVolumeSlider = document.getElementById('miniVolumeSlider');
 const miniVolumeValue = document.getElementById('miniVolumeValue');
 const root = document.documentElement;
 
+function syncBrowserThemeColor() {
+  const themeColor = document.querySelector('meta[name="theme-color"]');
+  if (!themeColor) return;
+
+  const nowPlayingOpen = document.body.classList.contains('view-now-playing');
+  const albumColor = getComputedStyle(root).getPropertyValue('--album-dominant-color').trim();
+  themeColor.setAttribute('content', nowPlayingOpen ? (albumColor || '#05070d') : '#000000');
+}
+
+const browserThemeObserver = new MutationObserver(syncBrowserThemeColor);
+if (document.body) {
+  browserThemeObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  syncBrowserThemeColor();
+}
+
 document.addEventListener('contextmenu', (event) => {
   event.preventDefault();
 });
@@ -91,16 +106,6 @@ function setAlbumColors(colors) {
   ['--c1', '--c2', '--c3', '--c4', '--c5'].forEach((property, index) => {
     root.style.setProperty(property, colors[index]);
   });
-
-  const palette = colors.slice(0, 5).map((color) => {
-    const hex = color.replace('#', '');
-    return [0, 2, 4].map((offset) => parseInt(hex.slice(offset, offset + 2), 16));
-  });
-  const average = [0, 1, 2].map((channel) =>
-    palette.reduce((total, color) => total + color[channel], 0) / palette.length
-  );
-  const themeColor = document.querySelector('meta[name="theme-color"]');
-  themeColor?.setAttribute('content', rgbToHex(...average.map((channel) => channel * 0.34)));
 }
 
 function rgbToHex(red, green, blue) {
@@ -211,6 +216,7 @@ function extractAlbumColors(image) {
 
     const color = rgbToHex(...channels.map((channel) => channel * scale));
     root.style.setProperty('--album-dominant-color', color);
+    syncBrowserThemeColor();
     setAlbumColors(selected.map((sample) => {
       const sampleMultiplier = sample.brightness < 80 ? 1.25 : 0.72;
       return rgbToHex(
