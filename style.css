@@ -2689,7 +2689,7 @@ body.on-demand-active .station-row {
   top: 50%;
   right: 0.15rem;
   width: 3rem;
-  height: 3rem;
+  height: 4rem;
   padding: 0;
   align-items: center;
   justify-content: center;
@@ -2896,6 +2896,9 @@ body.on-demand-active .live-row .progress-bar {
   /* Let the drag thumb overflow the bar instead of clipping it. */
   overflow: visible;
   touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 body.on-demand-active .live-row .progress-bar::before {
@@ -2904,8 +2907,11 @@ body.on-demand-active .live-row .progress-bar::before {
   top: 50%;
   left: 0;
   width: 100%;
-  height: 1.5rem;
+  height: 5rem;
   transform: translateY(-50%);
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .progress-thumb {
