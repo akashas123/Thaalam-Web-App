@@ -128,8 +128,9 @@ function extractAlbumColors(image) {
     context.drawImage(image, 0, 0, size, size);
     const pixels = context.getImageData(0, 0, size, size).data;
     const candidates = [];
+    const buckets = new Map();
 
-    for (let index = 0; index < pixels.length; index += 16) {
+    for (let index = 0; index < pixels.length; index += 4) {
       const red = pixels[index];
       const green = pixels[index + 1];
       const blue = pixels[index + 2];
@@ -139,13 +140,23 @@ function extractAlbumColors(image) {
       const brightness = (red + green + blue) / 3;
       if (brightness < 12 || brightness > 248) continue;
 
-      candidates.push({
-        r: red,
-        g: green,
-        b: blue,
-        saturation: Math.max(red, green, blue) - Math.min(red, green, blue),
-        brightness
-      });
+      const key = `${red >> 4},${green >> 4},${blue >> 4}`;
+      const bucket = buckets.get(key) || { count: 0, r: 0, g: 0, b: 0 };
+      bucket.count += 1;
+      bucket.r += red;
+      bucket.g += green;
+      bucket.b += blue;
+      buckets.set(key, bucket);
+
+      if (index % 16 === 0) {
+        candidates.push({
+          r: red,
+          g: green,
+          b: blue,
+          saturation: Math.max(red, green, blue) - Math.min(red, green, blue),
+          brightness
+        });
+      }
     }
 
     candidates.sort((first, second) =>
@@ -164,12 +175,48 @@ function extractAlbumColors(image) {
       selected.push({ r: 8, g: 12, b: 20, brightness: 12 });
     }
 
-    setAlbumColors(selected.map((color) => {
-      const multiplier = color.brightness < 80 ? 1.25 : 0.72;
+    const dominant = [...buckets.values()].sort((first, second) => second.count - first.count)[0];
+    if (!dominant) {
+      root.style.setProperty('--album-dominant-color', '#080c14');
+      setAlbumColors(Array(5).fill('#080c14'));
+      return;
+    }
+
+    const averageBrightness = (dominant.r + dominant.g + dominant.b) / (dominant.count * 3);
+    const multiplier = Math.min(1.65, Math.max(0.78, 138 / averageBrightness));
+    const channels = [
+      (dominant.r / dominant.count) * multiplier,
+      (dominant.g / dominant.count) * multiplier,
+      (dominant.b / dominant.count) * multiplier
+    ];
+    const relativeLuminance = (scale) => {
+      const linear = channels.map((channel) => {
+        const value = (channel * scale) / 255;
+        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+      });
+      return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
+    };
+
+    let scale = 1;
+    if (relativeLuminance(scale) > 0.1) {
+      let low = 0;
+      let high = 1;
+      for (let iteration = 0; iteration < 14; iteration += 1) {
+        const middle = (low + high) / 2;
+        if (relativeLuminance(middle) <= 0.1) low = middle;
+        else high = middle;
+      }
+      scale = low;
+    }
+
+    const color = rgbToHex(...channels.map((channel) => channel * scale));
+    root.style.setProperty('--album-dominant-color', color);
+    setAlbumColors(selected.map((sample) => {
+      const sampleMultiplier = sample.brightness < 80 ? 1.25 : 0.72;
       return rgbToHex(
-        color.r * multiplier,
-        color.g * multiplier,
-        color.b * multiplier
+        sample.r * sampleMultiplier,
+        sample.g * sampleMultiplier,
+        sample.b * sampleMultiplier
       );
     }));
   } catch (error) {

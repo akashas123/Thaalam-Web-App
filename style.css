@@ -102,6 +102,7 @@
   --c3: #171717;
   --c4: #0f172a;
   --c5: #05070d;
+  --album-dominant-color: #05070d;
   --home-tint: transparent;
 }
 
@@ -184,74 +185,14 @@ body.view-about {
   inset: -35%;
   z-index: 0;
   cursor: pointer;
-
-  background:
-    radial-gradient(
-      ellipse at 20% 20%,
-      var(--c1) 0%,
-      transparent 42%
-    ),
-    radial-gradient(
-      ellipse at 80% 20%,
-      var(--c2) 0%,
-      transparent 45%
-    ),
-    radial-gradient(
-      ellipse at 80% 80%,
-      var(--c3) 0%,
-      transparent 45%
-    ),
-    radial-gradient(
-      ellipse at 20% 80%,
-      var(--c4) 0%,
-      transparent 45%
-    ),
-    radial-gradient(
-      ellipse at 50% 50%,
-      var(--c5) 0%,
-      #05070d 65%
-    );
-
-  background-size:
-    55% 55%,
-    60% 60%,
-    55% 55%,
-    60% 60%,
-    100% 100%;
-
-  background-position:
-    0% 0%,
-    100% 0%,
-    100% 100%,
-    0% 100%,
-    50% 50%;
-
-  background-repeat: no-repeat;
-
-  filter: blur(3.4375rem) saturate(1.25);
-
-  transform:
-    translate3d(0, 0, 0)
-    scale(1.15);
-
-  opacity: 0.95;
-
-  transition:
-    background 2.5s ease,
-    filter 1.5s ease;
-
-  will-change: transform;
+  background: var(--album-dominant-color, #05070d);
+  opacity: 1;
+  transition: background-color 1.2s ease;
+  will-change: background-color;
 
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-
-  transform-style: preserve-3d;
-
-  animation:
-    albumColorFlow
-    30s
-    ease-in-out
-    infinite;
+  transform: translateZ(0);
 }
 
 [class~="album-background"]::after {
@@ -259,55 +200,12 @@ body.view-about {
   position: absolute;
   inset: 0;
 
-  background:
-    radial-gradient(
-      circle at center,
-      transparent 10%,
-      rgba(0, 0, 0, 0.18) 55%,
-      rgba(0, 0, 0, 0.45) 100%
-    );
+  background: transparent;
 }
 
-@keyframes albumColorFlow {
-  0% {
-    transform:
-      translate3d(-1.5%, -1%, 0)
-      scale(1.15);
-  }
-
-  25% {
-    transform:
-      translate3d(1%, -1.5%, 0)
-      scale(1.17);
-  }
-
-  50% {
-    transform:
-      translate3d(1.5%, 1%, 0)
-      scale(1.16);
-  }
-
-  75% {
-    transform:
-      translate3d(-1%, 1.5%, 0)
-      scale(1.17);
-  }
-
-  100% {
-    transform:
-      translate3d(-1.5%, -1%, 0)
-      scale(1.15);
-  }
-}
-
-body[class~="paused-gradient"]
-[class~="album-background"] {
-  animation-play-state: paused;
-}
-
-/* About keeps a flat backdrop and the live album gradient is Now Playing
-   only. Hiding (rather than removing) the layer keeps the Now Playing
-   colors fresh when the listener navigates back. Home paints its own
+/* About keeps a flat backdrop and the album color is Now Playing only.
+   Hiding (rather than removing) the layer keeps the Now Playing color fresh
+   when the listener navigates back. Home paints its own
    artwork tint via body.view-home above. */
 body.view-home [class~="album-background"],
 body.view-about [class~="album-background"] {
@@ -320,9 +218,9 @@ body.view-about [class~="album-background"] {
 }
 
 body.view-now-playing [class~="album-background"] {
-  opacity: 0.95;
+  opacity: 1;
   visibility: visible;
-  transition: opacity 0.3s ease;
+  transition: background-color 1.2s ease;
 }
 
 body::after {
@@ -338,6 +236,10 @@ body::after {
       rgba(0, 0, 0, 0.08),
       rgba(0, 0, 0, 0.32)
     );
+}
+
+body.view-now-playing::after {
+  background: transparent;
 }
 
 [class~="app"] {
@@ -4050,7 +3952,7 @@ body.on-demand-active .transport-btn:disabled {
 
   text-transform: uppercase;
 
-  opacity: 0.65;
+  opacity: 0.84;
 }
 
 .lyrics-notice {
@@ -4058,7 +3960,7 @@ body.on-demand-active .transport-btn:disabled {
     -0.25rem 0 1rem;
 
   color:
-    rgba(255, 255, 255, 0.48);
+    rgba(255, 255, 255, 0.76);
 
   font-size: 0.82rem;
 
@@ -4142,11 +4044,11 @@ body.has-lyrics.synced-lyrics
 
 .lyrics-line {
   color:
-    rgba(255, 255, 255, 0.68);
+    rgba(255, 255, 255, 0.88);
 
   font-weight: 500;
 
-  opacity: 0.58;
+  opacity: 0.96;
 
   transition:
     color 0.25s ease,
@@ -4806,12 +4708,7 @@ body.has-lyrics .lyrics-panel {
     grid-template-columns: minmax(0, 1fr) 2.25rem 2.25rem;
     align-items: center;
     border: 0;
-    background: linear-gradient(
-      105deg,
-      color-mix(in srgb, var(--c1) 48%, #05070d) 0%,
-      color-mix(in srgb, var(--c2) 34%, #05070d) 54%,
-      #05070d 100%
-    ) !important;
+    background: var(--album-dominant-color, #05070d) !important;
     color: #fff;
     cursor: pointer;
     backdrop-filter: none;
