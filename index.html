@@ -11,7 +11,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=308">
+  <link rel="stylesheet" href="style.css?v=318">
   <link rel="icon" type="image/png" href="icon-512.png?v=4">
   <link rel="apple-touch-icon" href="icon-192.png?v=4">
 
@@ -224,9 +224,12 @@
   <main class="site-page home-page" id="homePage" aria-labelledby="homeTitle">
     <div class="site-page-content">
       <header class="library-playlist-heading" id="likedSongsHeader" hidden>
-        <button type="button" id="closeLikedSongs" aria-label="Back to Library">‹</button>
-        <h1>Liked Songs</h1>
+        <h1>Your Library</h1>
       </header>
+      <div class="liked-songs-view-title">
+        <button type="button" id="closeLikedSongs" aria-label="Back to Library">‹</button>
+        <h2>Liked Songs</h2>
+      </div>
       <header class="home-catalog-header">
         <div>
           <h1 id="homeTitle" tabindex="-1">Browse music</h1>
@@ -283,9 +286,7 @@
         </span>
         <span class="liked-playlist-copy">
           <strong>Liked Songs</strong>
-          <span>Your favourite tracks</span>
         </span>
-        <span class="liked-playlist-chevron" aria-hidden="true">›</span>
       </button>
     </div>
   </main>
@@ -1534,7 +1535,7 @@
         delete genreResults.dataset.renderKey;
         const empty = document.createElement('p');
         empty.className = 'genre-empty';
-        empty.textContent = 'No matching songs were found.';
+        empty.textContent = activeGenre === 'you-like' ? 'No liked songs' : 'No matching songs were found.';
         genreResults.appendChild(empty);
         updateHomeTint([]);
         return;
@@ -2392,7 +2393,7 @@
         }
         if (!songs.length) {
           const empty = genreResults.querySelector('.genre-empty');
-          if (empty) empty.textContent = 'No songs liked';
+          if (empty) empty.textContent = 'No liked songs';
         }
         return;
       }
@@ -2468,7 +2469,7 @@
         }
         if (!songs.length) {
           const empty = genreResults.querySelector('.genre-empty');
-          if (empty) empty.textContent = 'Your favourite songs will appear here';
+          if (empty) empty.textContent = 'No liked songs';
         }
       } catch {
         if (requestId !== genreRequestId || activeGenre !== 'you-like') return;
@@ -2477,7 +2478,7 @@
         genreResults.setAttribute('aria-busy', 'false');
         const error = document.createElement('p');
         error.className = 'genre-empty';
-        error.textContent = 'No songs liked';
+        error.textContent = 'No liked songs';
         genreResults.appendChild(error);
       }
     }
@@ -2521,7 +2522,7 @@
       renderGenreResults(currentFavouriteSongs);
       if (!currentFavouriteSongs.length) {
         const empty = genreResults.querySelector('.genre-empty');
-        if (empty) empty.textContent = 'Your favourite songs will appear here';
+        if (empty) empty.textContent = 'No liked songs';
       }
     });
 
@@ -2726,9 +2727,9 @@
     const VIEW_ORDER = ['home', 'now-playing', 'about', 'library'];
 
     function applyView(view) {
-      const previousView = VIEW_ORDER.find((name) =>
-        document.body.classList.contains(`view-${name}`)
-      );
+      const previousView = document.body.classList.contains('view-library')
+        ? 'library'
+        : VIEW_ORDER.find((name) => document.body.classList.contains(`view-${name}`));
       const previousIndex = previousView
         ? VIEW_ORDER.indexOf(previousView)
         : -1;
@@ -2748,6 +2749,7 @@
       document.body.classList.add(`view-${view}`);
       if (view === 'library') document.body.classList.add('view-home');
       if (view !== 'home') document.body.classList.remove('library-playlist-open');
+      if (view !== 'home') document.getElementById('likedSongsHeader').hidden = true;
       markCurrentView(view);
       if (view === 'now-playing') setMobileDestination('');
     }
@@ -2807,7 +2809,9 @@
 
     function showView(view, { riseFromMiniPlayer = false } = {}) {
       // Re-selecting the current page should not repeat page-specific work.
-      if (document.body.classList.contains(`view-${view}`)) {
+      const isAlreadyOnView = document.body.classList.contains(`view-${view}`) &&
+        !(view === 'home' && document.body.classList.contains('view-library'));
+      if (isAlreadyOnView) {
         return Promise.resolve();
       }
 
@@ -2890,6 +2894,7 @@
         if (destination === 'home') {
           const cameFromLikedSongs = document.body.classList.contains('library-playlist-open');
           document.body.classList.remove('library-playlist-open');
+          document.getElementById('likedSongsHeader').hidden = true;
           document.body.classList.remove('mobile-search-active');
           if (catalogSearchInput?.value) clearCatalogSearch();
           showView('home');
@@ -2898,6 +2903,7 @@
           }
         } else if (destination === 'search') {
           document.body.classList.remove('library-playlist-open');
+          document.getElementById('likedSongsHeader').hidden = true;
           document.body.classList.add('mobile-search-active');
           showView('home').then(() => requestAnimationFrame(() => catalogSearchInput?.focus()));
         } else if (destination === 'library') {
@@ -2909,6 +2915,7 @@
 
     document.getElementById('openLikedPlaylist')?.addEventListener('click', () => {
       setMobileDestination('library');
+      document.getElementById('likedSongsHeader').hidden = false;
       document.body.classList.add('library-playlist-open');
       showView('home').then(() => {
         document.querySelector('[data-genre="you-like"]')?.click();
@@ -2926,6 +2933,7 @@
         searchTerm: ''
       };
       setMobileDestination(target.destination);
+      document.getElementById('likedSongsHeader').hidden = !target.likedSongsOpen;
       if (target.view === 'library' && !target.likedSongsOpen) {
         showView('library');
         return;
