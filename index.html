@@ -22,7 +22,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=430">
+  <link rel="stylesheet" href="style.css?v=431">
   <link rel="icon" type="image/png" href="icon-512.png?v=4">
   <link rel="apple-touch-icon" href="icon-192.png?v=4">
 
@@ -1721,6 +1721,14 @@
     function updateMobileHomeTint() {
       if (desktopNavigation.matches) return;
       const shelves = document.getElementById('mobileGenreShelves');
+      const firstRecentTrack = shelves?.querySelector('.mobile-recents-row .mobile-genre-track');
+      const likedFolderIsFirst = Boolean(firstRecentTrack?.classList.contains('is-liked-folder-recent'));
+      document.body.classList.toggle('has-liked-home-glow', likedFolderIsFirst);
+      if (likedFolderIsFirst) {
+        setHomeArt('');
+        setHomeTint('#e94d89');
+        return;
+      }
       const firstArtwork = [...(shelves?.querySelectorAll('.mobile-genre-track-art img') || [])]
         .map((image) => image.currentSrc || image.src)
         .find((url) => url && !url.includes('album-placeholder.svg'));
