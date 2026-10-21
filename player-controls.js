@@ -560,6 +560,8 @@ async function requestCloudRatings(method, body) {
   });
   if (response.status === 401) {
     sessionStorage.removeItem('thaalam.googleAccessToken');
+    localStorage.removeItem('thaalam.googleAccessToken');
+    localStorage.removeItem('thaalam.googleAccessTokenExpiresAt');
     window.dispatchEvent(new Event('thaalam:auth-expired'));
     throw new Error('Google sign-in expired.');
   }

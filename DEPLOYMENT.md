@@ -10,10 +10,11 @@ client secret in this static app. Enable the Google Identity Services client for
 the OAuth consent screen and publish or add test users as appropriate. Until a
 client ID is configured, the sign-in button stays disabled and explains why.
 
-Google sign-in provides a short-lived access token for the session. The Cloudflare
-Worker verifies it against Google's user-info endpoint before using the Google
-account's stable subject ID to read or write ratings. The browser keeps the
-access token in session storage, not persistent local storage.
+Google sign-in provides a short-lived access token. The Cloudflare Worker verifies
+it against Google's user-info endpoint before using the Google account's stable
+subject ID to read or write ratings. The browser stores the token and its expiry
+in local storage so an app restart does not require signing in again. Once the
+token expires, sign in again to resume syncing.
 
 ## Cross-browser song ratings
 

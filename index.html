@@ -825,7 +825,7 @@
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=9"></script>
-  <script src="player-controls.js?v=40"></script>
+  <script src="player-controls.js?v=41"></script>
   <script src="lyrics.js?v=41"></script>
   <script src="/google-auth-config.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -2672,6 +2672,13 @@
           headers,
           cache: 'no-store'
         });
+        if (response.status === 401) {
+          sessionStorage.removeItem('thaalam.googleAccessToken');
+          localStorage.removeItem('thaalam.googleAccessToken');
+          localStorage.removeItem('thaalam.googleAccessTokenExpiresAt');
+          window.dispatchEvent(new Event('thaalam:auth-expired'));
+          throw new Error('Google sign-in expired.');
+        }
         if (!response.ok) throw new Error(`Could not load liked songs (${response.status}).`);
         const data = await response.json();
         const ratings = Array.isArray(data.ratings) ? data.ratings : [];
@@ -2719,10 +2726,18 @@
         if (requestId !== genreRequestId || activeGenre !== 'you-like') return;
         if (quiet) return;
         genreResults.setAttribute('aria-busy', 'false');
-        currentFavouriteSongs = [];
-        renderGenreResults([]);
+        currentFavouriteSongs = getLocalLikedSongs(userId);
+        renderGenreResults(currentFavouriteSongs);
         const empty = genreResults.querySelector('.genre-empty');
-        if (empty) empty.textContent = 'Could not sync liked songs. Check your connection.';
+        if (empty) {
+          if (!window.getThaalamGoogleAccessToken?.()) {
+            empty.textContent = 'Sign in again to load your synced likes.';
+          } else {
+            empty.textContent = currentFavouriteSongs.length
+              ? 'Could not sync. Showing saved songs on this device.'
+              : 'Could not load your liked songs. Please try again.';
+          }
+        }
       }
     }
 
@@ -3497,7 +3512,23 @@
       const clientId = window.THAALAM_GOOGLE_CLIENT_ID || '';
       const profileStorageKey = 'thaalam.googleProfile';
       const accessTokenStorageKey = 'thaalam.googleAccessToken';
-      window.getThaalamGoogleAccessToken = () => sessionStorage.getItem(accessTokenStorageKey) || '';
+      const accessTokenExpiryKey = 'thaalam.googleAccessTokenExpiresAt';
+      window.getThaalamGoogleAccessToken = () => {
+        const storedToken = localStorage.getItem(accessTokenStorageKey) || '';
+        const expiresAt = Number(localStorage.getItem(accessTokenExpiryKey) || 0);
+        if (storedToken && expiresAt > Date.now() + 30000) return storedToken;
+        if (storedToken) {
+          localStorage.removeItem(accessTokenStorageKey);
+          localStorage.removeItem(accessTokenExpiryKey);
+        }
+        const legacySessionToken = sessionStorage.getItem(accessTokenStorageKey) || '';
+        if (legacySessionToken) {
+          localStorage.setItem(accessTokenStorageKey, legacySessionToken);
+          localStorage.setItem(accessTokenExpiryKey, String(Date.now() + 3600 * 1000));
+          sessionStorage.removeItem(accessTokenStorageKey);
+        }
+        return legacySessionToken;
+      };
       let savedProfile = null;
       try {
         savedProfile = JSON.parse(localStorage.getItem(profileStorageKey) || 'null');
@@ -3563,7 +3594,6 @@
       else showGuest();
 
       let tokenClient = null;
-      let silentTokenRequest = false;
       const keepSavedAccountVisible = () => {
         if (!savedProfile) return;
         showProfile(savedProfile);
@@ -3571,15 +3601,10 @@
 
       const finishGoogleSignIn = (response) => {
         if (response.error || !response.access_token) {
-          if (silentTokenRequest) keepSavedAccountVisible();
-          else {
-            status.hidden = false;
-            status.textContent = 'Google sign-in failed. Please try again.';
-          }
-          silentTokenRequest = false;
+          status.hidden = false;
+          status.textContent = 'Google sign-in failed. Please try again.';
           return;
         }
-        silentTokenRequest = false;
         fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
           headers: { Authorization: `Bearer ${response.access_token}` }
         })
@@ -3590,7 +3615,12 @@
           .then((user) => {
             const profile = { sub: user.sub || '', name: user.name || '', email: user.email || '', picture: user.picture || '' };
             localStorage.setItem(profileStorageKey, JSON.stringify(profile));
-            sessionStorage.setItem(accessTokenStorageKey, response.access_token);
+            localStorage.setItem(accessTokenStorageKey, response.access_token);
+            localStorage.setItem(
+              accessTokenExpiryKey,
+              String(Date.now() + Math.max(60, Number(response.expires_in) || 3600) * 1000)
+            );
+            sessionStorage.removeItem(accessTokenStorageKey);
             savedProfile = profile;
             showProfile(profile);
             window.dispatchEvent(new Event('thaalam:authenticated'));
@@ -3617,45 +3647,23 @@
         return tokenClient;
       };
 
-      const requestGoogleAccess = (silent = false) => {
+      const requestGoogleAccess = () => {
         const client = getTokenClient();
         if (!client) {
-          if (silent) keepSavedAccountVisible();
-          else {
-            status.hidden = false;
-            status.textContent = 'Google sign-in is not available. Check the OAuth client configuration and reload.';
-          }
+          status.hidden = false;
+          status.textContent = 'Google sign-in is not available. Check the OAuth client configuration and reload.';
           return;
         }
-        silentTokenRequest = silent;
-        client.requestAccessToken(silent
-          ? { prompt: 'none', login_hint: savedProfile?.email || '' }
-          : {});
+        client.requestAccessToken();
       };
 
-      let silentRestoreAttempts = 0;
-      const restoreSavedGoogleSession = () => {
-        if (!savedProfile || window.getThaalamGoogleAccessToken() || silentTokenRequest) return;
-        if (getTokenClient()) {
-          requestGoogleAccess(true);
-          return;
-        }
-        // GIS is loaded asynchronously. Retry briefly so a fresh app session can
-        // restore the existing Google grant before Favourites renders its state.
-        if (silentRestoreAttempts++ < 40) window.setTimeout(restoreSavedGoogleSession, 250);
-      };
-
-      if (savedProfile && typeof savedProfile === 'object') {
-        keepSavedAccountVisible();
-        restoreSavedGoogleSession();
-        window.addEventListener('load', restoreSavedGoogleSession, { once: true });
-      }
+      if (savedProfile && typeof savedProfile === 'object') keepSavedAccountVisible();
 
       window.addEventListener('thaalam:auth-expired', () => {
         sessionStorage.removeItem(accessTokenStorageKey);
+        localStorage.removeItem(accessTokenStorageKey);
+        localStorage.removeItem(accessTokenExpiryKey);
         keepSavedAccountVisible();
-        silentRestoreAttempts = 0;
-        restoreSavedGoogleSession();
       });
 
       if (clientId) {
@@ -3675,6 +3683,8 @@
         } catch { /* Keep the active device ratings if storage is unavailable. */ }
         localStorage.removeItem(profileStorageKey);
         sessionStorage.removeItem(accessTokenStorageKey);
+        localStorage.removeItem(accessTokenStorageKey);
+        localStorage.removeItem(accessTokenExpiryKey);
         window.location.reload();
       });
       profileDialog.addEventListener('click', (event) => {
@@ -3682,7 +3692,7 @@
       });
 
       signInButton.addEventListener('click', () => {
-        requestGoogleAccess(false);
+        requestGoogleAccess();
       });
       window.dispatchEvent(new Event('thaalam:profile-ready'));
     })();
