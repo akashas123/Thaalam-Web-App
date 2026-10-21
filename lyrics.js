@@ -278,7 +278,7 @@ function updateTrackTime() {
       : '0:00';
 }
 
-function updateActiveLyric() {
+function updateActiveLyric(forceReveal = false) {
   const onDemand = Boolean(window.onDemandPlaybackActive);
 
   if (
@@ -314,7 +314,7 @@ function updateActiveLyric() {
 
   if (
     activeIndex >= 0 &&
-    activeIndex !== activeLyricIndex
+    (forceReveal || activeIndex !== activeLyricIndex)
   ) {
     smoothlyRevealLyric(
       syncedLines[activeIndex].element
@@ -324,6 +324,8 @@ function updateActiveLyric() {
   activeLyricIndex =
     activeIndex;
 }
+
+window.refreshActiveLyricPosition = () => updateActiveLyric(true);
 
 function smoothlyRevealLyric(lineElement) {
   cancelAnimationFrame(

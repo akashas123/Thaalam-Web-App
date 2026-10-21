@@ -4973,7 +4973,7 @@ body.has-lyrics .lyrics-panel {
 
     overflow-y: auto;
 
-    padding-right: 0;
+    padding-right: clamp(2.75rem, 15vw, 4rem);
   }
 
   body.has-lyrics
@@ -4987,21 +4987,32 @@ body.has-lyrics .lyrics-panel {
 
   body.has-lyrics
   .lyrics-line {
+    font-size: 0.92em;
     font-weight: 700;
-    color: rgba(255, 255, 255, 0.58);
-    opacity: 1;
+    color: rgba(255, 255, 255, 0.62);
+    opacity: 0.82;
+    transition:
+      color 0.55s ease,
+      opacity 0.55s ease,
+      transform 0.55s ease;
   }
 
   body.has-lyrics
   .lyrics-line {
-    margin-bottom: 0.12rem;
+    margin-bottom: 0.68rem;
   }
 
   body.has-lyrics
   .lyrics-line.is-active {
-    font-size: 1.65em;
+    /* Enlarge visually without changing layout dimensions, so wrapped lines
+       don't reflow as the highlight moves. */
+    font-size: inherit;
     color: #fff;
-    font-weight: 800;
+    font-weight: 700;
+    opacity: 1;
+    transform: translateX(0.1rem) scale(1.04, 1.18);
+    transform-origin: left center;
+    text-shadow: none;
   }
 
   body.has-lyrics.synced-lyrics
@@ -5965,3 +5976,11 @@ img {
   }
 }
 
+/* Suppress the browser's blue press flash on the mobile player and Lyrics
+   Beta surface while keeping the effect and all desktop styling untouched. */
+@media (max-width: 56.1875rem) {
+  body.view-now-playing,
+  body.view-now-playing * {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
