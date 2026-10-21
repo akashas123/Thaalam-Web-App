@@ -33,18 +33,18 @@ export async function handleRatings(request, env) {
     // Probe progressively so deployments can migrate without taking ratings offline.
     try {
       const result = await env.DB.prepare(
-        'SELECT track_key, rating, title, artist, track_id, artwork, album FROM user_ratings WHERE user_id = ? ORDER BY updated_at DESC'
+        'SELECT track_key, rating, title, artist, track_id, artwork, album, updated_at FROM user_ratings WHERE user_id = ? ORDER BY updated_at DESC'
       ).bind(user.sub).all();
       rows = result.results || [];
     } catch {
       try {
         const result = await env.DB.prepare(
-          'SELECT track_key, rating, title, artist, video_id, artwork FROM user_ratings WHERE user_id = ? ORDER BY updated_at DESC'
+          'SELECT track_key, rating, title, artist, video_id, artwork, updated_at FROM user_ratings WHERE user_id = ? ORDER BY updated_at DESC'
         ).bind(user.sub).all();
         rows = result.results || [];
       } catch {
         const result = await env.DB.prepare(
-          'SELECT track_key, rating, title, artist, video_id FROM user_ratings WHERE user_id = ? ORDER BY updated_at DESC'
+          'SELECT track_key, rating, title, artist, video_id, updated_at FROM user_ratings WHERE user_id = ? ORDER BY updated_at DESC'
         ).bind(user.sub).all();
         rows = result.results || [];
       }
@@ -123,7 +123,7 @@ export async function handleRatings(request, env) {
           track_id = CASE WHEN excluded.track_id = '' THEN user_ratings.track_id ELSE excluded.track_id END,
           artwork = CASE WHEN excluded.artwork = '' THEN user_ratings.artwork ELSE excluded.artwork END,
           album = CASE WHEN excluded.album = '' THEN user_ratings.album ELSE excluded.album END,
-          updated_at = unixepoch()
+          updated_at = CASE WHEN user_ratings.rating = excluded.rating THEN user_ratings.updated_at ELSE unixepoch() END
       `).bind(user.sub, entry.trackKey.trim(), entry.rating, title, artist, trackId, artworkInput, album);
     });
     try {
@@ -141,7 +141,7 @@ export async function handleRatings(request, env) {
           rating = excluded.rating, title = excluded.title, artist = excluded.artist,
           video_id = excluded.video_id,
           artwork = CASE WHEN excluded.artwork = '' THEN user_ratings.artwork ELSE excluded.artwork END,
-          updated_at = unixepoch()
+          updated_at = CASE WHEN user_ratings.rating = excluded.rating THEN user_ratings.updated_at ELSE unixepoch() END
       `).bind(user.sub, entry.trackKey.trim(), entry.rating, legacyTitle, legacyArtist, legacyVideoId, artworkInput);
       });
       try {
@@ -156,7 +156,8 @@ export async function handleRatings(request, env) {
             VALUES (?, ?, ?, ?, ?, ?, unixepoch())
             ON CONFLICT(user_id, track_key) DO UPDATE SET
               rating = excluded.rating, title = excluded.title, artist = excluded.artist,
-              video_id = excluded.video_id, updated_at = unixepoch()
+              video_id = excluded.video_id,
+              updated_at = CASE WHEN user_ratings.rating = excluded.rating THEN user_ratings.updated_at ELSE unixepoch() END
           `).bind(user.sub, entry.trackKey.trim(), entry.rating, legacyTitle, legacyArtist, legacyVideoId);
         });
         if (legacy.length) await env.DB.batch(legacy);
@@ -188,7 +189,7 @@ export async function handleRatings(request, env) {
         track_id = CASE WHEN excluded.track_id = '' THEN user_ratings.track_id ELSE excluded.track_id END,
         artwork = CASE WHEN excluded.artwork = '' THEN user_ratings.artwork ELSE excluded.artwork END,
         album = CASE WHEN excluded.album = '' THEN user_ratings.album ELSE excluded.album END,
-        updated_at = unixepoch()
+        updated_at = CASE WHEN user_ratings.rating = excluded.rating THEN user_ratings.updated_at ELSE unixepoch() END
     `).bind(user.sub, trackKey, payload.rating, title, artist, trackId, artwork, album).run();
     return Response.json({ ok: true });
   } catch { /* Support older schemas during the database column rename. */ }
@@ -203,7 +204,7 @@ export async function handleRatings(request, env) {
       artwork = CASE WHEN excluded.artwork = '' THEN user_ratings.artwork ELSE excluded.artwork END,
       provider_track_id = CASE WHEN excluded.provider_track_id = '' THEN user_ratings.provider_track_id ELSE excluded.provider_track_id END,
       album = CASE WHEN excluded.album = '' THEN user_ratings.album ELSE excluded.album END,
-      updated_at = unixepoch()
+      updated_at = CASE WHEN user_ratings.rating = excluded.rating THEN user_ratings.updated_at ELSE unixepoch() END
   `).bind(user.sub, trackKey, payload.rating, title, artist, videoId, artwork, providerTrackId, album);
   try {
     await withProviderIdentity.run();
@@ -218,7 +219,7 @@ export async function handleRatings(request, env) {
           artist = CASE WHEN excluded.artist = '' THEN user_ratings.artist ELSE excluded.artist END,
           video_id = COALESCE(excluded.video_id, user_ratings.video_id),
           artwork = CASE WHEN excluded.artwork = '' THEN user_ratings.artwork ELSE excluded.artwork END,
-          updated_at = unixepoch()
+          updated_at = CASE WHEN user_ratings.rating = excluded.rating THEN user_ratings.updated_at ELSE unixepoch() END
       `).bind(user.sub, trackKey, payload.rating, title, artist, videoId, artwork).run();
     } catch {
       await env.DB.prepare(`
@@ -226,7 +227,8 @@ export async function handleRatings(request, env) {
         VALUES (?, ?, ?, ?, ?, ?, unixepoch())
         ON CONFLICT(user_id, track_key) DO UPDATE SET
           rating = excluded.rating, title = excluded.title, artist = excluded.artist,
-          video_id = COALESCE(excluded.video_id, user_ratings.video_id), updated_at = unixepoch()
+          video_id = COALESCE(excluded.video_id, user_ratings.video_id),
+          updated_at = CASE WHEN user_ratings.rating = excluded.rating THEN user_ratings.updated_at ELSE unixepoch() END
       `).bind(user.sub, trackKey, payload.rating, title, artist, videoId).run();
     }
   }

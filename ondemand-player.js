@@ -127,9 +127,21 @@ let onDemandRecentHistory = [];
 try {
   const storedRecents = JSON.parse(localStorage.getItem(ON_DEMAND_RECENTS_KEY) || '[]');
   if (Array.isArray(storedRecents)) {
+    const seenRecentIdentities = new Set();
     onDemandRecentHistory = storedRecents
       .filter((song) => song && typeof song.trackName === 'string' && song.trackName.trim())
+      .filter((song) => {
+        const identity = song.recentDisplayType === 'liked-folder'
+          ? 'liked-folder'
+          : `${song.trackName}\n${song.artistName || ''}`.trim().toLocaleLowerCase();
+        if (seenRecentIdentities.has(identity)) return false;
+        seenRecentIdentities.add(identity);
+        return true;
+      })
       .slice(0, 10);
+    if (onDemandRecentHistory.length !== storedRecents.length) {
+      localStorage.setItem(ON_DEMAND_RECENTS_KEY, JSON.stringify(onDemandRecentHistory));
+    }
   }
 } catch { /* Recent tracks remain available for this visit if storage is blocked. */ }
 
@@ -384,6 +396,8 @@ async function findOnDemandSong(song) {
 // playable provider tracks once when the queue is loaded, so Next does not
 // have to repeat search/lookup requests for each song.
 const likedQueuePreparations = new Map();
+let pendingLikedQueueStartKey = '';
+let pendingLikedQueueStart = null;
 function likedQueuePreparationKey(song) {
   return String(song?.trackKey || song?.providerTrackId ||
     `${song?.trackName || ''}|${song?.artistName || ''}|${song?.collectionName || ''}`)
@@ -1531,6 +1545,15 @@ function startOnDemandQueue(songs, startIndex = 0, options = {}) {
   if (!queue.length) return;
 
   const selectedIndex = Math.max(0, Math.min(queue.length - 1, Number(startIndex) || 0));
+  const selectedSong = queue[selectedIndex];
+  const selectedKey = likedQueuePreparationKey(selectedSong);
+  // Mobile taps can fire again while a liked track is still resolving. Reuse
+  // that in-flight start so repeated taps don't reset the queue or launch
+  // competing searches for the same song.
+  if (selectedKey && selectedKey === pendingLikedQueueStartKey && pendingLikedQueueStart) {
+    return pendingLikedQueueStart;
+  }
+
   onDemandQueue = queue;
   onDemandQueueIndex = selectedIndex;
   onDemandQueueSource = 'favourites';
@@ -1544,11 +1567,21 @@ function startOnDemandQueue(songs, startIndex = 0, options = {}) {
   prepareLikedQueue(queue, selectedIndex);
   updateTransportButtonState();
 
-  return startOnDemandSong(queue[selectedIndex], {
+  pendingLikedQueueStartKey = selectedKey;
+  const start = startOnDemandSong(selectedSong, {
     ...options,
     preserveQueue: true,
     recordRecent: true
   });
+  let trackedStart;
+  trackedStart = Promise.resolve(start).finally(() => {
+    if (pendingLikedQueueStart === trackedStart) {
+      pendingLikedQueueStart = null;
+      pendingLikedQueueStartKey = '';
+    }
+  });
+  pendingLikedQueueStart = trackedStart;
+  return pendingLikedQueueStart;
 }
 
 function toggleOnDemandPlayback(shouldPlay) {

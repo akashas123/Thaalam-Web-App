@@ -370,18 +370,25 @@ function getStoredSongInfo(key) {
   }
 }
 
-function saveStoredSongInfo(key, entry) {
+function saveStoredSongInfo(key, entry, { refreshSavedAt = false } = {}) {
   if (!key || !entry) return;
 
   try {
     const cache = JSON.parse(
       localStorage.getItem(SONG_INFO_STORAGE_KEY) || '{}'
     );
-    cache[key] = { ...cache[key], ...entry, savedAt: Date.now() };
+    const now = Date.now();
+    cache[key] = {
+      ...cache[key],
+      ...entry,
+      savedAt: refreshSavedAt || !cache[key]?.savedAt ? now : cache[key].savedAt,
+      cacheUpdatedAt: now
+    };
 
     const oldestKeys = Object.keys(cache)
       .sort((first, second) =>
-        (cache[first]?.savedAt || 0) - (cache[second]?.savedAt || 0)
+        (cache[first]?.cacheUpdatedAt || cache[first]?.savedAt || 0) -
+        (cache[second]?.cacheUpdatedAt || cache[second]?.savedAt || 0)
       );
     while (oldestKeys.length > SONG_INFO_CACHE_LIMIT) {
       delete cache[oldestKeys.shift()];
@@ -930,7 +937,7 @@ function setStoredRating(
         providerTrackId: source?.providerTrackId || existingInfo.providerTrackId || '',
         ...(artworkUrl100 ? { artworkUrl100 } : {}),
         details
-      });
+      }, { refreshSavedAt: true });
       if (!source?.providerTrackId && typeof window.resolveLikedSongIdentity === 'function') {
         const trackKey = currentRatingTrackKey;
         void window.resolveLikedSongIdentity({
