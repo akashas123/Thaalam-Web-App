@@ -72,6 +72,7 @@ let isFetchingRelated = false;
 let prefetchToken = 0;
 let autoplayRetryTimer = 0;
 let autoplayAnchorTrackId = '';
+let mobilePlaybackWasActiveBeforeHide = false;
 /* The JioSaavn song-radio station currently driving the continuation queue.
    Each autoplay response builds a fresh station around the playing track, so
    this is informational and keeps the client aligned with the server. */
@@ -869,6 +870,32 @@ onDemandAudio.addEventListener('error', () => {
     '(active =', window.onDemandPlaybackActive,
     ', candidates =', trackCandidates.length, ')');
   handlePlaybackError();
+});
+
+// Some mobile browsers suspend a PWA's media when the screen is off. Resume
+// only if playback was active before the app was hidden; a user pause or a
+// fresh app launch must remain paused.
+document.addEventListener('visibilitychange', () => {
+  if (!isMobilePlaybackLayout()) return;
+  if (document.hidden) {
+    mobilePlaybackWasActiveBeforeHide =
+      Boolean(window.onDemandPlaybackActive && window.onDemandPlaying);
+    return;
+  }
+  if (!mobilePlaybackWasActiveBeforeHide) return;
+  mobilePlaybackWasActiveBeforeHide = false;
+  if (!window.onDemandPlaybackActive) return;
+
+  if (onDemandAudio.ended) {
+    advanceToSimilarSong();
+  } else if (onDemandAudio.paused) {
+    const playPromise = onDemandAudio.play();
+    if (playPromise) {
+      playPromise.catch((error) => {
+        logOnDemand('background resume rejected:', error?.name || error);
+      });
+    }
+  }
 });
 
 /* Called when a stream fails: fall through to the next search result first,
@@ -1813,8 +1840,14 @@ window.setInterval(() => {
 window.addEventListener('pagehide', () => {
   if (isMobilePlaybackLayout() && window.onDemandPlaybackActive) {
     pendingShouldPlay = false;
-    onDemandAudio.pause();
-    setOnDemandPlaying(false);
+    // Persist a paused restore state for refresh/reopen, but don't pause the
+    // live audio element here: mobile browsers can emit pagehide while
+    // backgrounding a PWA, and the stream should continue when allowed.
+    const wasPlaying = window.onDemandPlaying === true;
+    window.onDemandPlaying = false;
+    persistCurrentOnDemandSession();
+    window.onDemandPlaying = wasPlaying;
+    return;
   }
   persistCurrentOnDemandSession();
 });
