@@ -1545,6 +1545,14 @@ body.view-rises-from-mini.view-now-playing .player-view {
     line-height: 1.6;
   }
 
+  /* Nudge only the desktop title and subtitle upward. Transforms keep their
+     layout height unchanged, so the autoplay context, divider, player, and
+     lyrics retain their current positions. */
+  body.view-now-playing #nowPlayingHeading > h1,
+  body.view-now-playing #nowPlayingHeading > #nowPlayingSubtitle {
+    transform: translateY(-1.6rem);
+  }
+
   #nowPlayingHeading #nowPlayingAutoplayContext {
     margin: 3rem 0 0;
     color: rgba(255, 255, 255, 0.68);
