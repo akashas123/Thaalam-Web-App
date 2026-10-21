@@ -821,11 +821,11 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=81"></script>
-  <script src="ondemand-player.js?v=24"></script>
+  <script src="ondemand-player.js?v=25"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=9"></script>
-  <script src="player-controls.js?v=38"></script>
+  <script src="player-controls.js?v=39"></script>
   <script src="lyrics.js?v=40"></script>
   <script src="/google-auth-config.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -2478,6 +2478,8 @@
             favouritedAt: info.savedAt || entry.updated_at || 0,
             trackName: info.track || entry.title || keyTitle || 'Liked song',
             artistName: info.artist || entry.artist || keyArtist || 'Unknown artist',
+            collectionName: info.album || entry.album || '',
+            providerTrackId: info.providerTrackId || (trackKey.startsWith('youtube:') ? '' : (entry.track_id || entry.provider_track_id || '')),
             artworkUrl100: info.artworkUrl100 || info.artwork || entry.artwork || entry.artworkUrl100 ||
               (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : ''),
             ...(videoId ? { youtubeVideoId: videoId } : {})
@@ -2527,6 +2529,8 @@
               favouritedAt: info.savedAt || entry.updated_at || 0,
               trackName: info.track || entry.title || keyTitle || 'Liked song',
               artistName: info.artist || entry.artist || keyArtist || 'Unknown artist',
+              collectionName: info.album || entry.album || '',
+              providerTrackId: info.providerTrackId || (trackKey.startsWith('youtube:') ? '' : (entry.track_id || entry.provider_track_id || '')),
               artworkUrl100: info.artworkUrl100 || info.artwork || entry.artwork || entry.artworkUrl100 || fallbackArtwork,
               ...(videoId ? { youtubeVideoId: videoId } : {})
             };
@@ -2632,8 +2636,9 @@
             rating: 'up',
             title: song.trackName,
             artist: song.artistName,
+            album: song.collectionName || '',
             artwork: song.artworkUrl100,
-            video_id: song.youtubeVideoId || ''
+            track_id: song.providerTrackId || song.youtubeVideoId || ''
           });
         });
         ratings = [...ratingByKey.values()];
@@ -2644,7 +2649,9 @@
         const songs = ratings
           .filter((entry) => entry.rating === 'up')
           .map((entry) => {
-            const candidateVideoId = entry.video_id || (entry.track_key || '').replace(/^youtube:/, '');
+            const candidateVideoId = (entry.track_key || '').startsWith('youtube:')
+              ? (entry.track_id || entry.video_id || (entry.track_key || '').slice('youtube:'.length))
+              : (entry.video_id || '');
             const videoId = /^[\w-]{11}$/.test(candidateVideoId) ? candidateVideoId : '';
             // Older cloud rows predate artwork persistence; fall back to the
             // YouTube thumbnail instead of the blank placeholder card.
@@ -2654,6 +2661,9 @@
               trackKey: entry.track_key || '',
               trackName: entry.title || 'Liked song',
               artistName: entry.artist || 'Unknown artist',
+              collectionName: entry.album || '',
+              providerTrackId: entry.track_key?.startsWith('youtube:') ? '' : (entry.track_id || entry.provider_track_id || ''),
+              trackId: entry.track_id || '',
               artworkUrl100: storedArtwork || fallbackArtwork,
               ...(videoId ? { youtubeVideoId: videoId } : {})
             };
@@ -2718,8 +2728,9 @@
                 rating: 'up',
                 title: song.trackName,
                 artist: song.artistName,
-                video_id: song.youtubeVideoId || '',
-                artwork: song.artworkUrl100 || ''
+                album: song.collectionName || '',
+                track_id: song.providerTrackId || song.youtubeVideoId || '',
+                artwork: song.artworkUrl100 || '',
               });
             }
             localStorage.setItem(cacheKey, JSON.stringify({ ...cached, etag: '', ratings }));

@@ -20,8 +20,11 @@ access token in session storage, not persistent local storage.
 Like and dislike ratings sync by Google account through the `/api/ratings` Worker
 route. Configure a Cloudflare D1 database before deploying this feature:
 
-1. Create a D1 database in Cloudflare and apply `migrations/0001_user_ratings.sql`
-   with `wrangler d1 execute <database-name> --remote --file=migrations/0001_user_ratings.sql`.
+1. Create a D1 database in Cloudflare and apply the migrations in order. For an
+   existing database that already has `album` but still has `video_id`, rename
+   that column to `track_id` with `ALTER TABLE user_ratings RENAME COLUMN video_id TO track_id;`.
+   Fresh databases should apply `0003_user_ratings_track_identity.sql`. Use
+   `wrangler d1 execute <database-name> --remote --file=migrations/<migration-file>`.
 2. In the Pages project's **Settings > Functions > D1 database bindings**, add a
    binding named `DB` and select that database. The root `_worker.js` direct-upload
    worker reads the same `DB` binding. Git-integrated Pages deployments use the

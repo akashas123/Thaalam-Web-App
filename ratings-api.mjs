@@ -26,20 +26,29 @@ export async function handleRatings(request, env) {
 
   if (request.method === 'GET') {
     let rows = null;
-    // New installs have the artwork column; older D1 databases gain it via
-    // migrations/0002_user_ratings_artwork.sql. Probe once so both work.
+    // Probe progressively so deployments can migrate without taking ratings offline.
     try {
       const result = await env.DB.prepare(
-        'SELECT track_key, rating, title, artist, video_id, artwork FROM user_ratings WHERE user_id = ? ORDER BY updated_at DESC'
+        'SELECT track_key, rating, title, artist, track_id, artwork, album FROM user_ratings WHERE user_id = ? ORDER BY updated_at DESC'
       ).bind(user.sub).all();
       rows = result.results || [];
     } catch {
-      const result = await env.DB.prepare(
-        'SELECT track_key, rating, title, artist, video_id FROM user_ratings WHERE user_id = ? ORDER BY updated_at DESC'
-      ).bind(user.sub).all();
-      rows = result.results || [];
+      try {
+        const result = await env.DB.prepare(
+          'SELECT track_key, rating, title, artist, video_id, artwork FROM user_ratings WHERE user_id = ? ORDER BY updated_at DESC'
+        ).bind(user.sub).all();
+        rows = result.results || [];
+      } catch {
+        const result = await env.DB.prepare(
+          'SELECT track_key, rating, title, artist, video_id FROM user_ratings WHERE user_id = ? ORDER BY updated_at DESC'
+        ).bind(user.sub).all();
+        rows = result.results || [];
+      }
     }
-    const ratings = rows;
+    const ratings = rows.map((row) => ({
+      ...row,
+      track_id: row.track_id || row.provider_track_id || row.video_id || ''
+    }));
     const payload = JSON.stringify({ ratings });
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(payload));
     const etag = `"${[...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')}"`;
@@ -92,11 +101,111 @@ export async function handleRatings(request, env) {
     const statements = payload.ratings.map((entry) => {
       const title = typeof entry.title === 'string' ? entry.title.trim().slice(0, 300) : '';
       const artist = typeof entry.artist === 'string' ? entry.artist.trim().slice(0, 300) : '';
+      const album = typeof entry.album === 'string' ? entry.album.trim().slice(0, 300) : '';
+      const providerTrackId = typeof entry.providerTrackId === 'string' ? entry.providerTrackId.trim().slice(0, 200) : '';
       const artworkInput = typeof entry.artwork === 'string' ? entry.artwork.trim().slice(0, 500) : '';
       const videoId = typeof entry.videoId === 'string' && /^[\w-]{11}$/.test(entry.videoId)
         ? entry.videoId
         : null;
+      const trackId = (typeof entry.trackId === 'string' ? entry.trackId.trim().slice(0, 200) : '') ||
+        providerTrackId || videoId || (entry.trackKey.startsWith('youtube:') ? entry.trackKey.slice(8) : '');
       return env.DB.prepare(`
+        INSERT INTO user_ratings (user_id, track_key, rating, title, artist, track_id, artwork, album, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
+        ON CONFLICT(user_id, track_key) DO UPDATE SET
+          rating = excluded.rating,
+          title = CASE WHEN excluded.title = '' THEN user_ratings.title ELSE excluded.title END,
+          artist = CASE WHEN excluded.artist = '' THEN user_ratings.artist ELSE excluded.artist END,
+          track_id = CASE WHEN excluded.track_id = '' THEN user_ratings.track_id ELSE excluded.track_id END,
+          artwork = CASE WHEN excluded.artwork = '' THEN user_ratings.artwork ELSE excluded.artwork END,
+          album = CASE WHEN excluded.album = '' THEN user_ratings.album ELSE excluded.album END,
+          updated_at = unixepoch()
+      `).bind(user.sub, entry.trackKey.trim(), entry.rating, title, artist, trackId, artworkInput, album);
+    });
+    try {
+      if (statements.length) await env.DB.batch(statements);
+    } catch {
+      const artworkStatements = payload.ratings.map((entry) => {
+        const legacyTitle = typeof entry.title === 'string' ? entry.title.trim().slice(0, 300) : '';
+        const legacyArtist = typeof entry.artist === 'string' ? entry.artist.trim().slice(0, 300) : '';
+        const artworkInput = typeof entry.artwork === 'string' ? entry.artwork.trim().slice(0, 500) : '';
+        const legacyVideoId = typeof entry.videoId === 'string' ? entry.videoId : null;
+        return env.DB.prepare(`
+        INSERT INTO user_ratings (user_id, track_key, rating, title, artist, video_id, artwork, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch())
+        ON CONFLICT(user_id, track_key) DO UPDATE SET
+          rating = excluded.rating, title = excluded.title, artist = excluded.artist,
+          video_id = excluded.video_id,
+          artwork = CASE WHEN excluded.artwork = '' THEN user_ratings.artwork ELSE excluded.artwork END,
+          updated_at = unixepoch()
+      `).bind(user.sub, entry.trackKey.trim(), entry.rating, legacyTitle, legacyArtist, legacyVideoId, artworkInput);
+      });
+      try {
+        if (artworkStatements.length) await env.DB.batch(artworkStatements);
+      } catch {
+        const legacy = payload.ratings.map((entry) => {
+          const legacyTitle = typeof entry.title === 'string' ? entry.title.trim().slice(0, 300) : '';
+          const legacyArtist = typeof entry.artist === 'string' ? entry.artist.trim().slice(0, 300) : '';
+          const legacyVideoId = typeof entry.videoId === 'string' ? entry.videoId : null;
+          return env.DB.prepare(`
+            INSERT INTO user_ratings (user_id, track_key, rating, title, artist, video_id, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, unixepoch())
+            ON CONFLICT(user_id, track_key) DO UPDATE SET
+              rating = excluded.rating, title = excluded.title, artist = excluded.artist,
+              video_id = excluded.video_id, updated_at = unixepoch()
+          `).bind(user.sub, entry.trackKey.trim(), entry.rating, legacyTitle, legacyArtist, legacyVideoId);
+        });
+        if (legacy.length) await env.DB.batch(legacy);
+      }
+    }
+    return Response.json({ ok: true });
+  }
+  if (payload.rating !== 'up' && payload.rating !== 'down') {
+    return Response.json({ error: 'Rating must be up or down.' }, { status: 400 });
+  }
+  const title = typeof payload.title === 'string' ? payload.title.trim().slice(0, 300) : '';
+  const artist = typeof payload.artist === 'string' ? payload.artist.trim().slice(0, 300) : '';
+  const album = typeof payload.album === 'string' ? payload.album.trim().slice(0, 300) : '';
+  const providerTrackId = typeof payload.providerTrackId === 'string' ? payload.providerTrackId.trim().slice(0, 200) : '';
+  const artwork = typeof payload.artwork === 'string' ? payload.artwork.trim().slice(0, 500) : '';
+  const videoId = typeof payload.videoId === 'string' && /^[\w-]{11}$/.test(payload.videoId)
+    ? payload.videoId
+    : null;
+  const trackId = (typeof payload.trackId === 'string' ? payload.trackId.trim().slice(0, 200) : '') ||
+    providerTrackId || videoId || (trackKey.startsWith('youtube:') ? trackKey.slice(8) : '');
+  try {
+    await env.DB.prepare(`
+      INSERT INTO user_ratings (user_id, track_key, rating, title, artist, track_id, artwork, album, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
+      ON CONFLICT(user_id, track_key) DO UPDATE SET
+        rating = excluded.rating,
+        title = CASE WHEN excluded.title = '' THEN user_ratings.title ELSE excluded.title END,
+        artist = CASE WHEN excluded.artist = '' THEN user_ratings.artist ELSE excluded.artist END,
+        track_id = CASE WHEN excluded.track_id = '' THEN user_ratings.track_id ELSE excluded.track_id END,
+        artwork = CASE WHEN excluded.artwork = '' THEN user_ratings.artwork ELSE excluded.artwork END,
+        album = CASE WHEN excluded.album = '' THEN user_ratings.album ELSE excluded.album END,
+        updated_at = unixepoch()
+    `).bind(user.sub, trackKey, payload.rating, title, artist, trackId, artwork, album).run();
+    return Response.json({ ok: true });
+  } catch { /* Support older schemas during the database column rename. */ }
+  const withProviderIdentity = env.DB.prepare(`
+    INSERT INTO user_ratings (user_id, track_key, rating, title, artist, video_id, artwork, provider_track_id, album, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
+    ON CONFLICT(user_id, track_key) DO UPDATE SET
+      rating = excluded.rating,
+      title = CASE WHEN excluded.title = '' THEN user_ratings.title ELSE excluded.title END,
+      artist = CASE WHEN excluded.artist = '' THEN user_ratings.artist ELSE excluded.artist END,
+      video_id = COALESCE(excluded.video_id, user_ratings.video_id),
+      artwork = CASE WHEN excluded.artwork = '' THEN user_ratings.artwork ELSE excluded.artwork END,
+      provider_track_id = CASE WHEN excluded.provider_track_id = '' THEN user_ratings.provider_track_id ELSE excluded.provider_track_id END,
+      album = CASE WHEN excluded.album = '' THEN user_ratings.album ELSE excluded.album END,
+      updated_at = unixepoch()
+  `).bind(user.sub, trackKey, payload.rating, title, artist, videoId, artwork, providerTrackId, album);
+  try {
+    await withProviderIdentity.run();
+  } catch {
+    try {
+      await env.DB.prepare(`
         INSERT INTO user_ratings (user_id, track_key, rating, title, artist, video_id, artwork, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch())
         ON CONFLICT(user_id, track_key) DO UPDATE SET
@@ -106,46 +215,16 @@ export async function handleRatings(request, env) {
           video_id = COALESCE(excluded.video_id, user_ratings.video_id),
           artwork = CASE WHEN excluded.artwork = '' THEN user_ratings.artwork ELSE excluded.artwork END,
           updated_at = unixepoch()
-      `).bind(user.sub, entry.trackKey.trim(), entry.rating, title, artist, videoId, artworkInput);
-    });
-    try {
-      if (statements.length) await env.DB.batch(statements);
+      `).bind(user.sub, trackKey, payload.rating, title, artist, videoId, artwork).run();
     } catch {
-      const legacy = payload.ratings.map((entry) => {
-        const legacyTitle = typeof entry.title === 'string' ? entry.title.trim().slice(0, 300) : '';
-        const legacyArtist = typeof entry.artist === 'string' ? entry.artist.trim().slice(0, 300) : '';
-        const legacyVideoId = typeof entry.videoId === 'string' ? entry.videoId : null;
-        return env.DB.prepare(`
+      await env.DB.prepare(`
         INSERT INTO user_ratings (user_id, track_key, rating, title, artist, video_id, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, unixepoch())
         ON CONFLICT(user_id, track_key) DO UPDATE SET
           rating = excluded.rating, title = excluded.title, artist = excluded.artist,
-          video_id = excluded.video_id, updated_at = unixepoch()
-      `).bind(user.sub, entry.trackKey.trim(), entry.rating, legacyTitle, legacyArtist, legacyVideoId);
-      });
-      if (legacy.length) await env.DB.batch(legacy);
+          video_id = COALESCE(excluded.video_id, user_ratings.video_id), updated_at = unixepoch()
+      `).bind(user.sub, trackKey, payload.rating, title, artist, videoId).run();
     }
-    return Response.json({ ok: true });
   }
-  if (payload.rating !== 'up' && payload.rating !== 'down') {
-    return Response.json({ error: 'Rating must be up or down.' }, { status: 400 });
-  }
-  const title = typeof payload.title === 'string' ? payload.title.trim().slice(0, 300) : '';
-  const artist = typeof payload.artist === 'string' ? payload.artist.trim().slice(0, 300) : '';
-  const artwork = typeof payload.artwork === 'string' ? payload.artwork.trim().slice(0, 500) : '';
-  const videoId = typeof payload.videoId === 'string' && /^[\w-]{11}$/.test(payload.videoId)
-    ? payload.videoId
-    : null;
-  await env.DB.prepare(`
-    INSERT INTO user_ratings (user_id, track_key, rating, title, artist, video_id, artwork, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch())
-    ON CONFLICT(user_id, track_key) DO UPDATE SET
-      rating = excluded.rating,
-      title = CASE WHEN excluded.title = '' THEN user_ratings.title ELSE excluded.title END,
-      artist = CASE WHEN excluded.artist = '' THEN user_ratings.artist ELSE excluded.artist END,
-      video_id = COALESCE(excluded.video_id, user_ratings.video_id),
-      artwork = CASE WHEN excluded.artwork = '' THEN user_ratings.artwork ELSE excluded.artwork END,
-      updated_at = unixepoch()
-  `).bind(user.sub, trackKey, payload.rating, title, artist, videoId, artwork).run();
   return Response.json({ ok: true });
 }

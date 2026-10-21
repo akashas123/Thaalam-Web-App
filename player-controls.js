@@ -411,6 +411,8 @@ function notifyRatingChanged(trackKey, rating) {
         trackName: info.track || details.title || 'Liked song',
         artistName: info.artist || details.artist || 'Unknown artist',
         artworkUrl100: info.artworkUrl100 || info.artwork || details.artwork || '',
+        collectionName: info.album || details.album || '',
+        providerTrackId: info.providerTrackId || details.providerTrackId || '',
         ...(details.videoId ? { youtubeVideoId: details.videoId } : {})
       }
     }
@@ -490,6 +492,7 @@ function getRatingTrackDetails(trackKey) {
       artist: onDemandSong.artistName,
       album: onDemandSong.collectionName,
       art: onDemandSong.artworkUrl100,
+      providerTrackId: onDemandSong.providerTrackId,
       youtubeVideoId: onDemandSong.youtubeVideoId
     }
     : (liveSong?.title ? liveSong : null) || {};
@@ -512,6 +515,8 @@ function getRatingTrackDetails(trackKey) {
   return {
     title: String(rawTitle || '').trim(),
     artist: rawArtist,
+    album: String(song.album || song.collectionName || '').trim(),
+    providerTrackId: String(song.providerTrackId || '').trim(),
     videoId,
     artwork: String(artwork || '').trim()
   };
@@ -647,10 +652,12 @@ async function syncRatingsFromCloud() {
         : trackKey.split('|');
       title = cached.track || title;
       artist = cached.artist || artist;
+      const album = cached.album || '';
+      const providerTrackId = cached.providerTrackId || '';
       let videoId = trackKey.startsWith('youtube:') ? trackKey.slice('youtube:'.length) : '';
       if (!/^[\w-]{11}$/.test(videoId)) videoId = '';
       const artwork = cached.artworkUrl100 || cached.artwork || (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '');
-      uploads.push({ trackKey, rating, title, artist, videoId, artwork });
+      uploads.push({ trackKey, rating, title, artist, album, providerTrackId, videoId, artwork });
       remoteRatings[trackKey] = rating;
     }
     if (uploads.length) await requestCloudRatings('PUT', { ratings: uploads });
@@ -862,14 +869,23 @@ function setStoredRating(
       : null) || null;
     // On-demand now-playing uses {title,artist,art,id}; live radio uses the
     // same shape, while catalog songs use {trackName,artistName,artworkUrl100}.
-    const source = (song?.title && song?.artist)
-      ? song
-      : (liveSong?.title && liveSong?.artist ? liveSong : null)
+    const source = (window.onDemandPlaybackActive && onDemandSong?.trackName)
+      ? {
+          title: onDemandSong.trackName,
+          artist: onDemandSong.artistName,
+          album: onDemandSong.collectionName,
+          art: onDemandSong.artworkUrl100,
+          providerTrackId: onDemandSong.providerTrackId,
+          youtubeVideoId: onDemandSong.youtubeVideoId
+        }
+      : (song?.title && song?.artist ? song : null)
+        || (liveSong?.title && liveSong?.artist ? liveSong : null)
         || (onDemandSong?.trackName ? {
           title: onDemandSong.trackName,
           artist: onDemandSong.artistName,
           album: onDemandSong.collectionName,
           art: onDemandSong.artworkUrl100,
+          providerTrackId: onDemandSong.providerTrackId,
           youtubeVideoId: onDemandSong.youtubeVideoId
         } : null);
     const rawTitle = String(source?.title || song?.trackName || '').trim();
@@ -899,9 +915,31 @@ function setStoredRating(
       saveStoredSongInfo(currentRatingTrackKey, {
         track: rawTitle,
         artist: cleanArtist,
+        album: source?.album || existingInfo.album || '',
+        providerTrackId: source?.providerTrackId || existingInfo.providerTrackId || '',
         ...(artworkUrl100 ? { artworkUrl100 } : {}),
         details
       });
+      if (!source?.providerTrackId && typeof window.resolveLikedSongIdentity === 'function') {
+        const trackKey = currentRatingTrackKey;
+        void window.resolveLikedSongIdentity({
+          trackName: rawTitle,
+          artistName: cleanArtist,
+          collectionName: source?.album || ''
+        }).then((identity) => {
+          if (!identity?.providerTrackId || getStoredRatings()[trackKey] !== 'up') return;
+          const latestInfo = getStoredSongInfo(trackKey) || {};
+          saveStoredSongInfo(trackKey, {
+            providerTrackId: identity.providerTrackId,
+            album: identity.collectionName || latestInfo.album || '',
+            ...(identity.artworkUrl100 ? { artworkUrl100: latestInfo.artworkUrl100 || identity.artworkUrl100 } : {})
+          });
+          void persistRatingToCloud(trackKey, 'up');
+          notifyRatingChanged(trackKey, 'up');
+        }).catch((error) => {
+          console.warn('Could not resolve the liked song recording.', error);
+        });
+      }
     }
   }
 
@@ -913,6 +951,31 @@ function setStoredRating(
 
   return true;
 }
+
+window.saveLikedSongPlaybackIdentity = (song) => {
+  const trackKey = song?.trackKey;
+  if (!trackKey || !song?.providerTrackId) return;
+  let isLiked = getStoredRatings()[trackKey] === 'up';
+  if (!isLiked) {
+    const userId = window.getThaalamGoogleUserId?.();
+    try {
+      const cached = JSON.parse(localStorage.getItem(`thaalam.favourites:${userId}`) || 'null');
+      isLiked = Array.isArray(cached?.ratings) && cached.ratings.some((entry) =>
+        entry.track_key === trackKey && entry.rating === 'up');
+    } catch { /* The local rating check above remains authoritative. */ }
+  }
+  if (!isLiked) return;
+  const existingInfo = getStoredSongInfo(trackKey) || {};
+  saveStoredSongInfo(trackKey, {
+    track: song.trackName || existingInfo.track || '',
+    artist: song.artistName || existingInfo.artist || '',
+    album: song.collectionName || existingInfo.album || '',
+    providerTrackId: song.providerTrackId,
+    ...(song.artworkUrl100 ? { artworkUrl100: song.artworkUrl100 } : {})
+  });
+  void persistRatingToCloud(trackKey, 'up');
+  notifyRatingChanged(trackKey, 'up');
+};
 
 function selectRating(
   button,

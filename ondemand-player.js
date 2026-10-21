@@ -370,6 +370,16 @@ async function findOnDemandSong(song) {
   };
 }
 
+window.resolveLikedSongIdentity = async (song) => {
+  if (!song?.trackName || !song?.artistName) return null;
+  const resolved = await findOnDemandSong(song);
+  return {
+    providerTrackId: resolved.id || '',
+    collectionName: resolved.album || song.collectionName || '',
+    artworkUrl100: resolved.artworkUrl100 || song.artworkUrl100 || ''
+  };
+};
+
 function saveOnDemandSession(song, trackId, position = 0) {
   try {
     const payload = JSON.stringify({
@@ -995,12 +1005,19 @@ function updateOnDemandMetadata(song, track) {
 
 /* Appends a song to the session queue unless it is already the current entry
    (re-selecting the same track should not create a duplicate step). */
+function isSameOnDemandSong(first, second) {
+  if (!first || !second) return false;
+  if (first.providerTrackId && second.providerTrackId) {
+    return first.providerTrackId === second.providerTrackId;
+  }
+  if (first.trackKey && second.trackKey) return first.trackKey === second.trackKey;
+  return String(first.trackName || '').trim().toLowerCase() === String(second.trackName || '').trim().toLowerCase() &&
+    String(first.artistName || '').trim().toLowerCase() === String(second.artistName || '').trim().toLowerCase();
+}
+
 function enqueueOnDemandSong(song) {
   const current = onDemandQueue[onDemandQueueIndex];
-  const isSameAsCurrent =
-    current &&
-    current.trackName === song.trackName &&
-    (current.artistName || '') === (song.artistName || '');
+  const isSameAsCurrent = isSameOnDemandSong(current, song);
 
   if (isSameAsCurrent) return;
 
@@ -1297,11 +1314,10 @@ async function startOnDemandSong(song, {
     artworkUrl100: String(song.artworkUrl100 || '')
   };
   if (!song.trackName) return;
+  const hadProviderTrackId = Boolean(song.providerTrackId);
   if (!preserveQueue) {
     const current = onDemandQueue[onDemandQueueIndex];
-    const isSameAsCurrent = current
-      && current.trackName === song.trackName
-      && (current.artistName || '') === (song.artistName || '');
+    const isSameAsCurrent = isSameOnDemandSong(current, song);
     if (!isSameAsCurrent) {
       // A listener's new selection starts a fresh history. Autoplay tracks
       // added afterward can still be played next and navigated back to.
@@ -1371,8 +1387,9 @@ async function startOnDemandSong(song, {
     // and stream URL — reuse them so navigating back skips the search. Legacy
     // rows that only hold an old YouTube video id intentionally fall through to
     // a fresh JioSaavn search: this player has no YouTube sources left.
-    const track = song.providerTrackId && song.streamUrl
-      ? {
+    let track = null;
+    if (song.providerTrackId && song.streamUrl) {
+      track = {
         id: song.providerTrackId,
         streamUrl: song.streamUrl,
         durationSeconds: Number(song.trackTimeMillis) / 1000 || 0,
@@ -1381,8 +1398,11 @@ async function startOnDemandSong(song, {
         artist: song.artistName,
         album: song.collectionName,
         alternatives: []
-      }
-      : await findOnDemandSong(song);
+      };
+    } else if (song.providerTrackId) {
+      try { track = await resolveSong(song.providerTrackId); } catch { /* Search by metadata if the saved ID no longer resolves. */ }
+    }
+    if (!track?.streamUrl) track = await findOnDemandSong(song);
     if (requestId !== songRequestId) return;
 
     trackCandidates = [track, ...(track.alternatives || [])]
@@ -1396,6 +1416,9 @@ async function startOnDemandSong(song, {
     song.providerArtistIds = track.artistIds || song.providerArtistIds || [];
     song.providerAlbumId = track.albumId || song.providerAlbumId || '';
     song.streamUrl = track.streamUrl;
+    if (!hadProviderTrackId && song.trackKey) {
+      window.saveLikedSongPlaybackIdentity?.(song);
+    }
     setCurrentOnDemandTrack(song, track.id);
     persistCurrentOnDemandSession();
     updateOnDemandMetadata(song, track);
