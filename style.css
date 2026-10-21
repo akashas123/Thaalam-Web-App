@@ -4248,7 +4248,7 @@ body.has-lyrics .lyrics-panel {
   .mobile-genre-shelves::-webkit-scrollbar,
   .mobile-genre-track-row::-webkit-scrollbar { display: none; }
   .mobile-genre-row { min-width: 0; flex: 0 0 auto; overflow: visible; }
-  .mobile-genre-row:not(.mobile-recents-row) h2 { margin-bottom: 0.6rem; color: #fff; font-size: 1.08rem; font-weight: 650; }
+  .mobile-genre-row h2 { margin-bottom: 0.6rem; color: #fff; font-size: 1.08rem; font-weight: 650; }
   .mobile-genre-track-row { display: flex; gap: 1rem; overflow-x: auto; padding: 0 0 0.25rem; scrollbar-width: none; }
   .mobile-recents-row .mobile-genre-track-row { gap: 0.75rem; }
   .mobile-recents-row .mobile-genre-track { width: 5.5rem; flex-basis: 5.5rem; }

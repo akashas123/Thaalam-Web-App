@@ -517,8 +517,8 @@ function getRatingTrackDetails(trackKey) {
   };
 }
 
-function getPendingRatingDeletes() {
-  const userId = window.getThaalamGoogleUserId?.() ||
+function getPendingRatingDeletes(ownerOverride = '') {
+  const userId = ownerOverride || window.getThaalamGoogleUserId?.() ||
     localStorage.getItem(`${RATING_STORAGE_KEY}-owner`) || 'anonymous';
   const key = `${RATING_DELETE_STORAGE_PREFIX}${userId}`;
   try {
@@ -529,8 +529,8 @@ function getPendingRatingDeletes() {
   }
 }
 
-function savePendingRatingDeletes(deletions) {
-  const userId = window.getThaalamGoogleUserId?.() ||
+function savePendingRatingDeletes(deletions, ownerOverride = '') {
+  const userId = ownerOverride || window.getThaalamGoogleUserId?.() ||
     localStorage.getItem(`${RATING_STORAGE_KEY}-owner`) || 'anonymous';
   try {
     localStorage.setItem(
@@ -590,6 +590,8 @@ async function syncRatingsFromCloud() {
   const userId = window.getThaalamGoogleUserId?.();
   if (!window.getThaalamGoogleAccessToken?.() || !userId) return;
   try {
+    const ratingsOwnerKey = `${RATING_STORAGE_KEY}-owner`;
+    const owner = localStorage.getItem(ratingsOwnerKey) || 'anonymous';
     const response = await requestCloudRatings('GET');
     const remoteRatings = {};
     for (const entry of response.ratings || []) {
@@ -598,7 +600,10 @@ async function syncRatingsFromCloud() {
       }
     }
 
-    const pendingDeletes = getPendingRatingDeletes();
+    const pendingDeletes = getPendingRatingDeletes(userId);
+    if (owner === 'anonymous') {
+      getPendingRatingDeletes('anonymous').forEach((trackKey) => pendingDeletes.add(trackKey));
+    }
     if (pendingDeletes.size) {
       await requestCloudRatings('DELETE', { trackKeys: [...pendingDeletes] });
       for (const trackKey of pendingDeletes) {
@@ -606,18 +611,23 @@ async function syncRatingsFromCloud() {
         pendingDeletes.delete(trackKey);
       }
     }
-    savePendingRatingDeletes(pendingDeletes);
+    savePendingRatingDeletes(pendingDeletes, userId);
+    if (owner === 'anonymous') savePendingRatingDeletes(new Set(), 'anonymous');
 
-    // Bring existing browser ratings into the account the first time it syncs.
-    const ratingsOwnerKey = `${RATING_STORAGE_KEY}-owner`;
-    const owner = localStorage.getItem(ratingsOwnerKey) || '';
+    // Guest likes stay in the active device list and merge into the account.
+    // Switching directly between Google accounts still restores that account's
+    // own device cache instead of copying another account's likes across.
     let localRatings = getStoredRatings();
     if (owner && owner !== userId) {
       localStorage.setItem(`${RATING_STORAGE_KEY}:${owner}`, JSON.stringify(localRatings));
+      let accountRatings = {};
       try {
-        localRatings = JSON.parse(localStorage.getItem(`${RATING_STORAGE_KEY}:${userId}`) || '{}');
-      } catch {
-        localRatings = {};
+        accountRatings = JSON.parse(localStorage.getItem(`${RATING_STORAGE_KEY}:${userId}`) || '{}');
+      } catch { accountRatings = {}; }
+      if (owner === 'anonymous') {
+        localRatings = { ...accountRatings, ...localRatings };
+      } else {
+        localRatings = accountRatings;
       }
       saveStoredRatings(localRatings);
     }
@@ -628,7 +638,7 @@ async function syncRatingsFromCloud() {
     try { songInfoCache = JSON.parse(localStorage.getItem(SONG_INFO_STORAGE_KEY) || '{}'); } catch { songInfoCache = {}; }
     const uploads = [];
     for (const [trackKey, rating] of localEntries) {
-      if (remoteRatings[trackKey]) continue;
+      if (remoteRatings[trackKey] === rating) continue;
       // Prefer the snapshot taken at like-time (has real title/artist/artwork).
       // The raw key alone is lossy: `youtube:ID` carries no names at all.
       const cached = songInfoCache?.[trackKey] || {};

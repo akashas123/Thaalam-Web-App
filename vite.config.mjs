@@ -7,6 +7,12 @@ export default defineConfig({
     configureServer(server) {
       server.middlewares.use(async (request, response, next) => {
         const pathname = request.url?.split('?')[0];
+        if (pathname === '/api/ratings') {
+          response.statusCode = 503;
+          response.setHeader('Content-Type', 'application/json; charset=utf-8');
+          response.end(JSON.stringify({ error: 'Ratings database is only available in the Cloudflare runtime.' }));
+          return;
+        }
         const handlers = {
           '/api/music-search': handleSearch,
           '/api/music-album': handleAlbum,

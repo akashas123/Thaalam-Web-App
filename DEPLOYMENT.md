@@ -52,3 +52,4 @@ For dashboard drag-and-drop Direct Upload, include the root `_worker.js` file wi
 ## Local development
 
 Run `npm run dev`. The Vite middleware in `vite.config.mjs` exposes the same `/api/music-*` routes on the local origin, so the browser uses the same player flow at `http://localhost:5173` and in production.
+The local Vite server has no D1 binding, so `/api/ratings` returns a setup response; liked songs remain visible from browser storage. Google account ratings sync through the Cloudflare Pages or Worker runtime after the `DB` binding is configured.

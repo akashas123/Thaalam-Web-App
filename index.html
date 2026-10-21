@@ -825,7 +825,7 @@
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=9"></script>
-  <script src="player-controls.js?v=37"></script>
+  <script src="player-controls.js?v=38"></script>
   <script src="lyrics.js?v=40"></script>
   <script src="/google-auth-config.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -1597,6 +1597,15 @@
       sampleHomeTint(firstArt || '');
     }
 
+    function updateMobileHomeTint() {
+      if (desktopNavigation.matches) return;
+      const shelves = document.getElementById('mobileGenreShelves');
+      const firstArtwork = [...(shelves?.querySelectorAll('.mobile-genre-track-art img') || [])]
+        .map((image) => image.currentSrc || image.src)
+        .find((url) => url && !url.includes('album-placeholder.svg'));
+      updateHomeTint(firstArtwork ? [{ artworkUrl100: firstArtwork }] : []);
+    }
+
     function renderGenreResults(songs) {
       if (activeGenre.startsWith('search:')) genreResults.scrollTop = 0;
       lastGenreResultsSongs = songs;
@@ -1630,7 +1639,11 @@
         empty.className = 'genre-empty';
         empty.textContent = activeGenre === 'you-like' ? 'No liked songs' : 'No matching songs were found.';
         genreResults.appendChild(empty);
-        updateHomeTint([]);
+        if (!desktopNavigation.matches && !document.body.classList.contains('mobile-search-active')) {
+          updateMobileHomeTint();
+        } else {
+          updateHomeTint([]);
+        }
         return;
       }
 
@@ -1858,7 +1871,11 @@
           genreResults.classList.remove('is-shuffling');
         }, GENRE_SHUFFLE_MS);
       }
-      updateHomeTint(orderedSongs);
+      if (!desktopNavigation.matches && !document.body.classList.contains('mobile-search-active')) {
+        updateMobileHomeTint();
+      } else {
+        updateHomeTint(orderedSongs);
+      }
     }
 
     // Crossing the mobile/desktop boundary swaps the search card structure
@@ -1875,9 +1892,14 @@
     function showGenreLoading() {
       genreResults.replaceChildren();
       genreResults.setAttribute('aria-busy', 'true');
-      // Clear the glow while skeletons show so the old tab's art doesn't linger.
-      setHomeArt('');
-      setHomeTint('');
+      // Mobile Browse uses the first artwork in its visible shelves. Keep that
+      // live tint while the hidden catalog grid loads for a Home revisit.
+      if (desktopNavigation.matches || document.body.classList.contains('mobile-search-active')) {
+        setHomeArt('');
+        setHomeTint('');
+      } else {
+        updateMobileHomeTint();
+      }
       const placeholders = document.createDocumentFragment();
       for (let index = 0; index < GENRE_CHART_LIMIT; index += 1) {
         const card = document.createElement('article');
@@ -2069,13 +2091,14 @@
       if (!shelves || desktopNavigation.matches) return;
       shelves.querySelector('.mobile-recents-row')?.remove();
       const songs = window.getOnDemandHistory?.() || [];
-      if (!songs.length) return;
-      const recents = renderMobileHomeGenreRow(
-        { title: 'Recents' }, songs.slice(0, 10), { shuffle: false, all: true }
-      );
-      recents.classList.add('mobile-recents-row');
-      shelves.prepend(recents);
-      updateHomeTint([songs[0]]);
+      if (songs.length) {
+        const recents = renderMobileHomeGenreRow(
+          { title: 'Recents' }, songs.slice(0, 10), { shuffle: false, all: true }
+        );
+        recents.classList.add('mobile-recents-row');
+        shelves.prepend(recents);
+      }
+      updateMobileHomeTint();
     }
 
     async function loadMobileHomeGenres() {
@@ -2098,7 +2121,6 @@
         searchGenreChart(genreFeedIds[category.key], requestId, 10).catch(() => [])
       ));
       if (requestId !== mobileHomeGenresRequest) return;
-      updateHomeTint(results[0] || []);
       results.forEach((songs, index) => {
         placeholders[index].replaceWith(renderMobileHomeGenreRow(categories[index], songs));
       });
@@ -2215,8 +2237,12 @@
         error.className = 'genre-empty';
         error.textContent = 'Could not load songs. Check your connection and try again.';
         genreResults.appendChild(error);
-        setHomeArt('');
-        setHomeTint('');
+        if (!desktopNavigation.matches && !document.body.classList.contains('mobile-search-active')) {
+          updateMobileHomeTint();
+        } else {
+          setHomeArt('');
+          setHomeTint('');
+        }
       }
     }
 
@@ -2424,6 +2450,41 @@
         void requestCatalogSuggestions(term);
       }, 200);
     }
+    function getLocalLikedSongs(userId) {
+      let localRatings = {};
+      let accountCache = null;
+      let songInfo = {};
+      try { localRatings = JSON.parse(localStorage.getItem('thaalam24x7-ratings') || '{}'); } catch { /* Ignore malformed browser ratings. */ }
+      if (userId) {
+        try { accountCache = JSON.parse(localStorage.getItem(`thaalam.favourites:${userId}`) || 'null'); } catch { /* Use device ratings if the account cache is malformed. */ }
+      }
+      try { songInfo = JSON.parse(localStorage.getItem('thaalam24x7-song-info-v1') || '{}'); } catch { /* Song cards can still use rating keys. */ }
+      const entries = new Map((Array.isArray(accountCache?.ratings) ? accountCache.ratings : [])
+        .filter((entry) => entry?.track_key && (entry.rating === 'up' || entry.rating === 'down'))
+        .map((entry) => [entry.track_key, entry]));
+      Object.entries(localRatings && typeof localRatings === 'object' ? localRatings : {})
+        .filter(([, rating]) => rating === 'up' || rating === 'down')
+        .forEach(([trackKey, rating]) => entries.set(trackKey, { ...entries.get(trackKey), track_key: trackKey, rating }));
+      return [...entries.values()]
+        .filter((entry) => entry.rating === 'up')
+        .map((entry) => {
+          const trackKey = entry.track_key;
+          const info = songInfo?.[trackKey] || {};
+          const [keyTitle = '', keyArtist = ''] = trackKey.startsWith('youtube:') ? ['', ''] : trackKey.split('|');
+          const rawVideoId = trackKey.startsWith('youtube:') ? trackKey.slice('youtube:'.length) : '';
+          const videoId = /^[\w-]{11}$/.test(rawVideoId) ? rawVideoId : '';
+          return {
+            trackKey,
+            favouritedAt: info.savedAt || entry.updated_at || 0,
+            trackName: info.track || entry.title || keyTitle || 'Liked song',
+            artistName: info.artist || entry.artist || keyArtist || 'Unknown artist',
+            artworkUrl100: info.artworkUrl100 || info.artwork || entry.artwork || entry.artworkUrl100 ||
+              (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : ''),
+            ...(videoId ? { youtubeVideoId: videoId } : {})
+          };
+        });
+    }
+
     async function loadLikedSongs(requestId) {
       genreResults.replaceChildren();
       genreResults.setAttribute('aria-busy', 'true');
@@ -2445,9 +2506,11 @@
           .map((entry) => [entry.track_key, entry]));
         Object.entries(localRatings && typeof localRatings === 'object' ? localRatings : {})
           .filter(([, rating]) => rating === 'up' || rating === 'down')
-          .forEach(([trackKey, rating]) => {
-            if (!accountEntries.has(trackKey)) accountEntries.set(trackKey, { track_key: trackKey, rating });
-          });
+          .forEach(([trackKey, rating]) => accountEntries.set(trackKey, {
+            ...accountEntries.get(trackKey),
+            track_key: trackKey,
+            rating
+          }));
         const songs = [...accountEntries.values()]
           .filter((entry) => entry.rating === 'up')
           .map((entry) => {
@@ -2561,6 +2624,22 @@
             try { localStorage.setItem(cacheKey, JSON.stringify({ etag, ratings })); } catch { /* Use the fetched results for this visit. */ }
           }
         }
+        const ratingByKey = new Map(ratings.map((entry) => [entry.track_key, entry]));
+        getLocalLikedSongs(userId).forEach((song) => {
+          ratingByKey.set(song.trackKey, {
+            ...ratingByKey.get(song.trackKey),
+            track_key: song.trackKey,
+            rating: 'up',
+            title: song.trackName,
+            artist: song.artistName,
+            artwork: song.artworkUrl100,
+            video_id: song.youtubeVideoId || ''
+          });
+        });
+        ratings = [...ratingByKey.values()];
+        if (cacheKey) {
+          try { localStorage.setItem(cacheKey, JSON.stringify({ etag, ratings })); } catch { /* Keep the fetched results for this visit. */ }
+        }
         if (requestId !== genreRequestId || activeGenre !== 'you-like') return;
         const songs = ratings
           .filter((entry) => entry.rating === 'up')
@@ -2611,13 +2690,14 @@
         }
       } catch {
         if (requestId !== genreRequestId || activeGenre !== 'you-like') return;
-        genreTabShuffle = false;
-        genreResults.replaceChildren();
         genreResults.setAttribute('aria-busy', 'false');
-        const error = document.createElement('p');
-        error.className = 'genre-empty';
-        error.textContent = 'No liked songs';
-        genreResults.appendChild(error);
+        const songs = getLocalLikedSongs(userId);
+        currentFavouriteSongs = songs;
+        renderGenreResults(songs);
+        if (!songs.length) {
+          const empty = genreResults.querySelector('.genre-empty');
+          if (empty) empty.textContent = 'No liked songs';
+        }
       }
     }
 
@@ -3545,6 +3625,14 @@
 
       profileButton.addEventListener('click', () => profileDialog.showModal());
       logoutButton.addEventListener('click', () => {
+        try {
+          const localRatings = localStorage.getItem('thaalam24x7-ratings') || '{}';
+          localStorage.setItem('thaalam24x7-ratings:anonymous', localRatings);
+          if (savedProfile?.sub) {
+            localStorage.setItem(`thaalam24x7-ratings:${savedProfile.sub}`, localRatings);
+          }
+          localStorage.setItem('thaalam24x7-ratings-owner', 'anonymous');
+        } catch { /* Keep the active device ratings if storage is unavailable. */ }
         localStorage.removeItem(profileStorageKey);
         sessionStorage.removeItem(accessTokenStorageKey);
         window.location.reload();
