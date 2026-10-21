@@ -1035,6 +1035,18 @@
     let suggestionTimer = 0;
     let genreRequestId = 0;
     let currentFavouriteSongs = [];
+    const pendingFavouriteRatingChanges = new Map();
+    const PENDING_FAVOURITE_CHANGES_KEY = 'thaalam-pending-favourite-changes-v1';
+    try {
+      const savedChanges = JSON.parse(localStorage.getItem(PENDING_FAVOURITE_CHANGES_KEY) || '[]');
+      if (Array.isArray(savedChanges)) {
+        savedChanges.forEach((change) => {
+          if (change?.userId && change?.trackKey) {
+            pendingFavouriteRatingChanges.set(`${change.userId}\n${change.trackKey}`, change);
+          }
+        });
+      }
+    } catch { /* Pending UI overrides remain in memory for this session. */ }
     const FAVOURITE_SORT_KEY = 'thaalam-favourite-sort-v1';
     const FAVOURITE_LAYOUT_KEY = 'thaalam-favourite-layout-v1';
     let favouriteLayout = 'list';
@@ -1463,6 +1475,7 @@
         .filter((entry) => entry.rating === 'up')
         .map((entry) => {
           const trackKey = entry.track_key || '';
+          const updatedAt = Number(entry.updated_at) || 0;
           const candidateVideoId = trackKey.startsWith('youtube:')
             ? (entry.track_id || entry.video_id || trackKey.slice('youtube:'.length))
             : (entry.video_id || '');
@@ -1470,7 +1483,7 @@
           return {
             trackKey,
             trackId: entry.track_id || '',
-            favouritedAt: Number(entry.updated_at) || 0,
+            favouritedAt: updatedAt && updatedAt < 1e12 ? updatedAt * 1000 : updatedAt,
             trackName: entry.title || 'Liked song',
             artistName: entry.artist || 'Unknown artist',
             collectionName: entry.album || '',
@@ -1482,6 +1495,53 @@
             ...(videoId ? { youtubeVideoId: videoId } : {})
           };
         }));
+    }
+
+    function mergePendingFavouriteRatingChanges(entries, userId, { acknowledge = true } = {}) {
+      const merged = (Array.isArray(entries) ? entries : []).map((entry) => ({ ...entry }));
+      let acknowledgedChanges = false;
+      for (const [changeKey, change] of pendingFavouriteRatingChanges) {
+        if (change.userId !== userId) continue;
+        const index = merged.findIndex((entry) => entry.track_key === change.trackKey);
+        const remote = index >= 0 ? merged[index] : null;
+        const acknowledged = change.rating === null
+          ? !remote
+          : remote?.rating === change.rating;
+        if (acknowledged && acknowledge) {
+          pendingFavouriteRatingChanges.delete(changeKey);
+          acknowledgedChanges = true;
+          continue;
+        }
+        if (change.rating === null) {
+          if (index >= 0) merged.splice(index, 1);
+          continue;
+        }
+        const song = change.song || {};
+        const optimisticEntry = {
+          ...(remote || {}),
+          track_key: change.trackKey,
+          track_id: song.providerTrackId || song.trackId || remote?.track_id || '',
+          rating: change.rating,
+          title: song.trackName || remote?.title || 'Liked song',
+          artist: song.artistName || remote?.artist || 'Unknown artist',
+          album: song.collectionName || remote?.album || '',
+          artwork: song.artworkUrl100 || remote?.artwork || '',
+          updated_at: Math.floor(change.changedAt / 1000)
+        };
+        if (index >= 0) merged[index] = optimisticEntry;
+        else merged.push(optimisticEntry);
+      }
+      if (acknowledgedChanges) persistPendingFavouriteRatingChanges();
+      return merged;
+    }
+
+    function persistPendingFavouriteRatingChanges() {
+      try {
+        localStorage.setItem(
+          PENDING_FAVOURITE_CHANGES_KEY,
+          JSON.stringify([...pendingFavouriteRatingChanges.values()])
+        );
+      } catch { /* Keep pending overrides in memory if browser storage is unavailable. */ }
     }
 
     function persistFavouriteArtwork(userId, songs, ratings) {
@@ -2692,7 +2752,7 @@
         });
         if (!response.ok) throw new Error(`Could not load liked songs (${response.status}).`);
         const data = await response.json();
-        const ratings = Array.isArray(data.ratings) ? data.ratings : [];
+        const ratings = mergePendingFavouriteRatingChanges(data.ratings, userId);
         songs = songsFromRatingEntries(ratings);
         try {
           localStorage.setItem(`thaalam.favourites:${userId}`, JSON.stringify({ ratings }));
@@ -2713,8 +2773,18 @@
       if (userId) {
         try {
           const cached = JSON.parse(localStorage.getItem(`thaalam.favourites:${userId}`) || 'null');
-          if (Array.isArray(cached?.ratings)) {
-            currentFavouriteSongs = songsFromRatingEntries(cached.ratings, cached.artworkByTrackKey || {});
+          if (!quiet && Array.isArray(cached?.ratings)) {
+            const cachedRatings = mergePendingFavouriteRatingChanges(cached.ratings, userId, { acknowledge: false });
+            currentFavouriteSongs = songsFromRatingEntries(cachedRatings, cached.artworkByTrackKey || {});
+            if (cachedRatings.length !== cached.ratings.length ||
+                cachedRatings.some((entry, index) => entry.track_key !== cached.ratings[index]?.track_key || entry.rating !== cached.ratings[index]?.rating)) {
+              try {
+                localStorage.setItem(`thaalam.favourites:${userId}`, JSON.stringify({
+                  ...cached,
+                  ratings: cachedRatings
+                }));
+              } catch { /* Continue showing the merged in-memory list. */ }
+            }
             renderGenreResults(currentFavouriteSongs);
             genreResults.setAttribute('aria-busy', 'false');
             renderedAccountCache = true;
@@ -2852,7 +2922,7 @@
         }
         if (!response.ok) throw new Error(`Could not load liked songs (${response.status}).`);
         const data = await response.json();
-        const ratings = Array.isArray(data.ratings) ? data.ratings : [];
+        const ratings = mergePendingFavouriteRatingChanges(data.ratings, userId);
         if (requestId !== genreRequestId || activeGenre !== 'you-like') return;
         let cachedArtworkByTrackKey = {};
         try {
@@ -2912,6 +2982,19 @@
     window.addEventListener('thaalam:rating-changed', (event) => {
       const { trackKey, rating, song } = event.detail || {};
       if (!trackKey || !song) return;
+
+      const userId = window.getThaalamGoogleUserId?.();
+      if (userId) {
+        const changeKey = `${userId}\n${trackKey}`;
+        pendingFavouriteRatingChanges.set(changeKey, {
+          userId,
+          trackKey,
+          rating: rating || null,
+          song: { ...song },
+          changedAt: Date.now()
+        });
+        persistPendingFavouriteRatingChanges();
+      }
 
       if (activeGenre !== 'you-like') return;
       const existingIndex = currentFavouriteSongs.findIndex((item) =>
