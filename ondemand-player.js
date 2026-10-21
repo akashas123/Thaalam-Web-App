@@ -40,6 +40,7 @@ let requestedStartSeconds = 0;
    (currentTime cannot be set before the duration is known). */
 let pendingStartSeconds = -1;
 let pendingShouldPlay = false;
+let autoplayTrackTransition = false;
 let selectedDuration = 0;
 let songRequestId = 0;
 let liveProgressSongKey = '';
@@ -831,7 +832,10 @@ function applyPendingMediaIntent() {
         // Autoplay policy or a transient rejection: stay visibly paused so the
         // listener can press Play (their gesture always succeeds).
         logOnDemand('play() rejected:', error?.name || error);
-        if (window.onDemandPlaybackActive) setOnDemandPlaying(false);
+        if (window.onDemandPlaybackActive) {
+          autoplayTrackTransition = false;
+          setOnDemandPlaying(false);
+        }
       });
     }
   }
@@ -841,6 +845,7 @@ onDemandAudio.addEventListener('loadedmetadata', applyPendingMediaIntent);
 
 onDemandAudio.addEventListener('playing', () => {
   if (!window.onDemandPlaybackActive) return;
+  autoplayTrackTransition = false;
   logOnDemand('playing', onDemandAudio.currentTime.toFixed(1), 's');
   onDemandModeLabel.textContent = 'ON DEMAND';
   syncOnDemandVolumeToStored();
@@ -851,7 +856,7 @@ onDemandAudio.addEventListener('pause', () => {
   // Fires for track swaps, src teardown and listener-initiated pauses alike.
   // By the time a queued pause event lands, returnToLive() has usually already
   // cleared the active flag — this guard keeps teardown from repainting state.
-  if (!window.onDemandPlaybackActive || onDemandAudio.ended) return;
+  if (!window.onDemandPlaybackActive || onDemandAudio.ended || autoplayTrackTransition) return;
   onDemandModeLabel.textContent = 'ON DEMAND';
   setOnDemandPlaying(false);
 });
@@ -872,10 +877,12 @@ onDemandAudio.addEventListener('stalled', () => {
 
 onDemandAudio.addEventListener('ended', () => {
   if (!window.onDemandPlaybackActive) return;
+  autoplayTrackTransition = true;
   onDemandModeLabel.textContent = 'ON DEMAND';
-  setOnDemandPlaying(false);
-  // Autoplay continues into the next queue item; the label is updated by
-  // advanceToSimilarSong() while the related list is being fetched.
+  // Keep the media session marked as playing while autoplay swaps sources.
+  // Marking it paused here can make mobile browsers suspend on-demand playback
+  // in the background before the next track has loaded. The play state is
+  // cleared only if autoplay runs out or a load fails.
   advanceToSimilarSong();
 });
 
@@ -906,6 +913,7 @@ function resumeMobilePlaybackAfterBackground() {
     (Number.isFinite(duration) && duration > 0 &&
       onDemandAudio.currentTime >= duration - 0.35);
   if (reachedTrackEnd) {
+    autoplayTrackTransition = true;
     advanceToSimilarSong();
   } else if (onDemandAudio.paused) {
     const playPromise = onDemandAudio.play();
@@ -967,6 +975,7 @@ async function handlePlaybackError() {
   onDemandMiniToggle.disabled = true;
   onDemandModeLabel.textContent = 'UNAVAILABLE';
   onDemandStation.textContent = 'Playback unavailable';
+  autoplayTrackTransition = false;
   setOnDemandPlaying(false);
   returnToLiveButton.hidden = false;
 }
@@ -1347,10 +1356,12 @@ function advanceToSimilarSong() {
     attempts += 1;
     if (attempts > 100 || (!isFetchingRelated && attempts > 12)) {
       window.clearInterval(autoplayRetryTimer);
+      autoplayTrackTransition = false;
       onDemandModeLabel.textContent = 'ON DEMAND';
       // Surface the reason in the station slot: the mode label is hidden while
       // on-demand is active, so without this the player just stops silently.
       onDemandStation.textContent = 'No more similar songs';
+      setOnDemandPlaying(false);
     }
   }, 250);
 }
@@ -1726,6 +1737,7 @@ function returnToLive() {
   songRequestId += 1;
   // Stop and release the stream so nothing keeps buffering in the background.
   pendingShouldPlay = false;
+  autoplayTrackTransition = false;
   pendingStartSeconds = -1;
   onDemandAudio.pause();
   setOnDemandPlaying(false);
