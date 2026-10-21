@@ -872,10 +872,11 @@ onDemandAudio.addEventListener('error', () => {
   handlePlaybackError();
 });
 
-// Some mobile browsers suspend a PWA's media when the screen is off. Resume
-// only if playback was active before the app was hidden; a user pause or a
-// fresh app launch must remain paused.
-document.addEventListener('visibilitychange', () => {
+// Some mobile browsers suspend a PWA's media when the screen is off, and may
+// restore it through pageshow instead of a visibilitychange event. Resume only
+// if playback was active before the app was hidden; a user pause or a fresh
+// app launch must remain paused.
+function resumeMobilePlaybackAfterBackground() {
   if (!isMobilePlaybackLayout()) return;
   if (document.hidden) {
     mobilePlaybackWasActiveBeforeHide =
@@ -886,7 +887,11 @@ document.addEventListener('visibilitychange', () => {
   mobilePlaybackWasActiveBeforeHide = false;
   if (!window.onDemandPlaybackActive) return;
 
-  if (onDemandAudio.ended) {
+  const duration = Number(onDemandAudio.duration);
+  const reachedTrackEnd = onDemandAudio.ended ||
+    (Number.isFinite(duration) && duration > 0 &&
+      onDemandAudio.currentTime >= duration - 0.35);
+  if (reachedTrackEnd) {
     advanceToSimilarSong();
   } else if (onDemandAudio.paused) {
     const playPromise = onDemandAudio.play();
@@ -896,7 +901,11 @@ document.addEventListener('visibilitychange', () => {
       });
     }
   }
-});
+}
+
+document.addEventListener('visibilitychange', resumeMobilePlaybackAfterBackground);
+window.addEventListener('pageshow', resumeMobilePlaybackAfterBackground);
+document.addEventListener('resume', resumeMobilePlaybackAfterBackground);
 
 /* Called when a stream fails: fall through to the next search result first,
    then ask the server for one fresh stream URL per track (expired CDN links),
@@ -1839,6 +1848,7 @@ window.setInterval(() => {
 }, 500);
 window.addEventListener('pagehide', () => {
   if (isMobilePlaybackLayout() && window.onDemandPlaybackActive) {
+    mobilePlaybackWasActiveBeforeHide ||= window.onDemandPlaying === true;
     pendingShouldPlay = false;
     // Persist a paused restore state for refresh/reopen, but don't pause the
     // live audio element here: mobile browsers can emit pagehide while

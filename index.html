@@ -821,7 +821,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=81"></script>
-  <script src="ondemand-player.js?v=29"></script>
+  <script src="ondemand-player.js?v=30"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=9"></script>
@@ -3633,14 +3633,29 @@
           : {});
       };
 
-      if (savedProfile && !window.getThaalamGoogleAccessToken()) {
-        // Keep the saved account visible without requesting OAuth during app startup.
+      let silentRestoreAttempts = 0;
+      const restoreSavedGoogleSession = () => {
+        if (!savedProfile || window.getThaalamGoogleAccessToken() || silentTokenRequest) return;
+        if (getTokenClient()) {
+          requestGoogleAccess(true);
+          return;
+        }
+        // GIS is loaded asynchronously. Retry briefly so a fresh app session can
+        // restore the existing Google grant before Favourites renders its state.
+        if (silentRestoreAttempts++ < 40) window.setTimeout(restoreSavedGoogleSession, 250);
+      };
+
+      if (savedProfile && typeof savedProfile === 'object') {
         keepSavedAccountVisible();
+        restoreSavedGoogleSession();
+        window.addEventListener('load', restoreSavedGoogleSession, { once: true });
       }
 
       window.addEventListener('thaalam:auth-expired', () => {
         sessionStorage.removeItem(accessTokenStorageKey);
         keepSavedAccountVisible();
+        silentRestoreAttempts = 0;
+        restoreSavedGoogleSession();
       });
 
       if (clientId) {
