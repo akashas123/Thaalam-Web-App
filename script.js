@@ -1299,9 +1299,20 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     navigator.serviceWorker.register('./sw.js')
       .then((registration) => {
-        // Poll for a newer worker so deployed versions reach open tabs without
-        // the user having to close every tab + hard-refresh twice.
-        setInterval(() => registration.update(), 60 * 1000);
+        // Check for deployed updates while the app is in the foreground. A
+        // background PWA can have its network suspended by the browser, which
+        // makes periodic Service Worker script fetches fail noisily.
+        const checkForServiceWorkerUpdate = () => {
+          if (document.visibilityState !== 'visible') return;
+          registration.update().catch(() => {
+            // A temporary update check failure is safe: the current worker
+            // keeps serving the app and visibilitychange will retry on return.
+          });
+        };
+        setInterval(checkForServiceWorkerUpdate, 60 * 1000);
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') checkForServiceWorkerUpdate();
+        });
       })
       .catch((error) => {
         console.log('Service worker registration failed:', error);

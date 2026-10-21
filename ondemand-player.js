@@ -27,10 +27,11 @@ const miniPlayerForProgress = document.getElementById('miniPlayer');
 const onDemandPrevButton = document.getElementById('onDemandPrevButton');
 const onDemandNextButton = document.getElementById('onDemandNextButton');
 
-/* The persistent audio element drives on-demand playback. A standby element
-   warms the next queued track; playback stays on the persistent element so
-   mobile background audio keeps one owner. */
-const onDemandAudio = new Audio();
+/* Two audio elements alternate roles. The standby warms the next track; at a
+   transition it becomes the active element so mobile background playback can
+   continue from already-buffered media instead of loading a new source on the
+   just-ended element. */
+let onDemandAudio = new Audio();
 onDemandAudio.preload = 'auto';
 // Warm the next queue stream while the current track is still playing.
 // Mobile browsers can delay the ended handler in the background, so avoid
@@ -38,12 +39,41 @@ onDemandAudio.preload = 'auto';
 let autoplayPreloadAudio = new Audio();
 autoplayPreloadAudio.preload = 'auto';
 let autoplayPreloadedTrackId = '';
+let autoplayPreloadedStreamUrl = '';
 
 function clearAutoplayPreload() {
   autoplayPreloadAudio.pause();
   autoplayPreloadAudio.removeAttribute('src');
   autoplayPreloadAudio.load();
   autoplayPreloadedTrackId = '';
+  autoplayPreloadedStreamUrl = '';
+}
+
+function promotePreloadedTrack(track) {
+  if (!track?.id || autoplayPreloadedTrackId !== track.id ||
+      autoplayPreloadedStreamUrl !== track.streamUrl ||
+      autoplayPreloadAudio.readyState < HTMLMediaElement.HAVE_FUTURE_DATA ||
+      autoplayPreloadAudio.error) {
+    logOnDemand('next-track preload not ready for handoff', {
+      trackId: track?.id || '',
+      preloadedTrackId: autoplayPreloadedTrackId,
+      readyState: autoplayPreloadAudio.readyState
+    });
+    return false;
+  }
+
+  const previousAudio = onDemandAudio;
+  onDemandAudio = autoplayPreloadAudio;
+  autoplayPreloadAudio = previousAudio;
+  autoplayPreloadAudio.pause();
+  autoplayPreloadAudio.removeAttribute('src');
+  autoplayPreloadAudio.load();
+  autoplayPreloadAudio.preload = 'auto';
+  autoplayPreloadedTrackId = '';
+  autoplayPreloadedStreamUrl = '';
+  syncOnDemandVolumeToStored();
+  logOnDemand('promoted buffered next track', track.id);
+  return true;
 }
 
 let requestedTrackId = '';
@@ -902,6 +932,7 @@ function bindOnDemandAudioEvents(audio) {
 }
 
 bindOnDemandAudioEvents(onDemandAudio);
+bindOnDemandAudioEvents(autoplayPreloadAudio);
 
 // Some mobile browsers suspend a PWA's media when the screen is off, and may
 // restore it through pageshow instead of a visibilitychange event. Resume only
@@ -1380,6 +1411,7 @@ function preloadNextAutoplayTrack() {
 function preloadTrackAudio(track) {
   if (!track?.id || !track.streamUrl || track.id === autoplayPreloadedTrackId) return;
   autoplayPreloadedTrackId = track.id;
+  autoplayPreloadedStreamUrl = track.streamUrl;
   autoplayPreloadAudio.src = track.streamUrl;
   // Explicit load() asks the browser to start buffering this media now while
   // the active audio element continues playing the current song.
@@ -1540,6 +1572,7 @@ async function playRelatedTrack(track) {
     updateOnDemandMetadata(song, { id: track.id, title: track.title, artist: track.artist, album: track.album, thumbnail: track.thumbnail });
   });
   prefetchUpcomingTrackArtwork();
+  promotePreloadedTrack(track);
   await loadTrack(trackCandidates[0] || { id: track.id, streamUrl: track.streamUrl }, requestId);
   if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
   updatePlaybackProgress();
@@ -1673,6 +1706,7 @@ async function startOnDemandSong(song, {
     persistCurrentOnDemandSession();
     updateOnDemandMetadata(song, track);
     preloadNextLikedQueueTrack(onDemandQueueIndex);
+    promotePreloadedTrack(track);
     await loadTrack(trackCandidates[0] || { id: track.id, streamUrl: track.streamUrl }, requestId);
     if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
     updatePlaybackProgress();
