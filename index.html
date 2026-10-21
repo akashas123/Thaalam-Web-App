@@ -821,7 +821,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=81"></script>
-  <script src="ondemand-player.js?v=22"></script>
+  <script src="ondemand-player.js?v=24"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=9"></script>
@@ -1511,7 +1511,10 @@
       );
     }
 
+    let homeTintSampleRequest = 0;
+
     function sampleHomeTint(url) {
+      const requestId = ++homeTintSampleRequest;
       // No fallback glow: empty grids, missing art, and CORS-blocked probes
       // keep Home flat dark. Only a successfully sampled color adds the wash.
       setHomeTint('');
@@ -1520,11 +1523,13 @@
       probe.crossOrigin = 'anonymous';
       probe.decoding = 'async';
       probe.onerror = () => {
+        if (requestId !== homeTintSampleRequest) return;
         // CORS-blocked art (e.g. some chart images) still gets a soft
         // neutral glow from the blurred ::before layer alone — leave the
         // wash cleared so it can't mismatch the real cover.
       };
       probe.onload = () => {
+        if (requestId !== homeTintSampleRequest) return;
         try {
           const canvas = document.createElement('canvas');
           canvas.width = 32;
@@ -1994,7 +1999,16 @@
     let mobileHomeGenresLoaded = false;
     let mobileHomeGenresRequest = 0;
 
-    function renderMobileHomeGenreRow(category, songs) {
+    function shuffleMobileItems(items) {
+      const shuffled = items.slice();
+      for (let index = shuffled.length - 1; index > 0; index -= 1) {
+        const swapIndex = Math.floor(Math.random() * (index + 1));
+        [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+      }
+      return shuffled;
+    }
+
+    function renderMobileHomeGenreRow(category, songs, { shuffle = true, all = false } = {}) {
       const section = document.createElement('section');
       section.className = 'mobile-genre-row';
       section.setAttribute('aria-label', `${category.title} songs`);
@@ -2002,7 +2016,8 @@
       heading.textContent = category.title;
       const trackRow = document.createElement('div');
       trackRow.className = 'mobile-genre-track-row';
-      songs.slice(0, 10).forEach((song) => {
+      const tracks = shuffle ? shuffleMobileItems(songs) : songs.slice();
+      (all ? tracks : tracks.slice(0, 10)).forEach((song) => {
         const card = document.createElement('article');
         card.className = 'mobile-genre-track';
         const play = document.createElement('button');
@@ -2049,13 +2064,29 @@
       return section;
     }
 
+    function updateMobileRecents() {
+      const shelves = document.getElementById('mobileGenreShelves');
+      if (!shelves || desktopNavigation.matches) return;
+      shelves.querySelector('.mobile-recents-row')?.remove();
+      const songs = window.getOnDemandHistory?.() || [];
+      if (!songs.length) return;
+      const recents = renderMobileHomeGenreRow(
+        { title: 'Recents' }, songs.slice(0, 10), { shuffle: false, all: true }
+      );
+      recents.classList.add('mobile-recents-row');
+      shelves.prepend(recents);
+      updateHomeTint([songs[0]]);
+    }
+
     async function loadMobileHomeGenres() {
       const shelves = document.getElementById('mobileGenreShelves');
       if (!shelves || mobileHomeGenresLoaded) return;
       mobileHomeGenresLoaded = true;
       const requestId = ++mobileHomeGenresRequest;
+      const categories = shuffleMobileItems(mobileHomeGenreRows);
       shelves.replaceChildren();
-      const placeholders = mobileHomeGenreRows.map((category) => {
+      updateMobileRecents();
+      const placeholders = categories.map((category) => {
         const section = document.createElement('section');
         section.className = 'mobile-genre-row';
         const loadingArt = '<article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art" aria-hidden="true"></div></article>'.repeat(4);
@@ -2063,15 +2094,18 @@
         shelves.appendChild(section);
         return section;
       });
-      const results = await Promise.all(mobileHomeGenreRows.map((category) =>
+      const results = await Promise.all(categories.map((category) =>
         searchGenreChart(genreFeedIds[category.key], requestId, 10).catch(() => [])
       ));
       if (requestId !== mobileHomeGenresRequest) return;
       updateHomeTint(results[0] || []);
       results.forEach((songs, index) => {
-        placeholders[index].replaceWith(renderMobileHomeGenreRow(mobileHomeGenreRows[index], songs));
+        placeholders[index].replaceWith(renderMobileHomeGenreRow(categories[index], songs));
       });
+      updateMobileRecents();
     }
+
+    window.addEventListener('thaalam-on-demand-history-change', updateMobileRecents);
 
     // Prefer official title matches over "(From "Album")" album references:
     // a query matching the song's core title (parentheticals stripped) ranks

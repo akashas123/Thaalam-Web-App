@@ -105,6 +105,7 @@ function updateNowPlayingSubtitle(isOnDemand) {
    v1 held YouTube video ids that this player can no longer play, so the key
    was bumped and stale v1/v2-era payloads are dropped on read. */
 const ON_DEMAND_STORAGE_KEY = 'thaalam-on-demand-session-v2';
+const ON_DEMAND_RECENTS_KEY = 'thaalam-on-demand-recents-v1';
 const PLAYBACK_MODE_STORAGE_KEY = 'thaalam-playback-mode-v1';
 const LEGACY_ON_DEMAND_STORAGE_KEYS = ['thaalam-on-demand-session-v1'];
 const MUSIC_SEARCH_CACHE_PREFIX = 'thaalam-jiosaavn-search-v1:';
@@ -118,6 +119,29 @@ const ON_DEMAND_DEBUG = true;
 const logOnDemand = (...parts) => {
   if (ON_DEMAND_DEBUG) console.log('[on-demand]', ...parts);
 };
+
+let onDemandRecentHistory = [];
+try {
+  const storedRecents = JSON.parse(localStorage.getItem(ON_DEMAND_RECENTS_KEY) || '[]');
+  if (Array.isArray(storedRecents)) {
+    onDemandRecentHistory = storedRecents
+      .filter((song) => song && typeof song.trackName === 'string' && song.trackName.trim())
+      .slice(0, 10);
+  }
+} catch { /* Recent tracks remain available for this visit if storage is blocked. */ }
+
+function rememberOnDemandSong(song) {
+  const identity = (entry) => `${entry.trackName || ''}\n${entry.artistName || ''}`.toLowerCase();
+  const key = identity(song);
+  onDemandRecentHistory = [
+    { ...song },
+    ...onDemandRecentHistory.filter((entry) => identity(entry) !== key)
+  ].slice(0, 10);
+  try {
+    localStorage.setItem(ON_DEMAND_RECENTS_KEY, JSON.stringify(onDemandRecentHistory));
+  } catch { /* Keep the in-memory recents list for this visit. */ }
+  window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
+}
 
 function savePlaybackMode(mode) {
   try {
@@ -985,6 +1009,7 @@ function enqueueOnDemandSong(song) {
   onDemandQueue = onDemandQueue.slice(0, onDemandQueueIndex + 1);
   onDemandQueue.push(song);
   onDemandQueueIndex = onDemandQueue.length - 1;
+  window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
 }
 
 function updateTransportButtonState() {
@@ -1043,13 +1068,18 @@ function skipOnDemandSong(offset) {
   if (!nextSong) return;
 
   onDemandQueueIndex = nextIndex;
+  window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
   onDemandQueueSource = onDemandFavouriteQueueLength > 0 && nextIndex < onDemandFavouriteQueueLength
     ? 'favourites'
     : 'autoplay';
   updateTransportButtonState();
   // Skips stay in the listener's current view; only fresh picks open Now
   // Playing (see startOnDemandSong).
-  startOnDemandSong(nextSong, { preserveQueue: true, openNowPlaying: false });
+  startOnDemandSong(nextSong, {
+    preserveQueue: true,
+    openNowPlaying: false,
+    recordRecent: false
+  });
 }
 
 onDemandPrevButton?.addEventListener('click', () => skipOnDemandSong(-1));
@@ -1216,6 +1246,7 @@ async function playRelatedTrack(track) {
   selectedDuration = track.durationSeconds || parseDurationString(track.duration) || 0;
   onDemandQueue.push(song);
   onDemandQueueIndex = onDemandQueue.length - 1;
+  window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
   updateNowPlayingSubtitle(true);
   updateTransportButtonState();
 
@@ -1250,7 +1281,11 @@ async function playRelatedTrack(track) {
   prefetchRelatedTracks(track.id);
 }
 
-async function startOnDemandSong(song, { preserveQueue = false, openNowPlaying = true } = {}) {
+async function startOnDemandSong(song, {
+  preserveQueue = false,
+  openNowPlaying = true,
+  recordRecent = !preserveQueue
+} = {}) {
   if (!song?.trackName) return;
   // Ratings-backed favourites may contain partial or older metadata. Keep the
   // player input shape consistent before artwork lookup, search, and queueing.
@@ -1295,6 +1330,7 @@ async function startOnDemandSong(song, { preserveQueue = false, openNowPlaying =
   const requestId = ++songRequestId;
   selectedDuration = Number(song.trackTimeMillis) / 1000 || 0;
   enqueueOnDemandSong(song);
+  if (recordRecent) rememberOnDemandSong(song);
   updateTransportButtonState();
   resetScrub();
   window.onDemandPlaybackActive = true;
@@ -1401,7 +1437,8 @@ function startOnDemandQueue(songs, startIndex = 0, options = {}) {
 
   return startOnDemandSong(queue[selectedIndex], {
     ...options,
-    preserveQueue: true
+    preserveQueue: true,
+    recordRecent: true
   });
 }
 
@@ -1592,6 +1629,8 @@ window.returnToLive = returnToLive;
 window.getCurrentOnDemandSong = () => currentOnDemandSong
   ? { ...currentOnDemandSong, youtubeVideoId: currentOnDemandSong.youtubeVideoId || '' }
   : null;
+window.getOnDemandHistory = () => onDemandRecentHistory
+  .map((song) => ({ ...song }));
 
 /* Mute/unmute the on-demand audio element. */
 window.setOnDemandMuted = (muted) => {
