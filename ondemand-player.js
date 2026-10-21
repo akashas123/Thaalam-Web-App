@@ -1032,6 +1032,27 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
 
   if (!sameSource) onDemandAudio.src = requestedStreamUrl;
   onDemandAudio.load();
+
+  // Request playback as soon as the next source is installed. Waiting until
+  // loadedmetadata to call play() can leave mobile browsers silent in the
+  // background: some defer that event until the screen wakes, even though the
+  // queue and Media Session metadata have already advanced. Playback can be
+  // requested before metadata; applyPendingMediaIntent() still performs any
+  // pending seek when metadata arrives.
+  if (shouldPlay) {
+    pendingShouldPlay = false;
+    const playPromise = onDemandAudio.play();
+    if (playPromise) {
+      playPromise.catch((error) => {
+        if (requestId !== songRequestId || !window.onDemandPlaybackActive ||
+            error?.name === 'AbortError') return;
+        logOnDemand('play() rejected during track load:', error?.name || error);
+        autoplayTrackTransition = false;
+        setOnDemandPlaying(false);
+      });
+    }
+  }
+
   await metadataPromise;
 }
 
