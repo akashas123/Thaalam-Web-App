@@ -85,6 +85,9 @@ let relatedTrackCursor = 0;
 let isFetchingRelated = false;
 let prefetchToken = 0;
 let autoplayRetryTimer = 0;
+let autoplayPrefetchRetryTimer = 0;
+let autoplayPrefetchRetryAttempt = 0;
+let autoplayPrefetchFailed = false;
 let autoplayAnchorTrackId = '';
 let mobilePlaybackWasActiveBeforeHide = false;
 /* The JioSaavn song-radio station currently driving the continuation queue.
@@ -911,6 +914,11 @@ function resumeMobilePlaybackAfterBackground() {
       Boolean(window.onDemandPlaybackActive && window.onDemandPlaying);
     return;
   }
+  if (autoplayPrefetchFailed && !isFetchingRelated && currentOnDemandTrackId) {
+    window.clearTimeout(autoplayPrefetchRetryTimer);
+    autoplayPrefetchRetryTimer = 0;
+    prefetchRelatedTracks(currentOnDemandTrackId, true);
+  }
   if (!mobilePlaybackWasActiveBeforeHide) return;
   mobilePlaybackWasActiveBeforeHide = false;
   if (!window.onDemandPlaybackActive) return;
@@ -1271,22 +1279,42 @@ onDemandNextButton?.addEventListener('click', () => skipOnDemandSong(1));
    musical style after each transition on both mobile and desktop. */
 async function fetchRelatedTracks(trackId) {
   if (!trackId) return [];
-  try {
-    if (onDemandQueueSource === 'favourites') autoplayAnchorTrackId = trackId;
-    if (!autoplayAnchorTrackId) autoplayAnchorTrackId = trackId;
-    const queue = await fetchAutoplayQueue(autoplayAnchorTrackId);
-    if (queue.stationid) radioStationId = queue.stationid;
-    return queue.tracks.filter((track) => track.id && !playedTrackIds.has(track.id) &&
-      !NON_CATALOG_TITLE.test(track.title) && !UNOFFICIAL_MIX_TITLE.test(track.title));
-  } catch (error) {
-    console.warn('Autoplay: Failed.', error);
-    return [];
+  if (onDemandQueueSource === 'favourites') autoplayAnchorTrackId = trackId;
+  if (!autoplayAnchorTrackId) autoplayAnchorTrackId = trackId;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const queue = await fetchAutoplayQueue(autoplayAnchorTrackId);
+      if (queue.stationid) radioStationId = queue.stationid;
+      return queue.tracks.filter((track) => track.id && !playedTrackIds.has(track.id) &&
+        !NON_CATALOG_TITLE.test(track.title) && !UNOFFICIAL_MIX_TITLE.test(track.title));
+    } catch (error) {
+      console.warn(
+        `Autoplay recommendations request failed (${attempt + 1}/3):`,
+        error?.name || 'Error',
+        error?.message || String(error),
+        `visibility=${document.visibilityState}`,
+        `online=${navigator.onLine}`
+      );
+      if (attempt < 2) {
+        await new Promise((resolve) => window.setTimeout(resolve, 700 * (attempt + 1)));
+      }
+    }
   }
+
+  return null;
 }
 
 /* Kicks off a background queue lookup as soon as the current track starts. */
-function prefetchRelatedTracks(trackId) {
+function prefetchRelatedTracks(trackId, isRetry = false) {
   if (!trackId) return;
+
+  if (!isRetry) {
+    window.clearTimeout(autoplayPrefetchRetryTimer);
+    autoplayPrefetchRetryTimer = 0;
+    autoplayPrefetchRetryAttempt = 0;
+    autoplayPrefetchFailed = false;
+  }
 
   const token = ++prefetchToken;
   isFetchingRelated = true;
@@ -1295,7 +1323,38 @@ function prefetchRelatedTracks(trackId) {
     .then((tracks) => {
       // Ignore a response for a track the listener has already moved past.
       if (token !== prefetchToken) return;
-      relatedTrackCache = tracks.filter((track) => !playedTrackIds.has(track.id));
+
+      if (!Array.isArray(tracks)) {
+        // Keep any already-buffered, unplayed recommendations. A transient
+        // fetch failure must not turn a usable queue into an empty one.
+        autoplayPrefetchFailed = true;
+        autoplayPrefetchRetryAttempt += 1;
+        const retryDelay = Math.min(30000, 1000 * (2 ** Math.min(autoplayPrefetchRetryAttempt - 1, 5)));
+        window.clearTimeout(autoplayPrefetchRetryTimer);
+        autoplayPrefetchRetryTimer = window.setTimeout(() => {
+          autoplayPrefetchRetryTimer = 0;
+          if (window.onDemandPlaybackActive && currentOnDemandTrackId) {
+            prefetchRelatedTracks(currentOnDemandTrackId, true);
+          }
+        }, retryDelay);
+        updateTransportButtonState();
+        return;
+      }
+
+      autoplayPrefetchFailed = false;
+      autoplayPrefetchRetryAttempt = 0;
+      window.clearTimeout(autoplayPrefetchRetryTimer);
+      autoplayPrefetchRetryTimer = 0;
+      const pendingTracks = [
+        ...relatedTrackCache.slice(relatedTrackCursor),
+        ...tracks
+      ];
+      const seenTrackIds = new Set();
+      relatedTrackCache = pendingTracks.filter((track) => {
+        if (!track?.id || playedTrackIds.has(track.id) || seenTrackIds.has(track.id)) return false;
+        seenTrackIds.add(track.id);
+        return true;
+      });
       relatedTrackCursor = 0;
       prefetchUpcomingTrackArtwork();
       if (onDemandQueueSource === 'favourites' &&
@@ -1405,8 +1464,8 @@ function advanceToSimilarSong() {
     return;
   }
 
-  // The prefetch has not landed yet (or returned no eligible tracks). Retry briefly rather
-  // than leaving the listener at a silent dead end, then say so on screen.
+  // The prefetch has not landed yet (or returned no eligible tracks). Wait for
+  // the in-flight request or a scheduled transient-error retry before stopping.
   let attempts = 0;
   window.clearInterval(autoplayRetryTimer);
   autoplayRetryTimer = window.setInterval(() => {
@@ -1426,6 +1485,12 @@ function advanceToSimilarSong() {
 
     attempts += 1;
     if (attempts > 100 || (!isFetchingRelated && attempts > 12)) {
+      if (autoplayPrefetchFailed) {
+        // A failed recommendation request is transient; leave the player in
+        // its waiting state while the scheduled retry rebuilds the queue.
+        attempts = 0;
+        return;
+      }
       window.clearInterval(autoplayRetryTimer);
       autoplayTrackTransition = false;
       onDemandModeLabel.textContent = 'ON DEMAND';
@@ -1515,6 +1580,10 @@ async function startOnDemandSong(song, {
       relatedTrackCache = [];
       relatedTrackCursor = 0;
       isFetchingRelated = false;
+      window.clearTimeout(autoplayPrefetchRetryTimer);
+      autoplayPrefetchRetryTimer = 0;
+      autoplayPrefetchRetryAttempt = 0;
+      autoplayPrefetchFailed = false;
       autoplayAnchorTrackId = '';
       prefetchToken += 1;
     }
@@ -1647,6 +1716,10 @@ function startOnDemandQueue(songs, startIndex = 0, options = {}) {
   relatedTrackCache = [];
   relatedTrackCursor = 0;
   isFetchingRelated = false;
+  window.clearTimeout(autoplayPrefetchRetryTimer);
+  autoplayPrefetchRetryTimer = 0;
+  autoplayPrefetchRetryAttempt = 0;
+  autoplayPrefetchFailed = false;
   autoplayAnchorTrackId = '';
   prefetchToken += 1;
   prepareLikedQueue(queue, selectedIndex);
@@ -1826,6 +1899,10 @@ function returnToLive() {
   // Cancel any in-flight related-tracks lookup so a late response cannot
   // restart on-demand playback after the listener has gone back to live.
   window.clearInterval(autoplayRetryTimer);
+  window.clearTimeout(autoplayPrefetchRetryTimer);
+  autoplayPrefetchRetryTimer = 0;
+  autoplayPrefetchRetryAttempt = 0;
+  autoplayPrefetchFailed = false;
   prefetchToken += 1;
   relatedTrackCache = [];
   relatedTrackCursor = 0;

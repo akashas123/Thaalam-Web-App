@@ -524,6 +524,9 @@ export async function handleAutoplay(request, env = {}) {
   const k = Math.max(1, Math.min(50, Number(url.searchParams.get('k')) || 30));
 
   const radio = await fetchProviderRadioSongs(id, k, env);
+  if (!radio.songs.length) {
+    return providerErrorResponse('JioSaavn autoplay recommendations are temporarily unavailable.');
+  }
   return Response.json(
     { results: radio.songs, stationid: radio.stationid || undefined },
     { headers: { 'Cache-Control': 'no-store' } }
