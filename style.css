@@ -4253,6 +4253,9 @@ body.has-lyrics .lyrics-panel {
   .mobile-recents-row .mobile-genre-track-row { gap: 0.75rem; }
   .mobile-recents-row .mobile-genre-track { width: 5.5rem; flex-basis: 5.5rem; }
   .mobile-recents-row .mobile-genre-track-art { width: 5.5rem; min-width: 5.5rem; height: 5.5rem; min-height: 5.5rem; flex-basis: 5.5rem; }
+  .mobile-recents-row .mobile-genre-track-art.is-liked-folder-recent { display: grid; place-items: center; background: linear-gradient(145deg, #e94d89, #70216f 82%); }
+  .mobile-recents-row .mobile-genre-track-art.is-liked-folder-recent svg { width: 1.6rem; height: 1.6rem; fill: #fff; }
+  .mobile-recents-row .mobile-genre-track.is-liked-folder-recent .mobile-genre-track-artist { display: none; }
   .mobile-genre-track { width: 8.5rem; flex: 0 0 8.5rem; }
   .mobile-genre-track-art { display: block; width: 8.5rem; min-width: 8.5rem; height: 8.5rem; min-height: 8.5rem; aspect-ratio: 1 / 1; flex: 0 0 8.5rem; overflow: hidden; border: 0; border-radius: 0.55rem; background: #111 url('album-placeholder.svg?v=3') center / cover no-repeat; }
   .mobile-genre-track-art img { display: block; width: 100%; height: 100%; aspect-ratio: 1 / 1; object-fit: cover; opacity: 0; transition: opacity 0.16s ease; }

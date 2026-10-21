@@ -107,6 +107,7 @@ function updateNowPlayingSubtitle(isOnDemand) {
 const ON_DEMAND_STORAGE_KEY = 'thaalam-on-demand-session-v2';
 const ON_DEMAND_RECENTS_KEY = 'thaalam-on-demand-recents-v1';
 const PLAYBACK_MODE_STORAGE_KEY = 'thaalam-playback-mode-v1';
+const isMobilePlaybackLayout = () => window.matchMedia('(max-width: 56.1875rem)').matches;
 const LEGACY_ON_DEMAND_STORAGE_KEYS = ['thaalam-on-demand-session-v1'];
 const MUSIC_SEARCH_CACHE_PREFIX = 'thaalam-jiosaavn-search-v1:';
 const MUSIC_SEARCH_CACHE_TTL = 6 * 60 * 60 * 1000;
@@ -130,12 +131,19 @@ try {
   }
 } catch { /* Recent tracks remain available for this visit if storage is blocked. */ }
 
-function rememberOnDemandSong(song) {
-  const identity = (entry) => `${entry.trackName || ''}\n${entry.artistName || ''}`.toLowerCase();
-  const key = identity(song);
+function rememberOnDemandSong(song, { fromLikedFolder = false } = {}) {
+  const recentSong = fromLikedFolder
+    ? { ...song, recentDisplayType: 'liked-folder', recentDisplayName: 'Liked Songs', recentDisplayArtist: 'Your library' }
+    : { ...song };
+  const identity = (entry) => entry.recentDisplayType === 'liked-folder'
+    ? 'liked-folder'
+    : `${entry.trackName || ''}\n${entry.artistName || ''}`.toLowerCase();
+  const key = identity(recentSong);
+  const playedSongKey = `${song.trackName || ''}\n${song.artistName || ''}`.toLowerCase();
   onDemandRecentHistory = [
-    { ...song },
-    ...onDemandRecentHistory.filter((entry) => identity(entry) !== key)
+    recentSong,
+    ...onDemandRecentHistory.filter((entry) =>
+      identity(entry) !== key && !(fromLikedFolder && identity(entry) === playedSongKey))
   ].slice(0, 10);
   try {
     localStorage.setItem(ON_DEMAND_RECENTS_KEY, JSON.stringify(onDemandRecentHistory));
@@ -1346,7 +1354,11 @@ async function startOnDemandSong(song, {
   const requestId = ++songRequestId;
   selectedDuration = Number(song.trackTimeMillis) / 1000 || 0;
   enqueueOnDemandSong(song);
-  if (recordRecent) rememberOnDemandSong(song);
+  if (recordRecent) {
+    const fromLikedFolder = song.recentDisplayType === 'liked-folder' ||
+      (preserveQueue && onDemandQueueSource === 'favourites');
+    rememberOnDemandSong(song, { fromLikedFolder });
+  }
   updateTransportButtonState();
   resetScrub();
   window.onDemandPlaybackActive = true;
@@ -1494,7 +1506,10 @@ async function restoreOnDemandSession() {
 
   const song = stored.song;
   savePlaybackMode('on-demand');
-  const shouldResume = stored.playing === true;
+  // Mobile restores the current track and queue paused. Playback must require
+  // an explicit tap after a refresh or app reopen; desktop keeps its prior
+  // resume behavior.
+  const shouldResume = stored.playing === true && !isMobilePlaybackLayout();
   // Keep the session's navigation history across refreshes. Entries without a
   // track name are dropped; entries missing a resolved stream re-search on tap.
   const savedQueue = Array.isArray(stored.queue)
@@ -1654,6 +1669,9 @@ window.getCurrentOnDemandSong = () => currentOnDemandSong
   : null;
 window.getOnDemandHistory = () => onDemandRecentHistory
   .map((song) => ({ ...song }));
+window.recordOnDemandLikedRecent = (song) => {
+  if (song?.trackName) rememberOnDemandSong(song, { fromLikedFolder: true });
+};
 
 /* Mute/unmute the on-demand audio element. */
 window.setOnDemandMuted = (muted) => {
@@ -1753,7 +1771,14 @@ window.setInterval(() => {
     persistCurrentOnDemandSession();
   }
 }, 500);
-window.addEventListener('pagehide', persistCurrentOnDemandSession);
+window.addEventListener('pagehide', () => {
+  if (isMobilePlaybackLayout() && window.onDemandPlaybackActive) {
+    pendingShouldPlay = false;
+    onDemandAudio.pause();
+    setOnDemandPlaying(false);
+  }
+  persistCurrentOnDemandSession();
+});
 
 /* On-demand survives a refresh, so it is restored on load. This runs on
    DOMContentLoaded (rather than inline) so the live-radio startup in script.js

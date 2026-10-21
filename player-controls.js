@@ -619,6 +619,7 @@ async function syncRatingsFromCloud() {
     savePendingRatingDeletes(pendingDeletes, userId);
     if (owner === 'anonymous') savePendingRatingDeletes(new Set(), 'anonymous');
 
+    const importingLocalRatings = owner !== userId;
     // Guest likes stay in the active device list and merge into the account.
     // Switching directly between Google accounts still restores that account's
     // own device cache instead of copying another account's likes across.
@@ -636,7 +637,13 @@ async function syncRatingsFromCloud() {
       }
       saveStoredRatings(localRatings);
     }
-    const localEntries = Object.entries(localRatings)
+    if (!importingLocalRatings) {
+      // Once this device belongs to the signed-in account, the server is the
+      // source of truth. Never re-upload stale browser likes over cloud unlikes.
+      localRatings = { ...remoteRatings };
+      saveStoredRatings(localRatings);
+    }
+    const localEntries = (importingLocalRatings ? Object.entries(localRatings) : [])
       .filter(([, rating]) => rating === 'up' || rating === 'down')
       .slice(0, 500);
     let songInfoCache = {};

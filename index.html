@@ -22,7 +22,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=410">
+  <link rel="stylesheet" href="style.css?v=413">
   <link rel="icon" type="image/png" href="icon-512.png?v=4">
   <link rel="apple-touch-icon" href="icon-192.png?v=4">
 
@@ -821,11 +821,11 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=81"></script>
-  <script src="ondemand-player.js?v=25"></script>
+  <script src="ondemand-player.js?v=27"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=9"></script>
-  <script src="player-controls.js?v=39"></script>
+  <script src="player-controls.js?v=40"></script>
   <script src="lyrics.js?v=40"></script>
   <script src="/google-auth-config.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -1706,6 +1706,7 @@
         playButton.title = 'Play on demand';
         playButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
         playButton.addEventListener('click', () => {
+          if (activeGenre === 'you-like') window.recordOnDemandLikedRecent?.(song);
           const current = window.onDemandPlaybackActive
             ? window.getCurrentOnDemandSong?.()
             : null;
@@ -2045,34 +2046,50 @@
         const play = document.createElement('button');
         play.type = 'button';
         play.className = 'mobile-genre-track-art';
-        play.setAttribute('aria-label', `Play ${song.trackName || 'song'} on demand`);
-        const artwork = document.createElement('img');
-        const placeholderArtwork = 'album-placeholder.svg?v=3';
-        const artworkUrl = song.artworkUrl100
-          ? song.artworkUrl100.replace(/^http:/, 'https:').replace(/\d+x\d+bb\./, '600x600bb.')
-          : placeholderArtwork;
-        artwork.addEventListener('load', () => play.classList.add('has-artwork'));
-        artwork.addEventListener('error', () => {
-          if (artwork.dataset.fallbackApplied) {
-            play.classList.add('has-artwork');
+        const isLikedFolderRecent = category.title === 'Recents' && song.recentDisplayType === 'liked-folder';
+        if (isLikedFolderRecent) card.classList.add('is-liked-folder-recent');
+        play.setAttribute('aria-label', isLikedFolderRecent
+          ? 'Play Liked Songs'
+          : `Play ${song.trackName || 'song'} on demand`);
+        if (isLikedFolderRecent) {
+          play.classList.add('is-liked-folder-recent');
+          play.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 4.6a5.4 5.4 0 0 0-7.6 0L12 5.8l-1.2-1.2a5.4 5.4 0 0 0-7.6 7.6l1.2 1.2L12 21l7.6-7.6 1.2-1.2a5.4 5.4 0 0 0 0-7.6Z"/></svg>';
+        } else {
+          const artwork = document.createElement('img');
+          const placeholderArtwork = 'album-placeholder.svg?v=3';
+          const artworkUrl = song.artworkUrl100
+            ? song.artworkUrl100.replace(/^http:/, 'https:').replace(/\d+x\d+bb\./, '600x600bb.')
+            : placeholderArtwork;
+          artwork.addEventListener('load', () => play.classList.add('has-artwork'));
+          artwork.addEventListener('error', () => {
+            if (artwork.dataset.fallbackApplied) {
+              play.classList.add('has-artwork');
+              return;
+            }
+            artwork.dataset.fallbackApplied = 'true';
+            artwork.src = placeholderArtwork;
+          });
+          artwork.src = artworkUrl;
+          artwork.alt = '';
+          artwork.loading = 'lazy';
+          play.appendChild(artwork);
+        }
+        play.addEventListener('click', () => {
+          if (isLikedFolderRecent) {
+            play.disabled = true;
+            void window.playLikedSongsQueue?.()
+              .catch((error) => console.warn('Could not start the Liked Songs queue.', error))
+              .finally(() => { play.disabled = false; });
             return;
           }
-          artwork.dataset.fallbackApplied = 'true';
-          artwork.src = placeholderArtwork;
-        });
-        artwork.src = artworkUrl;
-        artwork.alt = '';
-        artwork.loading = 'lazy';
-        play.appendChild(artwork);
-        play.addEventListener('click', () => {
           window.startOnDemandSong?.(song, { openNowPlaying: false });
         });
         const title = document.createElement('p');
         title.className = 'mobile-genre-track-title';
-        title.textContent = song.trackName || 'Unknown song';
+        title.textContent = isLikedFolderRecent ? song.recentDisplayName : (song.trackName || 'Unknown song');
         const artist = document.createElement('p');
         artist.className = 'mobile-genre-track-artist';
-        artist.textContent = song.artistName || 'Unknown artist';
+        artist.textContent = isLikedFolderRecent ? song.recentDisplayArtist : (song.artistName || 'Unknown artist');
         card.append(play, title, artist);
         trackRow.appendChild(card);
       });
@@ -2487,12 +2504,58 @@
         });
     }
 
-    async function loadLikedSongs(requestId) {
-      genreResults.replaceChildren();
-      genreResults.setAttribute('aria-busy', 'true');
+    async function playLikedSongsQueue() {
       const token = window.getThaalamGoogleAccessToken?.();
       const userId = window.getThaalamGoogleUserId?.();
-      if (!token || !userId) {
+      let songs;
+      if (token && userId) {
+        const response = await fetch('/api/ratings', {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store'
+        });
+        if (!response.ok) throw new Error(`Could not load liked songs (${response.status}).`);
+        const data = await response.json();
+        songs = (Array.isArray(data.ratings) ? data.ratings : [])
+          .filter((entry) => entry.rating === 'up')
+          .map((entry) => {
+            const trackKey = entry.track_key || '';
+            const youtubeVideoId = trackKey.startsWith('youtube:')
+              ? trackKey.slice('youtube:'.length)
+              : '';
+            return {
+              trackKey,
+              trackName: entry.title || 'Liked song',
+              artistName: entry.artist || 'Unknown artist',
+              collectionName: entry.album || '',
+              providerTrackId: youtubeVideoId ? '' : (entry.track_id || entry.provider_track_id || ''),
+              artworkUrl100: entry.artwork || '',
+              ...(youtubeVideoId ? { youtubeVideoId } : {})
+            };
+          });
+      } else {
+        songs = getLocalLikedSongs(userId);
+      }
+      if (!songs?.length) return;
+      window.startOnDemandQueue?.(sortFavouriteSongs(songs), 0, { openNowPlaying: false });
+    }
+    window.playLikedSongsQueue = playLikedSongsQueue;
+
+    async function loadLikedSongs(requestId, { quiet = false } = {}) {
+      if (!quiet) {
+        genreResults.replaceChildren();
+        genreResults.setAttribute('aria-busy', 'true');
+      }
+      const token = window.getThaalamGoogleAccessToken?.();
+      const userId = window.getThaalamGoogleUserId?.();
+      if (userId && !token) {
+        genreResults.setAttribute('aria-busy', 'false');
+        currentFavouriteSongs = [];
+        renderGenreResults([]);
+        const empty = genreResults.querySelector('.genre-empty');
+        if (empty) empty.textContent = 'Sign in again to load your synced likes.';
+        return;
+      }
+      if (!userId) {
         genreResults.setAttribute('aria-busy', 'false');
         let localRatings = {};
         let accountCache = null;
@@ -2604,47 +2667,14 @@
       }
 
       try {
-        const cacheKey = userId ? `thaalam.favourites:${userId}` : '';
-        let cached = null;
-        if (cacheKey) {
-          try { cached = JSON.parse(localStorage.getItem(cacheKey) || 'null'); } catch { localStorage.removeItem(cacheKey); }
-        }
         const headers = { Authorization: `Bearer ${token}` };
-        if (cached?.etag) headers['If-None-Match'] = cached.etag;
         const response = await fetch('/api/ratings', {
           headers,
           cache: 'no-store'
         });
-        let ratings;
-        let etag = cached?.etag || '';
-        if (response.status === 304 && Array.isArray(cached?.ratings)) {
-          ratings = cached.ratings;
-        } else {
-          if (!response.ok) throw new Error(`Could not load liked songs (${response.status}).`);
-          const data = await response.json();
-          ratings = data.ratings || [];
-          etag = response.headers.get('ETag') || '';
-          if (cacheKey) {
-            try { localStorage.setItem(cacheKey, JSON.stringify({ etag, ratings })); } catch { /* Use the fetched results for this visit. */ }
-          }
-        }
-        const ratingByKey = new Map(ratings.map((entry) => [entry.track_key, entry]));
-        getLocalLikedSongs(userId).forEach((song) => {
-          ratingByKey.set(song.trackKey, {
-            ...ratingByKey.get(song.trackKey),
-            track_key: song.trackKey,
-            rating: 'up',
-            title: song.trackName,
-            artist: song.artistName,
-            album: song.collectionName || '',
-            artwork: song.artworkUrl100,
-            track_id: song.providerTrackId || song.youtubeVideoId || ''
-          });
-        });
-        ratings = [...ratingByKey.values()];
-        if (cacheKey) {
-          try { localStorage.setItem(cacheKey, JSON.stringify({ etag, ratings })); } catch { /* Keep the fetched results for this visit. */ }
-        }
+        if (!response.ok) throw new Error(`Could not load liked songs (${response.status}).`);
+        const data = await response.json();
+        const ratings = Array.isArray(data.ratings) ? data.ratings : [];
         if (requestId !== genreRequestId || activeGenre !== 'you-like') return;
         const songs = ratings
           .filter((entry) => entry.rating === 'up')
@@ -2678,19 +2708,6 @@
           void Promise.all(missingArtwork.map(async (song) => {
             song.artworkUrl100 = await window.lookupAlbumArtwork(song.trackName, song.artistName) || '';
           })).then(() => {
-            if (cacheKey) {
-              const artworkByKey = new Map(songs.map((song) => [
-                `${song.trackName.toLowerCase()}|${song.artistName.toLowerCase()}`,
-                song.artworkUrl100
-              ]));
-              ratings = ratings.map((entry) => {
-                if (entry.rating !== 'up') return entry;
-                const key = `${String(entry.title || 'Liked song').toLowerCase()}|${String(entry.artist || 'Unknown artist').toLowerCase()}`;
-                const artworkUrl100 = artworkByKey.get(key);
-                return artworkUrl100 ? { ...entry, artworkUrl100 } : entry;
-              });
-              try { localStorage.setItem(cacheKey, JSON.stringify({ etag, ratings })); } catch { /* Artwork remains available for this view. */ }
-            }
             if (requestId === genreRequestId && activeGenre === 'you-like') renderGenreResults(songs);
           });
         }
@@ -2700,43 +2717,18 @@
         }
       } catch {
         if (requestId !== genreRequestId || activeGenre !== 'you-like') return;
+        if (quiet) return;
         genreResults.setAttribute('aria-busy', 'false');
-        const songs = getLocalLikedSongs(userId);
-        currentFavouriteSongs = songs;
-        renderGenreResults(songs);
-        if (!songs.length) {
-          const empty = genreResults.querySelector('.genre-empty');
-          if (empty) empty.textContent = 'No liked songs';
-        }
+        currentFavouriteSongs = [];
+        renderGenreResults([]);
+        const empty = genreResults.querySelector('.genre-empty');
+        if (empty) empty.textContent = 'Could not sync liked songs. Check your connection.';
       }
     }
 
     window.addEventListener('thaalam:rating-changed', (event) => {
       const { trackKey, rating, song } = event.detail || {};
       if (!trackKey || !song) return;
-
-      const userId = window.getThaalamGoogleUserId?.();
-      if (userId) {
-        const cacheKey = `thaalam.favourites:${userId}`;
-        try {
-          const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
-          if (Array.isArray(cached?.ratings)) {
-            const ratings = cached.ratings.filter((entry) => entry.track_key !== trackKey);
-            if (rating === 'up') {
-              ratings.unshift({
-                track_key: trackKey,
-                rating: 'up',
-                title: song.trackName,
-                artist: song.artistName,
-                album: song.collectionName || '',
-                track_id: song.providerTrackId || song.youtubeVideoId || '',
-                artwork: song.artworkUrl100 || '',
-              });
-            }
-            localStorage.setItem(cacheKey, JSON.stringify({ ...cached, etag: '', ratings }));
-          }
-        } catch { /* The live tab still updates if its cache cannot be written. */ }
-      }
 
       if (activeGenre !== 'you-like') return;
       const existingIndex = currentFavouriteSongs.findIndex((item) => item.trackKey === trackKey);
@@ -2783,6 +2775,25 @@
       favouriteSortControl.hidden = true;
       return loadCatalog(genre, '', genreFeedIds[genre]);
     }
+
+    let likedSongsPollInFlight = false;
+    const refreshOpenLikedSongs = async () => {
+      if (activeGenre !== 'you-like' || document.hidden ||
+          !window.getThaalamGoogleAccessToken?.() ||
+          !window.getThaalamGoogleUserId?.() || likedSongsPollInFlight) return;
+      likedSongsPollInFlight = true;
+      const requestId = ++genreRequestId;
+      try {
+        await loadLikedSongs(requestId, { quiet: true });
+      } finally {
+        likedSongsPollInFlight = false;
+      }
+    };
+    window.setInterval(refreshOpenLikedSongs, 4000);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) void refreshOpenLikedSongs();
+    });
+    window.addEventListener('focus', () => void refreshOpenLikedSongs());
 
     favouriteSortSelect.addEventListener('change', () => {
       try { localStorage.setItem(FAVOURITE_SORT_KEY, favouriteSortSelect.value); } catch { /* Sorting still works for this visit. */ }
