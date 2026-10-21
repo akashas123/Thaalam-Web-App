@@ -549,11 +549,13 @@ function savePendingRatingDeletes(deletions, ownerOverride = '') {
 
 async function requestCloudRatings(method, body) {
   const token = window.getThaalamGoogleAccessToken?.();
-  if (!token) return null;
+  const userId = window.getThaalamGoogleUserId?.();
+  if (!token && !userId) return null;
   const response = await fetch('/api/ratings', {
     method,
+    credentials: 'same-origin',
     headers: {
-      Authorization: `Bearer ${token}`,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(body ? { 'Content-Type': 'application/json' } : {})
     },
     ...(body ? { body: JSON.stringify(body) } : {})
@@ -578,7 +580,7 @@ async function persistRatingToCloud(trackKey, rating) {
   if (rating) deletions.delete(trackKey);
   else deletions.add(trackKey);
   savePendingRatingDeletes(deletions);
-  if (!window.getThaalamGoogleAccessToken?.()) return;
+  if (!window.getThaalamGoogleAccessToken?.() && !window.getThaalamGoogleUserId?.()) return;
   const details = getRatingTrackDetails(trackKey);
   try {
     await requestCloudRatings(rating ? 'PUT' : 'DELETE', {
@@ -595,7 +597,7 @@ async function persistRatingToCloud(trackKey, rating) {
 
 async function syncRatingsFromCloud() {
   const userId = window.getThaalamGoogleUserId?.();
-  if (!window.getThaalamGoogleAccessToken?.() || !userId) return;
+  if (!userId) return;
   try {
     const ratingsOwnerKey = `${RATING_STORAGE_KEY}-owner`;
     const owner = localStorage.getItem(ratingsOwnerKey) || 'anonymous';
@@ -682,7 +684,7 @@ async function syncRatingsFromCloud() {
 }
 
 window.addEventListener('thaalam:authenticated', syncRatingsFromCloud);
-if (window.getThaalamGoogleAccessToken?.()) {
+if (window.getThaalamGoogleUserId?.()) {
   void syncRatingsFromCloud();
 }
 

@@ -199,7 +199,7 @@
         }
         document.body.classList.remove('view-now-playing');
         document.body.classList.add(`view-${storedView}`);
-      } catch {
+      } catch (error) {
         // Private mode or blocked storage: use Home as the landing page.
         document.body.classList.remove('view-now-playing');
         document.body.classList.add('view-home');
@@ -825,7 +825,7 @@
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=9"></script>
-  <script src="player-controls.js?v=41"></script>
+  <script src="player-controls.js?v=42"></script>
   <script src="lyrics.js?v=41"></script>
   <script src="/google-auth-config.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -2505,12 +2505,15 @@
     }
 
     async function playLikedSongsQueue() {
+      try { await window.thaalamGoogleSessionReady; } catch { /* Fall back to device likes if session restore is offline. */ }
       const token = window.getThaalamGoogleAccessToken?.();
       const userId = window.getThaalamGoogleUserId?.();
       let songs;
-      if (token && userId) {
+      if (userId) {
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
         const response = await fetch('/api/ratings', {
-          headers: { Authorization: `Bearer ${token}` },
+          headers,
+          credentials: 'same-origin',
           cache: 'no-store'
         });
         if (!response.ok) throw new Error(`Could not load liked songs (${response.status}).`);
@@ -2541,20 +2544,13 @@
     window.playLikedSongsQueue = playLikedSongsQueue;
 
     async function loadLikedSongs(requestId, { quiet = false } = {}) {
+      try { await window.thaalamGoogleSessionReady; } catch { /* Keep local likes available if session restore is offline. */ }
       if (!quiet) {
         genreResults.replaceChildren();
         genreResults.setAttribute('aria-busy', 'true');
       }
       const token = window.getThaalamGoogleAccessToken?.();
       const userId = window.getThaalamGoogleUserId?.();
-      if (userId && !token) {
-        genreResults.setAttribute('aria-busy', 'false');
-        currentFavouriteSongs = [];
-        renderGenreResults([]);
-        const empty = genreResults.querySelector('.genre-empty');
-        if (empty) empty.textContent = 'Sign in again to load your synced likes.';
-        return;
-      }
       if (!userId) {
         genreResults.setAttribute('aria-busy', 'false');
         let localRatings = {};
@@ -2667,9 +2663,10 @@
       }
 
       try {
-        const headers = { Authorization: `Bearer ${token}` };
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
         const response = await fetch('/api/ratings', {
           headers,
+          credentials: 'same-origin',
           cache: 'no-store'
         });
         if (response.status === 401) {
@@ -2722,7 +2719,7 @@
           const empty = genreResults.querySelector('.genre-empty');
           if (empty) empty.textContent = 'No liked songs';
         }
-      } catch {
+      } catch (error) {
         if (requestId !== genreRequestId || activeGenre !== 'you-like') return;
         if (quiet) return;
         genreResults.setAttribute('aria-busy', 'false');
@@ -2730,7 +2727,8 @@
         renderGenreResults(currentFavouriteSongs);
         const empty = genreResults.querySelector('.genre-empty');
         if (empty) {
-          if (!window.getThaalamGoogleAccessToken?.()) {
+          if (error?.message?.includes('expired') ||
+              (!window.getThaalamGoogleAccessToken?.() && !window.getThaalamGoogleUserId?.())) {
             empty.textContent = 'Sign in again to load your synced likes.';
           } else {
             empty.textContent = currentFavouriteSongs.length
@@ -2794,7 +2792,6 @@
     let likedSongsPollInFlight = false;
     const refreshOpenLikedSongs = async () => {
       if (activeGenre !== 'you-like' || document.hidden ||
-          !window.getThaalamGoogleAccessToken?.() ||
           !window.getThaalamGoogleUserId?.() || likedSongsPollInFlight) return;
       likedSongsPollInFlight = true;
       const requestId = ++genreRequestId;
@@ -3599,6 +3596,59 @@
         showProfile(savedProfile);
       };
 
+      const saveLegacyAccessToken = (token, expiresIn) => {
+        localStorage.setItem(accessTokenStorageKey, token);
+        localStorage.setItem(
+          accessTokenExpiryKey,
+          String(Date.now() + Math.max(60, Number(expiresIn) || 3600) * 1000)
+        );
+      };
+
+      const createServerSession = async (token) => {
+        const result = await fetch('/api/auth/session', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'X-Requested-With': 'XMLHttpRequest'
+          }
+        });
+        if (!result.ok) throw new Error(`Could not create app session (${result.status}).`);
+        const data = await result.json();
+        return data.user;
+      };
+
+      const restoreServerSession = async () => {
+        let user = null;
+        try {
+          const result = await fetch('/api/auth/session', {
+            credentials: 'same-origin',
+            cache: 'no-store'
+          });
+          if (result.ok) user = (await result.json()).user;
+        } catch { /* Try migrating an existing browser token below. */ }
+
+        if (!user) {
+          const token = window.getThaalamGoogleAccessToken();
+          if (token) {
+            try {
+              user = await createServerSession(token);
+              localStorage.removeItem(accessTokenStorageKey);
+              localStorage.removeItem(accessTokenExpiryKey);
+              sessionStorage.removeItem(accessTokenStorageKey);
+            } catch { /* Keep using the short-lived token until the session API is deployed. */ }
+          }
+        }
+
+        if (user?.sub) {
+          savedProfile = { sub: user.sub, name: user.name || '', email: user.email || '', picture: user.picture || '' };
+          localStorage.setItem(profileStorageKey, JSON.stringify(savedProfile));
+          showProfile(savedProfile);
+          window.dispatchEvent(new Event('thaalam:authenticated'));
+        }
+      };
+      window.thaalamGoogleSessionReady = restoreServerSession();
+
       const finishGoogleSignIn = (response) => {
         if (response.error || !response.access_token) {
           status.hidden = false;
@@ -3612,15 +3662,18 @@
             if (!result.ok) throw new Error('Could not load Google profile');
             return result.json();
           })
-          .then((user) => {
-            const profile = { sub: user.sub || '', name: user.name || '', email: user.email || '', picture: user.picture || '' };
+          .then(async (user) => {
+            let profile = { sub: user.sub || '', name: user.name || '', email: user.email || '', picture: user.picture || '' };
+            try {
+              profile = await createServerSession(response.access_token);
+              localStorage.removeItem(accessTokenStorageKey);
+              localStorage.removeItem(accessTokenExpiryKey);
+              sessionStorage.removeItem(accessTokenStorageKey);
+            } catch {
+              saveLegacyAccessToken(response.access_token, response.expires_in);
+            }
+            profile = { sub: profile.sub || '', name: profile.name || '', email: profile.email || '', picture: profile.picture || '' };
             localStorage.setItem(profileStorageKey, JSON.stringify(profile));
-            localStorage.setItem(accessTokenStorageKey, response.access_token);
-            localStorage.setItem(
-              accessTokenExpiryKey,
-              String(Date.now() + Math.max(60, Number(response.expires_in) || 3600) * 1000)
-            );
-            sessionStorage.removeItem(accessTokenStorageKey);
             savedProfile = profile;
             showProfile(profile);
             window.dispatchEvent(new Event('thaalam:authenticated'));
@@ -3672,7 +3725,7 @@
       }
 
       profileButton.addEventListener('click', () => profileDialog.showModal());
-      logoutButton.addEventListener('click', () => {
+      logoutButton.addEventListener('click', async () => {
         try {
           const localRatings = localStorage.getItem('thaalam24x7-ratings') || '{}';
           localStorage.setItem('thaalam24x7-ratings:anonymous', localRatings);
@@ -3685,6 +3738,13 @@
         sessionStorage.removeItem(accessTokenStorageKey);
         localStorage.removeItem(accessTokenStorageKey);
         localStorage.removeItem(accessTokenExpiryKey);
+        try {
+          await fetch('/api/auth/session', {
+            method: 'DELETE',
+            credentials: 'same-origin',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+          });
+        } catch { /* The browser still clears its account state below. */ }
         window.location.reload();
       });
       profileDialog.addEventListener('click', (event) => {

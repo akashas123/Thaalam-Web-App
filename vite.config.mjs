@@ -7,6 +7,12 @@ export default defineConfig({
     configureServer(server) {
       server.middlewares.use(async (request, response, next) => {
         const pathname = request.url?.split('?')[0];
+        if (pathname === '/api/auth/session') {
+          response.statusCode = 503;
+          response.setHeader('Content-Type', 'application/json; charset=utf-8');
+          response.end(JSON.stringify({ error: 'Account sessions are only available in the Cloudflare runtime.' }));
+          return;
+        }
         if (pathname === '/api/ratings') {
           response.statusCode = 503;
           response.setHeader('Content-Type', 'application/json; charset=utf-8');

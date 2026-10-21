@@ -1,4 +1,8 @@
-async function getGoogleUser(request) {
+import { getSessionUser } from './google-session-api.mjs';
+
+async function getGoogleUser(request, env) {
+  const sessionUser = await getSessionUser(request, env);
+  if (sessionUser) return sessionUser;
   const authorization = request.headers.get('Authorization') || '';
   const match = authorization.match(/^Bearer\s+(.+)$/i);
   if (!match) return null;
@@ -21,7 +25,7 @@ export async function handleRatings(request, env) {
   if (!env.DB) {
     return Response.json({ error: 'Ratings storage is not configured.' }, { status: 503 });
   }
-  const user = await getGoogleUser(request);
+  const user = await getGoogleUser(request, env);
   if (!user) return Response.json({ error: 'Sign in with Google to sync ratings.' }, { status: 401 });
 
   if (request.method === 'GET') {

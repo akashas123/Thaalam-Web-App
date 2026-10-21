@@ -407,7 +407,106 @@ async function handleAutoplay(request, env = {}) {
   );
 }
 
-async function getGoogleUser(request) {
+const GOOGLE_SESSION_COOKIE = 'thaalam_session';
+const GOOGLE_SESSION_TTL = 60 * 60 * 24 * 365;
+
+function readGoogleSessionCookie(request) {
+  const cookieHeader = request.headers.get('Cookie') || '';
+  const value = cookieHeader.split(';').map((part) => part.trim())
+    .find((part) => part.startsWith(`${GOOGLE_SESSION_COOKIE}=`))?.slice(GOOGLE_SESSION_COOKIE.length + 1);
+  return value && /^[a-f0-9]{64}$/.test(value) ? value : '';
+}
+
+async function hashGoogleSession(token) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function googleSessionCookie(token, request, maxAge = GOOGLE_SESSION_TTL) {
+  const secure = new URL(request.url).protocol === 'https:' ? '; Secure' : '';
+  return `${GOOGLE_SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`;
+}
+
+function isSameOriginGoogleSessionRequest(request) {
+  return Boolean(request.headers.get('Origin') === new URL(request.url).origin &&
+    request.headers.get('X-Requested-With') === 'XMLHttpRequest');
+}
+
+async function getGoogleSessionUser(request, env) {
+  const token = readGoogleSessionCookie(request);
+  if (!token || !env.DB) return null;
+  try {
+    const sessionHash = await hashGoogleSession(token);
+    const row = await env.DB.prepare(`
+      SELECT user_id, name, email, picture FROM auth_sessions
+      WHERE session_hash = ? AND expires_at > unixepoch()
+    `).bind(sessionHash).first();
+    if (!row?.user_id) return null;
+    await env.DB.prepare('UPDATE auth_sessions SET expires_at = unixepoch() + ? WHERE session_hash = ?')
+      .bind(GOOGLE_SESSION_TTL, sessionHash).run();
+    return { sub: row.user_id, name: row.name || '', email: row.email || '', picture: row.picture || '' };
+  } catch {
+    return null;
+  }
+}
+
+async function handleGoogleSession(request, env) {
+  if (!env.DB) return Response.json({ error: 'Session storage unavailable.' }, { status: 503 });
+  if (request.method === 'GET') {
+    const user = await getGoogleSessionUser(request, env);
+    if (!user) return Response.json({ error: 'No active session.' }, {
+      status: 401, headers: { 'Cache-Control': 'no-store', 'Set-Cookie': googleSessionCookie('', request, 0) }
+    });
+    return Response.json({ user }, {
+      headers: { 'Cache-Control': 'no-store', 'Set-Cookie': googleSessionCookie(readGoogleSessionCookie(request), request) }
+    });
+  }
+  if (request.method === 'DELETE') {
+    if (!isSameOriginGoogleSessionRequest(request)) return Response.json({ error: 'Invalid request.' }, { status: 403 });
+    const token = readGoogleSessionCookie(request);
+    if (token) {
+      try { await env.DB.prepare('DELETE FROM auth_sessions WHERE session_hash = ?').bind(await hashGoogleSession(token)).run(); }
+      catch { /* Cookie removal still completes. */ }
+    }
+    return Response.json({ ok: true }, {
+      headers: { 'Cache-Control': 'no-store', 'Set-Cookie': googleSessionCookie('', request, 0) }
+    });
+  }
+  if (request.method !== 'POST') return Response.json({ error: 'Method not allowed.' }, { status: 405 });
+  if (!isSameOriginGoogleSessionRequest(request)) return Response.json({ error: 'Invalid request.' }, { status: 403 });
+  const accessToken = (request.headers.get('Authorization') || '').match(/^Bearer\s+(.+)$/i)?.[1];
+  if (!accessToken) return Response.json({ error: 'Google sign-in is required.' }, { status: 401 });
+  let user;
+  try {
+    const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` }, cf: { cacheTtl: 0, cacheEverything: false }
+    });
+    if (!response.ok) return Response.json({ error: 'Google sign-in expired.' }, { status: 401 });
+    user = await response.json();
+  } catch {
+    return Response.json({ error: 'Google sign-in could not be verified.' }, { status: 502 });
+  }
+  if (typeof user.sub !== 'string' || !user.sub || user.email_verified === false) {
+    return Response.json({ error: 'Google account could not be verified.' }, { status: 401 });
+  }
+  const token = [...crypto.getRandomValues(new Uint8Array(32))]
+    .map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  try {
+    await env.DB.prepare(`
+      INSERT INTO auth_sessions (session_hash, user_id, name, email, picture, expires_at)
+      VALUES (?, ?, ?, ?, ?, unixepoch() + ?)
+    `).bind(await hashGoogleSession(token), user.sub, user.name || '', user.email || '', user.picture || '', GOOGLE_SESSION_TTL).run();
+  } catch {
+    return Response.json({ error: 'Could not save sign-in session.' }, { status: 503 });
+  }
+  return Response.json({ user: { sub: user.sub, name: user.name || '', email: user.email || '', picture: user.picture || '' } }, {
+    headers: { 'Cache-Control': 'no-store', 'Set-Cookie': googleSessionCookie(token, request) }
+  });
+}
+
+async function getGoogleUser(request, env) {
+  const sessionUser = await getGoogleSessionUser(request, env);
+  if (sessionUser) return sessionUser;
   const match = (request.headers.get('Authorization') || '').match(/^Bearer\s+(.+)$/i);
   if (!match) return null;
   try {
@@ -425,7 +524,7 @@ async function getGoogleUser(request) {
 
 async function handleRatings(request, env) {
   if (!env.DB) return Response.json({ error: 'Ratings storage is not configured.' }, { status: 503 });
-  const user = await getGoogleUser(request);
+  const user = await getGoogleUser(request, env);
   if (!user) return Response.json({ error: 'Sign in with Google to sync ratings.' }, { status: 401 });
 
   if (request.method === 'GET') {
@@ -633,6 +732,10 @@ async function handleRatings(request, env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname === '/api/auth/session') {
+      try { return await handleGoogleSession(request, env); }
+      catch { return Response.json({ error: 'Sign-in is temporarily unavailable.' }, { status: 503 }); }
+    }
     if (url.pathname === '/api/ratings') {
       if (!['GET', 'PUT', 'DELETE'].includes(request.method)) {
         return Response.json({ error: 'Method not allowed.' }, { status: 405 });
