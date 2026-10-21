@@ -71,6 +71,7 @@ let relatedTrackCursor = 0;
 let isFetchingRelated = false;
 let prefetchToken = 0;
 let autoplayRetryTimer = 0;
+let autoplayAnchorTrackId = '';
 /* The JioSaavn song-radio station currently driving the continuation queue.
    Each autoplay response builds a fresh station around the playing track, so
    this is informational and keeps the client aligned with the server. */
@@ -378,6 +379,73 @@ async function findOnDemandSong(song) {
   };
 }
 
+// Liked queues can come from local storage or the account API. Resolve their
+// playable provider tracks once when the queue is loaded, so Next does not
+// have to repeat search/lookup requests for each song.
+const likedQueuePreparations = new Map();
+function likedQueuePreparationKey(song) {
+  return String(song?.trackKey || song?.providerTrackId ||
+    `${song?.trackName || ''}|${song?.artistName || ''}|${song?.collectionName || ''}`)
+    .toLowerCase();
+}
+
+async function resolveLikedQueueTrack(song) {
+  if (song?.providerTrackId && song?.streamUrl) {
+    return {
+      id: song.providerTrackId,
+      streamUrl: song.streamUrl,
+      durationSeconds: Number(song.trackTimeMillis) / 1000 || 0,
+      thumbnail: song.artworkUrl100,
+      title: song.trackName,
+      artist: song.artistName,
+      album: song.collectionName,
+      alternatives: []
+    };
+  }
+  let track = null;
+  if (song?.providerTrackId) {
+    try { track = await resolveSong(song.providerTrackId); } catch { /* Search by metadata below. */ }
+  }
+  if (!track?.streamUrl) track = await findOnDemandSong(song);
+  if (track?.id && track?.streamUrl) {
+    song.providerTrackId = track.id;
+    song.streamUrl = track.streamUrl;
+    song.providerArtistIds = track.artistIds || song.providerArtistIds || [];
+    song.providerAlbumId = track.albumId || song.providerAlbumId || '';
+    song.collectionName = song.collectionName || track.album || '';
+  }
+  return track;
+}
+
+function prepareLikedQueue(queue, selectedIndex) {
+  const songs = queue.filter((song) => song?.trackName);
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < songs.length) {
+      const song = songs[cursor++];
+      const key = likedQueuePreparationKey(song);
+      if (!key || (song.providerTrackId && song.streamUrl)) continue;
+      const preparation = resolveLikedQueueTrack(song);
+      likedQueuePreparations.set(key, preparation);
+      try {
+        await preparation;
+        if (!song.providerTrackId || !song.streamUrl) likedQueuePreparations.delete(key);
+      } catch {
+        likedQueuePreparations.delete(key);
+      }
+    }
+  };
+  // Start from the selected song and limit parallel lookups to avoid flooding
+  // the catalogue API when a large liked list is opened.
+  songs.sort((a, b) => queue.indexOf(a) - queue.indexOf(b));
+  const selectedSong = queue[selectedIndex];
+  if (selectedSong) {
+    const index = songs.indexOf(selectedSong);
+    if (index > 0) songs.unshift(...songs.splice(index, 1));
+  }
+  void Promise.all(Array.from({ length: Math.min(3, songs.length) }, worker));
+}
+
 window.resolveLikedSongIdentity = async (song) => {
   if (!song?.trackName || !song?.artistName) return null;
   const resolved = await findOnDemandSong(song);
@@ -398,6 +466,7 @@ function saveOnDemandSession(song, trackId, position = 0) {
       queueIndex: onDemandQueueIndex,
       queueSource: onDemandQueueSource,
       favouriteQueueLength: onDemandFavouriteQueueLength,
+      autoplayAnchorTrackId,
       // Paused state is part of the session: reopening should not start making
       // noise on its own if the listener had deliberately stopped the song.
       playing: window.onDemandPlaying === true
@@ -1110,42 +1179,18 @@ function skipOnDemandSong(offset) {
 onDemandPrevButton?.addEventListener('click', () => skipOnDemandSong(-1));
 onDemandNextButton?.addEventListener('click', () => skipOnDemandSong(1));
 
-const autoplayKey = (value) => normalizeText(value || '');
-
-/* Fetch recommendations from a fresh radio station, skipping the playing
-   artist/album and keeping only one track per artist and album per batch. */
+/* Fetch recommendations from the current autoplay anchor. Keeping the same
+   seed across autoplay tracks prevents the radio from drifting into a new
+   musical style after each transition on both mobile and desktop. */
 async function fetchRelatedTracks(trackId) {
   if (!trackId) return [];
   try {
-    const queue = await fetchAutoplayQueue(trackId);
+    if (onDemandQueueSource === 'favourites') autoplayAnchorTrackId = trackId;
+    if (!autoplayAnchorTrackId) autoplayAnchorTrackId = trackId;
+    const queue = await fetchAutoplayQueue(autoplayAnchorTrackId);
     if (queue.stationid) radioStationId = queue.stationid;
-    const currentSong = currentOnDemandSong || {};
-    const currentArtistIds = new Set((currentSong.providerArtistIds || []).map(String));
-    const currentArtistName = autoplayKey(currentSong.artistName);
-    const currentAlbumId = String(currentSong.providerAlbumId || '');
-    const currentAlbumName = autoplayKey(currentSong.collectionName);
-    const seenArtists = new Set(currentArtistIds);
-    const seenAlbums = new Set(currentAlbumId ? [currentAlbumId] : []);
-    if (currentArtistName) seenArtists.add(currentArtistName);
-    if (currentAlbumName) seenAlbums.add(currentAlbumName);
-
-    return queue.tracks.filter((track) => {
-      if (!track.id || playedTrackIds.has(track.id) ||
-          NON_CATALOG_TITLE.test(track.title) || UNOFFICIAL_MIX_TITLE.test(track.title)) return false;
-      const artistIds = (track.artistIds || []).map(String);
-      const artistName = autoplayKey(track.artist);
-      const albumId = String(track.albumId || '');
-      const albumName = autoplayKey(track.album);
-      if (artistIds.some((id) => seenArtists.has(id)) ||
-          (artistName && seenArtists.has(artistName)) ||
-          (albumId && seenAlbums.has(albumId)) ||
-          (albumName && seenAlbums.has(albumName))) return false;
-      artistIds.forEach((id) => seenArtists.add(id));
-      if (artistName) seenArtists.add(artistName);
-      if (albumId) seenAlbums.add(albumId);
-      if (albumName) seenAlbums.add(albumName);
-      return true;
-    });
+    return queue.tracks.filter((track) => track.id && !playedTrackIds.has(track.id) &&
+      !NON_CATALOG_TITLE.test(track.title) && !UNOFFICIAL_MIX_TITLE.test(track.title));
   } catch (error) {
     console.warn('Autoplay: Failed.', error);
     return [];
@@ -1337,6 +1382,7 @@ async function startOnDemandSong(song, {
       relatedTrackCache = [];
       relatedTrackCursor = 0;
       isFetchingRelated = false;
+      autoplayAnchorTrackId = '';
       prefetchToken += 1;
     }
   }
@@ -1400,21 +1446,11 @@ async function startOnDemandSong(song, {
     // rows that only hold an old YouTube video id intentionally fall through to
     // a fresh JioSaavn search: this player has no YouTube sources left.
     let track = null;
-    if (song.providerTrackId && song.streamUrl) {
-      track = {
-        id: song.providerTrackId,
-        streamUrl: song.streamUrl,
-        durationSeconds: Number(song.trackTimeMillis) / 1000 || 0,
-        thumbnail: song.artworkUrl100,
-        title: song.trackName,
-        artist: song.artistName,
-        album: song.collectionName,
-        alternatives: []
-      };
-    } else if (song.providerTrackId) {
-      try { track = await resolveSong(song.providerTrackId); } catch { /* Search by metadata if the saved ID no longer resolves. */ }
+    const preparation = likedQueuePreparations.get(likedQueuePreparationKey(song));
+    if (preparation) {
+      try { track = await preparation; } catch { /* Fall back to a fresh lookup below. */ }
     }
-    if (!track?.streamUrl) track = await findOnDemandSong(song);
+    if (!track?.streamUrl) track = await resolveLikedQueueTrack(song);
     if (requestId !== songRequestId) return;
 
     trackCandidates = [track, ...(track.alternatives || [])]
@@ -1467,7 +1503,9 @@ function startOnDemandQueue(songs, startIndex = 0, options = {}) {
   relatedTrackCache = [];
   relatedTrackCursor = 0;
   isFetchingRelated = false;
+  autoplayAnchorTrackId = '';
   prefetchToken += 1;
+  prepareLikedQueue(queue, selectedIndex);
   updateTransportButtonState();
 
   return startOnDemandSong(queue[selectedIndex], {
@@ -1516,6 +1554,7 @@ async function restoreOnDemandSession() {
     ? stored.queue.filter((entry) => entry?.trackName)
     : [];
   const savedIndex = Number.isInteger(stored.queueIndex) ? stored.queueIndex : -1;
+  autoplayAnchorTrackId = String(stored.autoplayAnchorTrackId || '');
   if (savedQueue.length && savedIndex >= 0 && savedIndex < savedQueue.length) {
     onDemandQueue = savedQueue;
     onDemandQueueIndex = savedIndex;
