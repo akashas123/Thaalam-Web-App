@@ -22,7 +22,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=429">
+  <link rel="stylesheet" href="style.css?v=430">
   <link rel="icon" type="image/png" href="icon-512.png?v=4">
   <link rel="apple-touch-icon" href="icon-192.png?v=4">
 
@@ -1421,7 +1421,7 @@
       if (!title || title === 'liked song' || !artist || artist === 'unknown artist') {
         return `track:${song?.trackKey || song?.providerTrackId || `${title}|${artist}`}`;
       }
-      return [title, artist, normalize(song?.collectionName), normalize(song?.providerTrackId)].join('|');
+      return [title, artist, normalize(song?.collectionName)].join('|');
     }
 
     function dedupeFavouriteSongs(songs) {
@@ -1429,7 +1429,10 @@
       const byIdentity = new Map();
       for (const song of songs || []) {
         const identity = favouriteSongIdentity(song);
-        const existing = byIdentity.get(identity);
+        const matches = byIdentity.get(identity) || [];
+        const providerTrackId = String(song.providerTrackId || '');
+        const existing = matches.find((candidate) =>
+          !candidate.providerTrackId || !providerTrackId || candidate.providerTrackId === providerTrackId);
         if (!existing) {
           const copy = {
             ...song,
@@ -1438,7 +1441,8 @@
               ...(song.duplicateTrackKeys || [])
             ])]
           };
-          byIdentity.set(identity, copy);
+          matches.push(copy);
+          byIdentity.set(identity, matches);
           uniqueSongs.push(copy);
           continue;
         }
@@ -1452,6 +1456,83 @@
         if (!existing.artworkUrl100 && song.artworkUrl100) existing.artworkUrl100 = song.artworkUrl100;
       }
       return uniqueSongs;
+    }
+
+    function songsFromRatingEntries(entries, artworkByTrackKey = {}) {
+      return dedupeFavouriteSongs((Array.isArray(entries) ? entries : [])
+        .filter((entry) => entry.rating === 'up')
+        .map((entry) => {
+          const trackKey = entry.track_key || '';
+          const candidateVideoId = trackKey.startsWith('youtube:')
+            ? (entry.track_id || entry.video_id || trackKey.slice('youtube:'.length))
+            : (entry.video_id || '');
+          const videoId = /^[\w-]{11}$/.test(candidateVideoId) ? candidateVideoId : '';
+          return {
+            trackKey,
+            trackId: entry.track_id || '',
+            favouritedAt: Number(entry.updated_at) || 0,
+            trackName: entry.title || 'Liked song',
+            artistName: entry.artist || 'Unknown artist',
+            collectionName: entry.album || '',
+            providerTrackId: trackKey.startsWith('youtube:')
+              ? ''
+              : (entry.track_id || entry.provider_track_id || ''),
+            artworkUrl100: entry.artwork || entry.artworkUrl100 || artworkByTrackKey[trackKey] ||
+              (!entry.artwork && videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : ''),
+            ...(videoId ? { youtubeVideoId: videoId } : {})
+          };
+        }));
+    }
+
+    function persistFavouriteArtwork(userId, songs, ratings) {
+      if (!userId) return;
+      const cacheKey = `thaalam.favourites:${userId}`;
+      let artworkByTrackKey = {};
+      try {
+        const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
+        artworkByTrackKey = cached?.artworkByTrackKey && typeof cached.artworkByTrackKey === 'object'
+          ? cached.artworkByTrackKey
+          : {};
+      } catch { /* Start a clean artwork map if the cache is malformed. */ }
+      for (const song of songs) {
+        if (!song.artworkUrl100) continue;
+        for (const key of new Set([song.trackKey, ...(song.duplicateTrackKeys || [])])) {
+          if (key) artworkByTrackKey[key] = song.artworkUrl100;
+        }
+      }
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify({
+          ratings: Array.isArray(ratings) ? ratings : [],
+          artworkByTrackKey
+        }));
+      } catch { /* The database remains authoritative if browser caching is unavailable. */ }
+    }
+
+    function patchFavouriteArtworkInPlace(songs) {
+      const cards = [...genreResults.querySelectorAll('.genre-card')];
+      for (const song of songs) {
+        if (!song.artworkUrl100) continue;
+        const keys = new Set([song.trackKey, ...(song.duplicateTrackKeys || [])]);
+        const card = cards.find((item) => keys.has(item.dataset.favouriteTrackKey));
+        const image = card?.querySelector('.genre-card-art');
+        if (!image || image.dataset.resolvedArtwork === song.artworkUrl100) continue;
+        image.dataset.resolvedArtwork = song.artworkUrl100;
+        card.dataset.favouriteArtworkUrl = song.artworkUrl100;
+        image.src = song.artworkUrl100
+          .replace(/^http:/, 'https:')
+          .replace(/\d+x\d+bb\./, '600x600bb.');
+      }
+      if (activeGenre === 'you-like' && currentFavouriteSongs.length) {
+        const ordered = sortFavouriteSongs(currentFavouriteSongs);
+        genreResults.dataset.renderKey = `you-like:${favouriteLayout}:` + ordered
+          .map((song) => [
+            song.trackId ?? `${song.trackName}|${song.artistName}`,
+            song.trackViewUrl || '',
+            song.youtubeVideoId || '',
+            song.artworkUrl100 || ''
+          ].join('::'))
+          .join(' ');
+      }
     }
 
     function sortFavouriteSongs(songs) {
@@ -1851,7 +1932,44 @@
 
         // Search rows skip the iTunes Store link: the metadata tap plays the
         // song instead of navigating away.
-        if (song.trackViewUrl && !searchListLayout) {
+        const mobileFavourite = activeGenre === 'you-like' && !desktopNavigation.matches;
+        if (mobileFavourite) {
+          const metadataPlayButton = document.createElement('button');
+          metadataPlayButton.className = 'genre-card-meta-tap';
+          metadataPlayButton.type = 'button';
+          Object.assign(metadataPlayButton.style, {
+            display: 'flex',
+            width: '100%',
+            minWidth: '0',
+            flexDirection: 'column',
+            alignItems: 'flex-start',
+            padding: '0',
+            border: '0',
+            borderRadius: '0',
+            background: 'transparent',
+            color: 'inherit',
+            font: 'inherit',
+            textAlign: 'left',
+            boxShadow: 'none'
+          });
+          metadataPlayButton.setAttribute('aria-label', `Play ${song.trackName || 'song'}`);
+          metadataPlayButton.append(title, artist);
+          metadataPlayButton.addEventListener('click', () => {
+            const current = window.onDemandPlaybackActive
+              ? window.getCurrentOnDemandSong?.()
+              : null;
+            if (isSameFavouriteTrack(song, current)) {
+              window.recordOnDemandLikedRecent?.(song);
+              window.toggleOnDemandPlayback?.();
+              return;
+            }
+            const queue = sortFavouriteSongs(currentFavouriteSongs);
+            const songIndex = queue.findIndex((item) => item.trackKey && item.trackKey === song.trackKey);
+            window.startOnDemandQueue?.(queue, songIndex >= 0 ? songIndex : 0, { openNowPlaying: false });
+          });
+          details.append(metadataPlayButton);
+          card.append(media, details);
+        } else if (song.trackViewUrl && !searchListLayout) {
           const link = document.createElement('a');
           link.className = 'genre-card-link';
           link.href = song.trackViewUrl.replace(/^http:/, 'https:');
@@ -1860,7 +1978,7 @@
           link.setAttribute('aria-label', `Open ${song.trackName || 'song'} in the iTunes Store`);
           link.append(details);
           card.append(media, link);
-        } else {
+        } else if (!mobileFavourite) {
           card.append(media, details);
         }
         if (isFavouriteList) card.append(listActions);
@@ -2566,24 +2684,11 @@
         });
         if (!response.ok) throw new Error(`Could not load liked songs (${response.status}).`);
         const data = await response.json();
-        songs = dedupeFavouriteSongs((Array.isArray(data.ratings) ? data.ratings : [])
-          .filter((entry) => entry.rating === 'up')
-          .map((entry) => {
-            const trackKey = entry.track_key || '';
-            const youtubeVideoId = trackKey.startsWith('youtube:')
-              ? trackKey.slice('youtube:'.length)
-              : '';
-            return {
-              trackKey,
-              favouritedAt: Number(entry.updated_at) || 0,
-              trackName: entry.title || 'Liked song',
-              artistName: entry.artist || 'Unknown artist',
-              collectionName: entry.album || '',
-              providerTrackId: youtubeVideoId ? '' : (entry.track_id || entry.provider_track_id || ''),
-              artworkUrl100: entry.artwork || '',
-              ...(youtubeVideoId ? { youtubeVideoId } : {})
-            };
-          }));
+        const ratings = Array.isArray(data.ratings) ? data.ratings : [];
+        songs = songsFromRatingEntries(ratings);
+        try {
+          localStorage.setItem(`thaalam.favourites:${userId}`, JSON.stringify({ ratings }));
+        } catch { /* The database remains authoritative if browser caching is unavailable. */ }
       } else {
         songs = getLocalLikedSongs(userId);
       }
@@ -2594,12 +2699,24 @@
 
     async function loadLikedSongs(requestId, { quiet = false } = {}) {
       try { await window.thaalamGoogleSessionReady; } catch { /* Keep local likes available if session restore is offline. */ }
-      if (!quiet) {
+      const token = window.getThaalamGoogleAccessToken?.();
+      const userId = window.getThaalamGoogleUserId?.();
+      let renderedAccountCache = false;
+      if (userId) {
+        try {
+          const cached = JSON.parse(localStorage.getItem(`thaalam.favourites:${userId}`) || 'null');
+          if (Array.isArray(cached?.ratings)) {
+            currentFavouriteSongs = songsFromRatingEntries(cached.ratings, cached.artworkByTrackKey || {});
+            renderGenreResults(currentFavouriteSongs);
+            genreResults.setAttribute('aria-busy', 'false');
+            renderedAccountCache = true;
+          }
+        } catch { /* Fetch the account list if its browser cache is unavailable. */ }
+      }
+      if (!quiet && !renderedAccountCache) {
         genreResults.replaceChildren();
         genreResults.setAttribute('aria-busy', 'true');
       }
-      const token = window.getThaalamGoogleAccessToken?.();
-      const userId = window.getThaalamGoogleUserId?.();
       if (!userId) {
         genreResults.setAttribute('aria-busy', 'false');
         let localRatings = {};
@@ -2729,29 +2846,17 @@
         const data = await response.json();
         const ratings = Array.isArray(data.ratings) ? data.ratings : [];
         if (requestId !== genreRequestId || activeGenre !== 'you-like') return;
-        const songs = dedupeFavouriteSongs(ratings
-          .filter((entry) => entry.rating === 'up')
-          .map((entry) => {
-            const candidateVideoId = (entry.track_key || '').startsWith('youtube:')
-              ? (entry.track_id || entry.video_id || (entry.track_key || '').slice('youtube:'.length))
-              : (entry.video_id || '');
-            const videoId = /^[\w-]{11}$/.test(candidateVideoId) ? candidateVideoId : '';
-            // Older cloud rows predate artwork persistence; fall back to the
-            // YouTube thumbnail instead of the blank placeholder card.
-            const storedArtwork = entry.artwork || entry.artworkUrl100 || '';
-            const fallbackArtwork = (!storedArtwork && videoId) ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '';
-            return {
-              trackKey: entry.track_key || '',
-              favouritedAt: Number(entry.updated_at) || 0,
-              trackName: entry.title || 'Liked song',
-              artistName: entry.artist || 'Unknown artist',
-              collectionName: entry.album || '',
-              providerTrackId: entry.track_key?.startsWith('youtube:') ? '' : (entry.track_id || entry.provider_track_id || ''),
-              trackId: entry.track_id || '',
-              artworkUrl100: storedArtwork || fallbackArtwork,
-              ...(videoId ? { youtubeVideoId: videoId } : {})
-            };
-          }));
+        let cachedArtworkByTrackKey = {};
+        try {
+          const cached = JSON.parse(localStorage.getItem(`thaalam.favourites:${userId}`) || 'null');
+          cachedArtworkByTrackKey = cached?.artworkByTrackKey || {};
+        } catch { /* Continue without cached covers. */ }
+        const songs = songsFromRatingEntries(ratings, cachedArtworkByTrackKey);
+        try {
+          const cacheKey = `thaalam.favourites:${userId}`;
+          const nextCache = JSON.stringify({ ratings, artworkByTrackKey: cachedArtworkByTrackKey });
+          if (localStorage.getItem(cacheKey) !== nextCache) localStorage.setItem(cacheKey, nextCache);
+        } catch { /* The database remains authoritative if browser caching is unavailable. */ }
         currentFavouriteSongs = songs;
         renderGenreResults(songs);
         // Liked tracks come from the ratings service without catalog artwork.
@@ -2762,7 +2867,10 @@
           void Promise.all(missingArtwork.map(async (song) => {
             song.artworkUrl100 = await window.lookupAlbumArtwork(song.trackName, song.artistName) || '';
           })).then(() => {
-            if (requestId === genreRequestId && activeGenre === 'you-like') renderGenreResults(songs);
+            if (requestId !== genreRequestId || activeGenre !== 'you-like') return;
+            persistFavouriteArtwork(userId, songs, ratings);
+            currentFavouriteSongs = songs;
+            patchFavouriteArtworkInPlace(songs);
           });
         }
         if (!songs.length) {
@@ -2772,6 +2880,10 @@
       } catch (error) {
         if (requestId !== genreRequestId || activeGenre !== 'you-like') return;
         if (quiet) return;
+        if (renderedAccountCache) {
+          genreResults.setAttribute('aria-busy', 'false');
+          return;
+        }
         genreResults.setAttribute('aria-busy', 'false');
         currentFavouriteSongs = getLocalLikedSongs(userId);
         renderGenreResults(currentFavouriteSongs);

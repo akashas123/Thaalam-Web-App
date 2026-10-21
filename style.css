@@ -4620,6 +4620,21 @@ body.has-lyrics .lyrics-panel {
   .genre-results.favourites-list-layout .genre-play-button { top: 50%; right: auto; bottom: auto; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,.48); }
   .genre-results.favourites-list-layout .genre-info-button { position: static; width: 2rem; height: 2rem; background: transparent; }
   .genre-card-list-actions { display: flex; align-items: center; gap: 0.25rem; }
+  .genre-card-meta-tap {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
 
   /* Mobile search: hide the genre pills (International / Hindi / ...) — the
      search page is type-to-search only. Scoped to mobile-search-active so
