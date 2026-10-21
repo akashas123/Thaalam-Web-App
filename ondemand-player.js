@@ -27,10 +27,10 @@ const miniPlayerForProgress = document.getElementById('miniPlayer');
 const onDemandPrevButton = document.getElementById('onDemandPrevButton');
 const onDemandNextButton = document.getElementById('onDemandNextButton');
 
-/* Two audio elements alternate for on-demand playback: the active element
-   drives the transport while the standby element preloads the next queued
-   track. The JioSaavn CDN answers Range requests for seeking. */
-let onDemandAudio = new Audio();
+/* The persistent audio element drives on-demand playback. A standby element
+   warms the next queued track; playback stays on the persistent element so
+   mobile background audio keeps one owner. */
+const onDemandAudio = new Audio();
 onDemandAudio.preload = 'auto';
 // Warm the next queue stream while the current track is still playing.
 // Mobile browsers can delay the ended handler in the background, so avoid
@@ -38,21 +38,6 @@ onDemandAudio.preload = 'auto';
 let autoplayPreloadAudio = new Audio();
 autoplayPreloadAudio.preload = 'auto';
 let autoplayPreloadedTrackId = '';
-
-function activatePreloadedTrack(track) {
-  if (!track?.id || track.id !== autoplayPreloadedTrackId ||
-      autoplayPreloadAudio.getAttribute('src') !== track.streamUrl ||
-      autoplayPreloadAudio.readyState < HTMLMediaElement.HAVE_METADATA ||
-      autoplayPreloadAudio.error) return false;
-  const finishedAudio = onDemandAudio;
-  onDemandAudio = autoplayPreloadAudio;
-  autoplayPreloadAudio = finishedAudio;
-  autoplayPreloadedTrackId = '';
-  autoplayPreloadAudio.pause();
-  autoplayPreloadAudio.removeAttribute('src');
-  autoplayPreloadAudio.load();
-  return true;
-}
 
 function clearAutoplayPreload() {
   autoplayPreloadAudio.pause();
@@ -914,7 +899,6 @@ function bindOnDemandAudioEvents(audio) {
 }
 
 bindOnDemandAudioEvents(onDemandAudio);
-bindOnDemandAudioEvents(autoplayPreloadAudio);
 
 // Some mobile browsers suspend a PWA's media when the screen is off, and may
 // restore it through pageshow instead of a visibilitychange event. Resume only
@@ -1436,7 +1420,6 @@ function advanceToSimilarSong() {
    stream, so it skips the search round-trip that startOnDemandSong performs. */
 async function playRelatedTrack(track) {
   onDemandQueueSource = 'autoplay';
-  activatePreloadedTrack(track);
   const artworkPromise = prefetchTrackArtwork(track);
   const song = relatedTrackToSong(track);
   const requestId = ++songRequestId;
@@ -1471,7 +1454,6 @@ async function playRelatedTrack(track) {
     updateOnDemandMetadata(song, { id: track.id, title: track.title, artist: track.artist, album: track.album, thumbnail: track.thumbnail });
   });
   prefetchUpcomingTrackArtwork();
-  if (autoplayPreloadedTrackId === track.id) autoplayPreloadedTrackId = '';
   await loadTrack(trackCandidates[0] || { id: track.id, streamUrl: track.streamUrl }, requestId);
   if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
   updatePlaybackProgress();
@@ -1583,7 +1565,6 @@ async function startOnDemandSong(song, {
     if (!track?.streamUrl) track = await resolveLikedQueueTrack(song);
     if (requestId !== songRequestId) return;
 
-    activatePreloadedTrack(track);
     trackCandidates = [track, ...(track.alternatives || [])]
       .filter((candidate) => candidate?.streamUrl);
     trackCandidateIndex = 0;
@@ -1968,7 +1949,9 @@ window.setInterval(() => {
 window.addEventListener('pagehide', () => {
   if (isMobilePlaybackLayout() && window.onDemandPlaybackActive) {
     mobilePlaybackWasActiveBeforeHide ||= window.onDemandPlaying === true;
-    pendingShouldPlay = false;
+    // pagehide can mean the PWA was backgrounded for the lock screen, not that
+    // playback was stopped. Preserve a queued track's pending play() intent;
+    // refresh/reopen still restores mobile sessions paused via shouldResume.
     // Persist a paused restore state for refresh/reopen, but don't pause the
     // live audio element here: mobile browsers can emit pagehide while
     // backgrounding a PWA, and the stream should continue when allowed.
