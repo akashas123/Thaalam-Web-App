@@ -21,9 +21,7 @@ function setFavicon(artwork) {
 }
 
 function applyNowPlayingMetadata(data) {
-  if (window.onDemandPlaybackActive
-    ? !window.isOnDemandAudioPlaying?.()
-    : metadataRadio.paused) {
+  if (!window.onDemandPlaybackActive && metadataRadio.paused) {
     clearInactiveRadioMetadata();
     return;
   }
@@ -64,9 +62,7 @@ function applyNowPlayingMetadata(data) {
 }
 
 function clearInactiveRadioMetadata() {
-  if (window.onDemandPlaybackActive
-    ? window.isOnDemandAudioPlaying?.()
-    : !metadataRadio.paused) return;
+  if (window.onDemandPlaybackActive || !metadataRadio.paused) return;
 
   document.title = defaultDocumentTitle;
   setFavicon(fallbackArtwork);

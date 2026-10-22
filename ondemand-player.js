@@ -845,8 +845,7 @@ function setOnDemandPlaying(isPlaying) {
   if (window.onDemandPlaybackActive) persistCurrentOnDemandSession();
   window.setPlayerVisualState?.(isPlaying);
   if (navigator.mediaSession) {
-    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'none';
-    if (!isPlaying) navigator.mediaSession.metadata = null;
+    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
   }
   onDemandPlayButton?.setAttribute('aria-label', isPlaying ? 'Pause' : 'Play');
   onDemandMiniToggle?.setAttribute('aria-label', isPlaying ? 'Pause' : 'Play');
@@ -857,13 +856,8 @@ function setOnDemandPlaying(isPlaying) {
   window.dispatchEvent(new Event('thaalam:on-demand-playback-state'));
 }
 
-window.isOnDemandAudioPlaying = () => Boolean(
-  window.onDemandPlaybackActive && window.onDemandPlaying === true &&
-  !onDemandAudio.paused && !onDemandAudio.ended
-);
-
 function refreshOnDemandMediaSessionMetadata(song = window.currentNowPlayingSong) {
-  if (!window.isOnDemandAudioPlaying?.() || !navigator.mediaSession ||
+  if (!window.onDemandPlaybackActive || !navigator.mediaSession ||
       !('MediaMetadata' in window)) return;
   const title = String(song?.title || onDemandTrack.dataset.trackTitle || 'Unknown song').trim();
   const artist = String(song?.artist || onDemandTrack.dataset.trackArtist || 'Unknown artist').trim();
@@ -946,10 +940,10 @@ function bindOnDemandAudioEvents(audio) {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
     autoplayTrackTransition = false;
     logOnDemand('playing', audio.currentTime.toFixed(1), 's');
+    refreshOnDemandMediaSessionMetadata();
     onDemandModeLabel.textContent = 'ON DEMAND';
     syncOnDemandVolumeToStored();
     setOnDemandPlaying(true);
-    refreshOnDemandMediaSessionMetadata();
   });
   audio.addEventListener('pause', () => {
   // Fires for track swaps, src teardown and listener-initiated pauses alike.
@@ -1603,7 +1597,6 @@ async function playRelatedTrack(track) {
   setCurrentOnDemandTrack(song, track.id);
   persistCurrentOnDemandSession();
 
-  setOnDemandPlaying(false);
   updateOnDemandMetadata(song, { id: track.id, title: track.title, artist: track.artist, album: track.album, thumbnail: track.thumbnail });
   void artworkPromise.then((artworkUrl) => {
     if (!artworkUrl || currentOnDemandTrackId !== track.id) return;
@@ -1684,7 +1677,6 @@ async function startOnDemandSong(song, {
   updateTransportButtonState();
   resetScrub();
   window.onDemandPlaybackActive = true;
-  setOnDemandPlaying(false);
   updateTransportButtonState();
   savePlaybackMode('on-demand');
   updateNowPlayingSubtitle(true);
@@ -1884,7 +1876,6 @@ async function restoreOnDemandSession() {
   // Enter the same on-demand state a fresh selection would, before any live
   // radio UI can repaint itself over the restored track.
   window.onDemandPlaybackActive = true;
-  setOnDemandPlaying(false);
   updateNowPlayingSubtitle(true);
   window.setOnDemandAudioQuality?.(true);
   document.body.classList.add('on-demand-active');
