@@ -22,7 +22,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=434">
+  <link rel="stylesheet" href="style.css?v=435">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=1">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=1">
 
@@ -1786,7 +1786,12 @@
       document.body.classList.toggle('has-liked-home-glow', likedFolderIsFirst);
       if (likedFolderIsFirst) {
         setHomeArt('');
-        setHomeTint('#e94d89');
+        // Keep the Home wash tied to the Liked Songs tile color. Read the
+        // shared CSS token so the initial Recents render cannot retain an
+        // older hard-coded pink when the tile palette changes.
+        const likedFolderColor = getComputedStyle(document.documentElement)
+          .getPropertyValue('--liked-folder-color').trim();
+        setHomeTint(likedFolderColor || '#ff1744');
         return;
       }
       const firstArtwork = [...(shelves?.querySelectorAll('.mobile-genre-track-art img') || [])]
