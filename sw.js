@@ -1,4 +1,4 @@
-const CACHE_NAME = 'thaalam-24x7-v574';
+const CACHE_NAME = 'thaalam-24x7-v580';
 const ALBUM_ART_CACHE_NAME = 'thaalam-album-art-v2';
 const ALBUM_ART_CACHE_LIMIT = 240;
 
@@ -15,8 +15,8 @@ const APP_FILES = [
   './lyrics.js?v=41',
   './manifest.json',
   './album-placeholder.svg?v=3',
-  './thaalam-icon-192.png?v=2',
-  './thaalam-icon-512.png?v=2'
+  './thaalam-icon-192.png?v=8',
+  './thaalam-icon-512.png?v=8'
 ];
 
 self.addEventListener('install', (event) => {
