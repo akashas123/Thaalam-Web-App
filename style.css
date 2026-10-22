@@ -3609,6 +3609,16 @@ body.on-demand-active .transport-btn:disabled {
   display: none;
 }
 
+.song-info-dialog,
+.sleep-dialog {
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--album-dominant-color, #05070d) 38%, #30252b),
+      color-mix(in srgb, var(--album-dominant-color, #05070d) 24%, #171419)
+    );
+}
+
 .song-info-dialog {
   height:
     min(30rem, calc(100dvh - 2rem));
@@ -3623,11 +3633,19 @@ body.on-demand-active .transport-btn:disabled {
   -ms-overflow-style: none;
 }
 
-.catalog-song-dialog {
-  width: min(52rem, calc(100vw - 2rem));
+.sleep-dialog {
+  width: min(24rem, calc(100vw - 2rem));
   height: fit-content;
-  max-height: min(44rem, calc(100dvh - 2rem));
+  max-height: min(80dvh, 38rem, calc(100dvh - 2rem));
+  overflow-y: auto;
+}
+
+.catalog-song-dialog {
+  width: min(52rem, calc(100vw - 3rem));
+  height: fit-content;
+  max-height: min(44rem, calc(100dvh - 3rem));
   padding: 1.5rem;
+  overflow: auto;
 }
 
 .catalog-song-notice {
@@ -3688,16 +3706,26 @@ body.on-demand-active .transport-btn:disabled {
 
 @media (max-width: 40rem) {
   .catalog-song-dialog {
-    padding: 1.25rem;
+    width: calc(100vw - 2rem);
+    max-height: calc(100dvh - 2rem);
+    padding: clamp(0.9rem, 4vw, 1.25rem);
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 
   .catalog-song-layout {
     grid-template-columns: 1fr;
+    gap: 1rem;
   }
 
   .catalog-song-dialog .song-info-art {
-    width: min(16rem, 100%);
+    width: min(12rem, 72vw, 28dvh);
     margin: 0 auto;
+  }
+
+  .catalog-song-dialog .catalog-artist-summary {
+    margin-top: 1rem;
+    padding-top: 1rem;
   }
 }
 

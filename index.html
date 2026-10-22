@@ -825,7 +825,7 @@
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=12"></script>
-  <script src="player-controls.js?v=43"></script>
+  <script src="player-controls.js?v=45"></script>
   <script src="lyrics.js?v=41"></script>
   <script src="/google-auth-config.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -1278,6 +1278,50 @@
       await Promise.all(Array.from({ length: workerCount }, prefetchWorker));
     }
 
+    function setCatalogDialogArtworkTint(artworkUrl, requestId) {
+      catalogSongInfoDialog.style.removeProperty('--album-dominant-color');
+      if (!artworkUrl) return;
+
+      const probe = new Image();
+      probe.crossOrigin = 'anonymous';
+      probe.decoding = 'async';
+      probe.onload = () => {
+        if (requestId !== catalogSongInfoRequestId) return;
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 32;
+          canvas.height = 32;
+          const context = canvas.getContext('2d', { willReadFrequently: true });
+          context.drawImage(probe, 0, 0, 32, 32);
+          const pixels = context.getImageData(0, 0, 32, 32).data;
+          const buckets = new Map();
+          for (let index = 0; index < pixels.length; index += 4) {
+            const red = pixels[index];
+            const green = pixels[index + 1];
+            const blue = pixels[index + 2];
+            const brightness = (red + green + blue) / 3;
+            if (pixels[index + 3] < 180 || brightness < 12 || brightness > 248) continue;
+            const key = `${red >> 4},${green >> 4},${blue >> 4}`;
+            const bucket = buckets.get(key) || { count: 0, red: 0, green: 0, blue: 0 };
+            bucket.count += 1;
+            bucket.red += red;
+            bucket.green += green;
+            bucket.blue += blue;
+            buckets.set(key, bucket);
+          }
+          const dominant = [...buckets.values()].sort((a, b) => b.count - a.count)[0];
+          if (!dominant) return;
+          const color = [dominant.red, dominant.green, dominant.blue]
+            .map((channel) => Math.round(channel / dominant.count))
+            .join(', ');
+          catalogSongInfoDialog.style.setProperty('--album-dominant-color', `rgb(${color})`);
+        } catch {
+          // Some artwork hosts block canvas sampling; keep the existing page tint.
+        }
+      };
+      probe.src = artworkUrl;
+    }
+
     async function openCatalogSongInfo(song, trigger = null) {
       const requestId = ++catalogSongInfoRequestId;
       const artistName = song.artistName || 'Unknown artist';
@@ -1286,6 +1330,7 @@
             .replace(/^http:/, 'https:')
             .replace(/\d+x\d+bb\./, '600x600bb.')
         : 'album-placeholder.svg?v=3';
+      setCatalogDialogArtworkTint(artworkUrl, requestId);
       const releaseDate = song.releaseDate
         ? new Date(song.releaseDate).toLocaleDateString()
         : 'N/A';
@@ -1315,58 +1360,16 @@
       if (!catalogSongInfoDialog.open) {
         catalogSongInfoDialog.showModal();
 
-        const triggerRect = trigger?.getBoundingClientRect();
-        const dialogRect = catalogSongInfoDialog.getBoundingClientRect();
-        if (triggerRect && dialogRect.width && dialogRect.height) {
-          const originX = triggerRect.left + triggerRect.width / 2 - dialogRect.left;
-          const originY = triggerRect.top + triggerRect.height / 2 - dialogRect.top;
-          const farthestCorner = Math.max(
-            Math.hypot(originX, originY),
-            Math.hypot(dialogRect.width - originX, originY),
-            Math.hypot(originX, dialogRect.height - originY),
-            Math.hypot(dialogRect.width - originX, dialogRect.height - originY)
-          );
-          catalogSongInfoDialog.style.transformOrigin = `${originX}px ${originY}px`;
-          catalogSongInfoDialog.animate(
-            [
-              {
-                opacity: 0.9,
-                transform: 'scale(0.025) rotate(-8deg)',
-                clipPath: `circle(1px at ${originX}px ${originY}px)`,
-                borderRadius: '50% 50% 45% 55% / 55% 45% 55% 45%',
-                filter: 'blur(1px)'
-              },
-              {
-                offset: 0.16,
-                opacity: 1,
-                transform: 'scale(0.16) rotate(-5deg)',
-                clipPath: `circle(${Math.ceil(farthestCorner * 0.16)}px at ${originX}px ${originY}px)`,
-                borderRadius: '45% 55% 50% 50% / 55% 45% 55% 45%',
-                filter: 'blur(0)'
-              },
-              {
-                offset: 0.72,
-                opacity: 1,
-                transform: 'scale(1.025) rotate(1deg)',
-                clipPath: `circle(${Math.ceil(farthestCorner + 2)}px at ${originX}px ${originY}px)`,
-                borderRadius: '1.7rem 0.8rem 1.5rem 0.9rem',
-                filter: 'blur(0)'
-              },
-              {
-                opacity: 1,
-                transform: 'scale(1) rotate(0)',
-                clipPath: `circle(${Math.ceil(farthestCorner + 2)}px at ${originX}px ${originY}px)`,
-                borderRadius: '1rem',
-                filter: 'blur(0)'
-              }
-            ],
-            {
-              duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 900,
-              easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)',
-              fill: 'both'
-            }
-          );
-        }
+        catalogSongInfoDialog.animate(
+          [
+            { opacity: 0 },
+            { opacity: 1 }
+          ],
+          {
+            duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 110,
+            easing: 'cubic-bezier(0, 0, 0.2, 1)'
+          }
+        );
       }
 
       try {

@@ -79,6 +79,15 @@ function openDialog(dialog) {
     'function'
   ) {
     dialog.showModal();
+    if (dialog === songInfoDialog || dialog === sleepTimerDialog) {
+      dialog.animate(
+        [{ opacity: 0 }, { opacity: 1 }],
+        {
+          duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 110,
+          easing: 'cubic-bezier(0, 0, 0.2, 1)'
+        }
+      );
+    }
   }
 }
 
