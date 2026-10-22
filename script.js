@@ -1216,7 +1216,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const favicon = document.createElement('link');
   favicon.rel = 'icon';
   favicon.type = 'image/png';
-  favicon.href = 'thaalam-icon.png?v=1';
+  favicon.href = 'thaalam-icon-512.png?v=1';
   document.head.prepend(favicon);
 
   const albumBackground = document.createElement('div');
