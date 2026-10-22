@@ -837,6 +837,22 @@ function setOnDemandPlaying(isPlaying) {
   window.dispatchEvent(new Event('thaalam:on-demand-playback-state'));
 }
 
+function refreshOnDemandMediaSessionMetadata(song = window.currentNowPlayingSong) {
+  if (!window.onDemandPlaybackActive || !navigator.mediaSession ||
+      !('MediaMetadata' in window)) return;
+  const title = String(song?.title || onDemandTrack.dataset.trackTitle || 'Unknown song').trim();
+  const artist = String(song?.artist || onDemandTrack.dataset.trackArtist || 'Unknown artist').trim();
+  const album = String(song?.album || 'Thaalam 24x7').trim();
+  const artwork = String(song?.art || currentOnDemandSong?.artworkUrl100 || '')
+    .replace(/^http:/, 'https:');
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title: title || 'Unknown song',
+    artist: artist || 'Unknown artist',
+    album: album || 'Thaalam 24x7',
+    artwork: artwork ? [{ src: artwork }] : []
+  });
+}
+
 /* Re-assert the listener's stored volume level + mute flag on the audio
    element. Called after every load and again on 'playing' so a track change
    can never come up at a level the slider does not show. */
@@ -895,6 +911,7 @@ function bindOnDemandAudioEvents(audio) {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
     autoplayTrackTransition = false;
     logOnDemand('playing', audio.currentTime.toFixed(1), 's');
+    refreshOnDemandMediaSessionMetadata();
     onDemandModeLabel.textContent = 'ON DEMAND';
     syncOnDemandVolumeToStored();
     setOnDemandPlaying(true);
@@ -1180,12 +1197,7 @@ function updateOnDemandMetadata(song, track) {
       if (candidates[index] !== artwork) {
         song.artworkUrl100 = candidates[index];
         if (currentOnDemandSong === song) persistCurrentOnDemandSession();
-        if (navigator.mediaSession && 'MediaMetadata' in window) {
-          navigator.mediaSession.metadata = new MediaMetadata({
-            title, artist, album,
-            artwork: [{ src: candidates[index], sizes: '512x512' }]
-          });
-        }
+        refreshOnDemandMediaSessionMetadata({ title, artist, album, art: candidates[index] });
       }
     };
     image.onerror = () => tryArtwork(index + 1);
@@ -1196,14 +1208,7 @@ function updateOnDemandMetadata(song, track) {
   window.updateMiniPlayerMarquees?.();
   window.dispatchEvent(new CustomEvent('thaalam:nowplaying', { detail: data }));
 
-  if (navigator.mediaSession && 'MediaMetadata' in window) {
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title,
-      artist,
-      album,
-      artwork: artwork ? [{ src: artwork, sizes: '512x512' }] : []
-    });
-  }
+  refreshOnDemandMediaSessionMetadata(nowPlaying);
 }
 
 /* Appends a song to the session queue unless it is already the current entry

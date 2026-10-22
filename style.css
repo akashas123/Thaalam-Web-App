@@ -4305,6 +4305,8 @@ body.has-lyrics .lyrics-panel {
     border-radius: 50%;
     background: rgba(10,12,16,.38);
     color: #fff;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
     backdrop-filter: blur(0.8rem);
     -webkit-backdrop-filter: blur(0.8rem);
   }

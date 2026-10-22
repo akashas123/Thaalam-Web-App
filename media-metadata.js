@@ -67,17 +67,21 @@ if (navigator.mediaSession) {
     console.log('Media controls are not supported:', error);
   }
   metadataRadio.addEventListener('play', () => {
+    if (window.onDemandPlaybackActive) return;
     navigator.mediaSession.playbackState = 'playing';
   });
   metadataRadio.addEventListener('playing', () => {
+    if (window.onDemandPlaybackActive) return;
     navigator.mediaSession.playbackState = 'playing';
   });
   metadataRadio.addEventListener('pause', () => {
+    if (window.onDemandPlaybackActive) return;
     navigator.mediaSession.playbackState = 'paused';
   });
 }
 
 metadataRadio.addEventListener('play', () => {
+  if (window.onDemandPlaybackActive) return;
   refreshNowPlayingMetadata(window.latestNowPlayingData);
 });
 
