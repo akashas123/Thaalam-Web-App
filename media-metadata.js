@@ -1,6 +1,7 @@
 const metadataRadio = document.getElementById('radio');
-const fallbackArtwork = new URL('album-placeholder.svg?v=3', window.location.href).href;
+const fallbackArtwork = new URL('thaalam-icon-512.png?v=1', window.location.href).href;
 let currentArtwork = '';
+const defaultDocumentTitle = 'Thaalam 24x7';
 
 function setFavicon(artwork) {
   if (!artwork) return;
@@ -20,24 +21,57 @@ function setFavicon(artwork) {
 }
 
 function applyNowPlayingMetadata(data) {
-  const nowPlaying = data?.now_playing;
-  const song = nowPlaying?.song;
+  if (!window.onDemandPlaybackActive && metadataRadio.paused) {
+    clearInactiveRadioMetadata();
+    return;
+  }
+
+  // A delayed radio update must never replace the current on-demand song's
+  // title or artwork in Chrome's shared media session.
+  const song = window.onDemandPlaybackActive
+    ? window.currentNowPlayingSong
+    : data?.now_playing?.song;
   if (!song) return;
 
-  const title = song.title?.trim() || 'Thaalam 24x7';
-  const artist = song.artist?.trim() || 'Thaalam 24x7';
-  const album = song.album?.trim() || 'Thaalam 24x7';
-  const artwork = song.art?.trim() || fallbackArtwork;
+  const title = String(song.title || '').trim() || 'Thaalam 24x7';
+  const artist = String(song.artist || '').trim() || 'Thaalam 24x7';
+  const album = String(song.album || '').trim() || 'Thaalam 24x7';
+  const artworkSource = String(song.art || '').trim();
+  let artwork = fallbackArtwork;
+  try {
+    if (artworkSource) artwork = new URL(artworkSource, window.location.href).href;
+  } catch {
+    // Keep an absolute local fallback so Chrome never retains the last song's
+    // artwork when the next track has a missing or malformed image URL.
+  }
   document.title = `${title} - ${artist}`;
-  if (song.art?.trim()) setFavicon(artwork);
+  if (artworkSource) setFavicon(artwork);
 
   if (navigator.mediaSession && 'MediaMetadata' in window) {
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title,
-      artist,
-      album,
-      artwork: [{ src: artwork, sizes: '512x512' }]
-    });
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title,
+        artist,
+        album,
+        artwork: [{ src: artwork, sizes: '512x512' }]
+      });
+    } catch (error) {
+      console.warn('Could not update media session metadata:', error);
+    }
+  }
+}
+
+function clearInactiveRadioMetadata() {
+  if (window.onDemandPlaybackActive || !metadataRadio.paused) return;
+
+  document.title = defaultDocumentTitle;
+  setFavicon(fallbackArtwork);
+  if (!navigator.mediaSession) return;
+  try {
+    navigator.mediaSession.metadata = null;
+    navigator.mediaSession.playbackState = 'none';
+  } catch (error) {
+    console.warn('Could not clear inactive radio media metadata:', error);
   }
 }
 
@@ -48,6 +82,19 @@ function refreshNowPlayingMetadata(data = window.latestNowPlayingData) {
 window.addEventListener('thaalam:nowplaying', (event) => {
   refreshNowPlayingMetadata(event.detail);
 });
+
+function refreshVisibleMediaSession() {
+  if (document.visibilityState !== 'visible') return;
+  refreshNowPlayingMetadata(
+    window.onDemandPlaybackActive
+      ? { now_playing: { song: window.currentNowPlayingSong } }
+      : window.latestNowPlayingData
+  );
+}
+
+document.addEventListener('visibilitychange', refreshVisibleMediaSession);
+window.addEventListener('pageshow', refreshVisibleMediaSession);
+window.addEventListener('thaalam:on-demand-playback-state', refreshVisibleMediaSession);
 
 if (window.latestNowPlayingData) {
   refreshNowPlayingMetadata(window.latestNowPlayingData);
@@ -76,7 +123,7 @@ if (navigator.mediaSession) {
   });
   metadataRadio.addEventListener('pause', () => {
     if (window.onDemandPlaybackActive) return;
-    navigator.mediaSession.playbackState = 'paused';
+    clearInactiveRadioMetadata();
   });
 }
 

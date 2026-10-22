@@ -26,6 +26,7 @@ const playbackProgressThumb = document.getElementById('progressThumb');
 const miniPlayerForProgress = document.getElementById('miniPlayer');
 const onDemandPrevButton = document.getElementById('onDemandPrevButton');
 const onDemandNextButton = document.getElementById('onDemandNextButton');
+const onDemandFallbackArtwork = new URL('thaalam-icon-512.png?v=1', window.location.href).href;
 
 /* Two audio elements alternate roles. The standby warms the next track; at a
    transition it becomes the active element so mobile background playback can
@@ -861,14 +862,24 @@ function refreshOnDemandMediaSessionMetadata(song = window.currentNowPlayingSong
   const title = String(song?.title || onDemandTrack.dataset.trackTitle || 'Unknown song').trim();
   const artist = String(song?.artist || onDemandTrack.dataset.trackArtist || 'Unknown artist').trim();
   const album = String(song?.album || 'Thaalam 24x7').trim();
-  const artwork = String(song?.art || currentOnDemandSong?.artworkUrl100 || '')
+  const artworkSource = String(song?.art || currentOnDemandSong?.artworkUrl100 || '')
     .replace(/^http:/, 'https:');
-  navigator.mediaSession.metadata = new MediaMetadata({
-    title: title || 'Unknown song',
-    artist: artist || 'Unknown artist',
-    album: album || 'Thaalam 24x7',
-    artwork: artwork ? [{ src: artwork }] : []
-  });
+  let artwork = onDemandFallbackArtwork;
+  try {
+    if (artworkSource) artwork = new URL(artworkSource, window.location.href).href;
+  } catch {
+    // Keep the current track's metadata valid even if its artwork URL is bad.
+  }
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: title || 'Unknown song',
+      artist: artist || 'Unknown artist',
+      album: album || 'Thaalam 24x7',
+      artwork: [{ src: artwork, sizes: '512x512' }]
+    });
+  } catch (error) {
+    console.warn('Could not update on-demand media metadata:', error);
+  }
 }
 
 /* Re-assert the listener's stored volume level + mute flag on the audio
