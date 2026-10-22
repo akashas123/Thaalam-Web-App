@@ -5590,6 +5590,27 @@ img {
 }
 
 @media (max-width: 56.1875rem) {
+  /* Lyrics can arrive after the next track's artwork and metadata have
+     already rendered. Reveal the mobile panel directly in document flow so
+     its heading never fades in at the player's absolute-positioned fallback. */
+  body.view-now-playing .lyrics-panel {
+    transition: none;
+  }
+
+  body.view-now-playing:not(.has-lyrics) .lyrics-panel {
+    display: none;
+  }
+
+  body.view-now-playing.has-lyrics .lyrics-panel {
+    display: block;
+    position: relative;
+    top: auto;
+    left: auto;
+    visibility: visible;
+    opacity: 1;
+    transform: none;
+  }
+
   /* Home's height already excludes the mini-player and bottom nav. The shared
      page padding was shrinking the shelf viewport a second time and covering
      the last album row above the mini-player. */
