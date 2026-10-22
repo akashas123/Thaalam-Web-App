@@ -4079,6 +4079,46 @@ body.on-demand-active .transport-btn:disabled {
 
     overscroll-behavior: contain;
   }
+
+  body.has-lyrics.synced-lyrics .lyrics-content {
+    max-height: min(80vh, calc(100% - 2rem));
+    padding-block: 0.75rem 2rem;
+    scroll-padding-block: 0.75rem 2rem;
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 1.75rem,
+      #000 calc(100% - 1.75rem),
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 1.75rem,
+      #000 calc(100% - 1.75rem),
+      transparent 100%
+    );
+  }
+
+  body.has-lyrics.synced-lyrics .lyrics-panel {
+    overflow: visible;
+  }
+
+  body.has-lyrics.synced-lyrics .lyrics-line {
+    scroll-margin-block: 0.75rem 2rem;
+  }
+
+  body.has-lyrics.synced-lyrics .lyrics-line.is-active {
+    font-size: 1.55em;
+    font-weight: 800;
+    line-height: 1.4;
+  }
+
+  body.has-lyrics.synced-lyrics .lyrics-content::after {
+    display: block;
+    height: 8rem;
+    content: "";
+  }
 }
 
 body.has-lyrics.synced-lyrics
@@ -5110,6 +5150,28 @@ body.has-lyrics .lyrics-panel {
     touch-action: none;
 
     overscroll-behavior: none;
+  }
+
+  body.has-lyrics.synced-lyrics .lyrics-panel {
+    height: auto;
+    max-height: none;
+  }
+
+  body.has-lyrics.synced-lyrics .lyrics-content {
+    height: clamp(12rem, 30dvh, 16rem);
+    padding-block: 1.25rem;
+    scroll-padding-block: 1.25rem;
+  }
+
+  body.has-lyrics.synced-lyrics .lyrics-line {
+    scroll-margin-block: 1.25rem;
+  }
+
+  body.has-lyrics.synced-lyrics .lyrics-line.is-active {
+    font-size: 1.3em;
+    font-weight: 700;
+    transform: translateX(0.1rem);
+    transform-origin: left center;
   }
 
   body.has-lyrics.mobile-lyrics-expanded
