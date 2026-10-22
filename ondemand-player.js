@@ -815,7 +815,25 @@ function bindScrubBar(bar) {
 }
 
 bindScrubBar(playbackProgressBar);
-bindScrubBar(document.getElementById('miniPlayerProgress'));
+const miniPlayerProgressBar = document.getElementById('miniPlayerProgress');
+bindScrubBar(miniPlayerProgressBar);
+
+/* Mobile browsers can route touches near a transparent bar's edge to a
+   neighboring layer instead of the bar itself. Recover those touches by
+   checking the rendered hit rectangles before the event reaches that layer. */
+document.addEventListener('pointerdown', (event) => {
+  if (!window.onDemandPlaybackActive || !onDemandAudio.getAttribute('src')) return;
+
+  const bars = [playbackProgressBar, miniPlayerProgressBar].filter(Boolean);
+  if (bars.some((bar) => bar.contains(event.target))) return;
+
+  const hitBar = bars.find((bar) => {
+    const rect = bar.getBoundingClientRect();
+    return event.clientX >= rect.left && event.clientX <= rect.right
+      && event.clientY >= rect.top && event.clientY <= rect.bottom;
+  });
+  if (hitBar) beginScrub(event, hitBar);
+}, { capture: true });
 
 function setOnDemandPlaying(isPlaying) {
   // Mirror of the live flag, so a restored session can reapply the pause state
