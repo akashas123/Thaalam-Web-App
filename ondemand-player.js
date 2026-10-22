@@ -941,7 +941,7 @@ bindOnDemandAudioEvents(autoplayPreloadAudio);
 function resumeMobilePlaybackAfterBackground() {
   if (!isMobilePlaybackLayout()) return;
   if (document.hidden) {
-    mobilePlaybackWasActiveBeforeHide =
+    mobilePlaybackWasActiveBeforeHide ||=
       Boolean(window.onDemandPlaybackActive && window.onDemandPlaying);
     return;
   }
