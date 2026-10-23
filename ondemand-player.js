@@ -303,7 +303,14 @@ async function resolveSong(trackId) {
   if (!trackId) return null;
   const url = new URL('/api/music-song', window.location.origin);
   url.searchParams.set('id', trackId);
-  const response = await fetch(url, { cache: 'no-store' });
+  const controller = new AbortController();
+  const deadline = window.setTimeout(() => controller.abort(), 10000);
+  let response;
+  try {
+    response = await fetch(url, { cache: 'no-store', signal: controller.signal });
+  } finally {
+    window.clearTimeout(deadline);
+  }
   const payload = await response.json().catch(() => null);
   if (!response.ok) throw new Error(payload?.error || `Playback failed (${response.status}).`);
   return Array.isArray(payload?.results) ? payload.results[0] || null : null;
@@ -1113,10 +1120,13 @@ async function handlePlaybackError() {
   if (trackId && rerresolvedTrackId !== trackId) {
     rerresolvedTrackId = trackId;
     onDemandModeLabel.textContent = 'RETRYING STREAM';
+    logOnDemand('resolving fresh stream after media error', trackId,
+      'hidden=', document.hidden);
     try {
       const fresh = await resolveSong(trackId);
       if (!window.onDemandPlaybackActive || currentOnDemandTrackId !== trackId) return;
       if (fresh?.streamUrl) {
+        logOnDemand('fresh stream resolved after media error', trackId);
         trackCandidates = [{ id: trackId, streamUrl: fresh.streamUrl }];
         trackCandidateIndex = 0;
         if (currentOnDemandSong) {
@@ -1126,10 +1136,26 @@ async function handlePlaybackError() {
         await loadTrack(trackCandidates[0], songRequestId, 0, true);
         return;
       }
+      logOnDemand('fresh stream resolution returned no playable stream', trackId);
     } catch (error) {
       logOnDemand('stream re-resolve failed:', error?.message || error);
       if (!window.onDemandPlaybackActive) return;
     }
+  }
+
+  // A failed stream should not strand playback when the next song is already
+  // buffered in the recommendation queue. Release any in-flight transition
+  // claim, then use the same guarded queue path as a normal track boundary.
+  const hasQueuedNext = onDemandQueueIndex >= 0 &&
+    onDemandQueueIndex < onDemandQueue.length - 1;
+  const hasRelatedNext = relatedTrackCursor < relatedTrackCache.length;
+  if (hasQueuedNext || hasRelatedNext || isFetchingRelated) {
+    logOnDemand('current stream unrecoverable; advancing queue', trackId,
+      'queued=', hasQueuedNext, 'related=', hasRelatedNext,
+      'fetching=', isFetchingRelated);
+    autoplayTrackTransition = false;
+    advanceToSimilarSong('stream-error');
+    return;
   }
 
   console.error('Rejected every stream for this track');
