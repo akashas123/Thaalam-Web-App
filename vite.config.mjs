@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
-import { handleAlbum, handleAutoplay, handleSearch, handleSong } from './music-api.mjs';
+import { Readable } from 'node:stream';
+import { handleAlbum, handleAutoplay, handleMusicStream, handleSearch, handleSong } from './music-api.mjs';
 
 export default defineConfig({
   plugins: [{
@@ -23,23 +24,28 @@ export default defineConfig({
           '/api/music-search': handleSearch,
           '/api/music-album': handleAlbum,
           '/api/music-autoplay': handleAutoplay,
-          '/api/music-song': handleSong
+          '/api/music-song': handleSong,
+          '/api/music-stream': handleMusicStream
         };
         const handler = handlers[pathname];
         if (!handler) {
           next();
           return;
         }
-        if (request.method !== 'GET') {
+        if (!['GET', 'HEAD'].includes(request.method)) {
           response.statusCode = 405;
           response.end(JSON.stringify({ error: 'Method not allowed.' }));
           return;
         }
         const url = new URL(request.url, 'http://localhost:5173');
-        const result = await handler(new Request(url));
+        const result = await handler(new Request(url, {
+          method: request.method,
+          headers: request.headers
+        }));
         response.statusCode = result.status;
         result.headers.forEach((value, key) => response.setHeader(key, value));
-        response.end(await result.text());
+        if (result.body) Readable.fromWeb(result.body).pipe(response);
+        else response.end();
       });
     }
   }]

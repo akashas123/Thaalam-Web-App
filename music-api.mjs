@@ -452,6 +452,57 @@ export async function handleSong(request, env = {}) {
   });
 }
 
+/* GET /api/music-stream?src=<Saavn CDN URL>
+   Same-origin byte-range proxy so the player can inspect decoded samples for
+   trailing silence without exposing arbitrary upstream hosts. */
+export async function handleMusicStream(request) {
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return new Response('Method not allowed.', { status: 405 });
+  }
+  const source = new URL(request.url).searchParams.get('src') || '';
+  let upstreamUrl;
+  try {
+    upstreamUrl = new URL(source);
+  } catch {
+    return new Response('A valid stream URL is required.', { status: 400 });
+  }
+  if (upstreamUrl.protocol !== 'https:' ||
+      !(upstreamUrl.hostname === 'saavncdn.com' || upstreamUrl.hostname.endsWith('.saavncdn.com')) ||
+      upstreamUrl.port || upstreamUrl.username || upstreamUrl.password) {
+    return new Response('Unsupported stream host.', { status: 403 });
+  }
+
+  const headers = new Headers();
+  for (const name of ['range', 'if-range', 'if-none-match', 'if-modified-since']) {
+    const value = request.headers.get(name);
+    if (value) headers.set(name, value);
+  }
+  try {
+    const upstream = await fetch(upstreamUrl, {
+      method: request.method,
+      headers,
+      redirect: 'follow'
+    });
+    const responseHeaders = new Headers();
+    for (const name of [
+      'accept-ranges', 'cache-control', 'content-length', 'content-range',
+      'content-type', 'etag', 'last-modified'
+    ]) {
+      const value = upstream.headers.get(name);
+      if (value) responseHeaders.set(name, value);
+    }
+    responseHeaders.set('Cache-Control', 'no-store');
+    responseHeaders.set('X-Content-Type-Options', 'nosniff');
+    return new Response(request.method === 'HEAD' ? null : upstream.body, {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      headers: responseHeaders
+    });
+  } catch {
+    return new Response('Audio stream is temporarily unavailable.', { status: 502 });
+  }
+}
+
 /* JioSaavn song radio: create a station for the given song, then return the
    next batch of similar songs from that station. JioSaavn's web-radio endpoint
    is stateless (repeated getSong calls return the same first batch), so each

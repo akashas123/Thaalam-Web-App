@@ -41,6 +41,11 @@ let autoplayPreloadAudio = new Audio();
 autoplayPreloadAudio.preload = 'auto';
 let autoplayPreloadedTrackId = '';
 let autoplayPreloadedStreamUrl = '';
+let handoffOutgoingAudio = null;
+let handoffVolume = 1;
+// Skip the final 2.5 seconds of the outgoing stream to avoid its encoded silent
+// tail. The outgoing audio remains at full volume until the next stream plays.
+const ON_DEMAND_HANDOFF_LEAD_SECONDS = 2.5;
 
 function clearAutoplayPreload() {
   autoplayPreloadAudio.pause();
@@ -53,12 +58,13 @@ function clearAutoplayPreload() {
 function promotePreloadedTrack(track) {
   if (!track?.id || autoplayPreloadedTrackId !== track.id ||
       autoplayPreloadedStreamUrl !== track.streamUrl ||
-      autoplayPreloadAudio.readyState < HTMLMediaElement.HAVE_FUTURE_DATA ||
+      autoplayPreloadAudio.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
       autoplayPreloadAudio.error) {
     logOnDemand('next-track preload not ready for handoff', {
       trackId: track?.id || '',
       preloadedTrackId: autoplayPreloadedTrackId,
-      readyState: autoplayPreloadAudio.readyState
+      readyState: autoplayPreloadAudio.readyState,
+      requiredReadyState: HTMLMediaElement.HAVE_CURRENT_DATA
     });
     return false;
   }
@@ -66,15 +72,47 @@ function promotePreloadedTrack(track) {
   const previousAudio = onDemandAudio;
   onDemandAudio = autoplayPreloadAudio;
   autoplayPreloadAudio = previousAudio;
-  autoplayPreloadAudio.pause();
-  autoplayPreloadAudio.removeAttribute('src');
-  autoplayPreloadAudio.load();
+  // Keep the outgoing stream alive during the short overlap. The next stream
+  // has already buffered on the standby element, so it can start before the
+  // current source reaches its end (important for mobile lock-screen audio).
+  handoffOutgoingAudio = previousAudio;
+  handoffVolume = getOnDemandVolumeLevel();
+  previousAudio.volume = handoffVolume;
+  // Start the incoming stream at the listener's full selected level. The
+  // outgoing source stays at full level until the incoming source is playing.
+  onDemandAudio.volume = handoffVolume;
   autoplayPreloadAudio.preload = 'auto';
   autoplayPreloadedTrackId = '';
   autoplayPreloadedStreamUrl = '';
   syncOnDemandVolumeToStored();
   logOnDemand('promoted buffered next track', track.id);
   return true;
+}
+
+function getOnDemandVolumeLevel() {
+  const storedLevel = typeof window.getStoredVolumeLevel === 'function'
+    ? Number(window.getStoredVolumeLevel())
+    : NaN;
+  return Number.isFinite(storedLevel)
+    ? Math.max(0, Math.min(100, storedLevel)) / 100
+    : 1;
+}
+
+function finishOnDemandHandoff() {
+  if (handoffOutgoingAudio) {
+    handoffOutgoingAudio.pause();
+    handoffOutgoingAudio.removeAttribute('src');
+    handoffOutgoingAudio.load();
+  }
+  handoffOutgoingAudio = null;
+  if (onDemandAudio) onDemandAudio.volume = handoffVolume;
+}
+
+function finishOnDemandHandoffWhenPlaying() {
+  if (!handoffOutgoingAudio) return;
+  // Release the old source only after the new source starts. No volume ramp is
+  // used, so the song does not fade out and the incoming track is never muted.
+  finishOnDemandHandoff();
 }
 
 let requestedTrackId = '';
@@ -631,6 +669,15 @@ function updatePlaybackProgress() {
         : duration;
     }
 
+    const hasUpcomingTrack =
+      (onDemandQueueIndex >= 0 && onDemandQueueIndex < onDemandQueue.length - 1) ||
+      Boolean(relatedTrackCache[relatedTrackCursor]);
+    if (!autoplayTrackTransition && hasUpcomingTrack && duration > 0 &&
+        elapsed >= duration - ON_DEMAND_HANDOFF_LEAD_SECONDS) {
+      autoplayTrackTransition = true;
+      advanceToSimilarSong();
+    }
+
     // While dragging, report the pointer's target instead of the player's
     // position so the readout matches what the user is holding.
     if (isScrubbing) {
@@ -886,6 +933,13 @@ function refreshOnDemandMediaSessionMetadata(song = window.currentNowPlayingSong
    element. Called after every load and again on 'playing' so a track change
    can never come up at a level the slider does not show. */
 function syncOnDemandVolumeToStored() {
+  // Keep the incoming side audible throughout a handoff, including while a
+  // mobile browser is suspending background JavaScript timers.
+  if (handoffOutgoingAudio) {
+    onDemandAudio.volume = getOnDemandVolumeLevel();
+    handoffVolume = onDemandAudio.volume;
+    return;
+  }
   try {
     const storedLevel = typeof window.getStoredVolumeLevel === 'function'
       ? window.getStoredVolumeLevel()
@@ -942,7 +996,11 @@ function bindOnDemandAudioEvents(audio) {
     logOnDemand('playing', audio.currentTime.toFixed(1), 's');
     refreshOnDemandMediaSessionMetadata();
     onDemandModeLabel.textContent = 'ON DEMAND';
-    syncOnDemandVolumeToStored();
+    if (handoffOutgoingAudio && audio === onDemandAudio) {
+      finishOnDemandHandoffWhenPlaying();
+    } else {
+      syncOnDemandVolumeToStored();
+    }
     setOnDemandPlaying(true);
   });
   audio.addEventListener('pause', () => {
@@ -964,6 +1022,7 @@ function bindOnDemandAudioEvents(audio) {
   }
   audio.addEventListener('ended', () => {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
+    if (autoplayTrackTransition) return;
     autoplayTrackTransition = true;
     onDemandModeLabel.textContent = 'ON DEMAND';
     advanceToSimilarSong();
