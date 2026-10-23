@@ -1194,10 +1194,10 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
   });
 
   if (!sameSource) {
-    // Pause and replace the source synchronously in the loop-wrap event. The
-    // transition guard suppresses the expected pause handler, and no timer or
-    // metadata wait is inserted before requesting the next track.
-    if (autoplayTrackTransition && !onDemandAudio.paused) onDemandAudio.pause();
+    // Do not explicitly pause the active media element at a background track
+    // handoff. Chrome can remove its lock-screen media notification on pause;
+    // replacing src already stops the old resource, then play() below starts
+    // the next one on this same element.
     onDemandAudio.src = requestedStreamUrl;
   } else {
     onDemandAudio.load();
