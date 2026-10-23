@@ -125,13 +125,10 @@ function decryptMediaUrl(encrypted) {
   return selectMediaUrl(plaintext);
 }
 
-/* Picks the playback URL out of the decrypted plaintext.
-   JioSaavn hands back a single CDN URL pinned to a low rendition, e.g.
-   https://aac.saavncdn.com/450/<hash>_96.mp4, but the CDN keeps every quality
-   under the same hash, so bump the bitrate to 320 kbps for high-quality
-   playback instead of the 96 kbps stream. Only the trailing _<bitrate> right
-   before the media extension is rewritten, leaving the hash itself untouched.
- */
+/* Picks the playback URL out of the decrypted plaintext. Keep the rendition
+   JioSaavn returned: a higher bitrate URL cannot be assumed to exist for every
+   track/CDN object. Rewriting it can make the next song fail with
+   MEDIA_ERR_SRC_NOT_SUPPORTED (code 4), especially on a background handoff. */
 function selectMediaUrl(plaintext) {
   if (!plaintext) return '';
 
@@ -142,9 +139,7 @@ function selectMediaUrl(plaintext) {
   const url = match[0].replace(/[\u0000-\u001f]+$/g, '');
   if (!url) return '';
 
-  // Upgrade _96/_128/_160/... to _320; an already-320 URL is returned as-is.
-  return url.replace(/_(\d{2,3})(\.(?:mp4|m4a|mp3))$/i, (whole, bitrate, ext) =>
-    Number(bitrate) >= 320 ? whole : `_320${ext}`);
+  return url;
 }
 
 
