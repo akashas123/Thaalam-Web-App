@@ -28,16 +28,14 @@ const onDemandPrevButton = document.getElementById('onDemandPrevButton');
 const onDemandNextButton = document.getElementById('onDemandNextButton');
 const onDemandFallbackArtwork = new URL('thaalam-icon-512.png?v=1', window.location.href).href;
 
-/* Keep one audio element as the on-demand playback owner for the whole
-   session. The second element only warms the browser cache: promoting it at a
-   track boundary can make mobile browsers drop or replace the Media Session
-   while the page is backgrounded. */
+/* Each on-demand track gets its own audio element. Only the current track's
+   element is active; the separate preloader remains silent and is never
+   promoted into the playback/Media Session role. */
 let onDemandAudio = new Audio();
 onDemandAudio.preload = 'auto';
-// Avoid a natural audio end. Some mobile browsers release the background audio
-// session at that boundary, preventing the next source from starting while
-// locked. Detect the loop wrap and replace the source from that same event.
-onDemandAudio.loop = true;
+// Each on-demand song gets its own native audio instance and ends normally.
+onDemandAudio.loop = false;
+let onDemandAudioTrackId = '';
 // Warm the next queue stream while the current track is still playing.
 // Mobile browsers can delay the ended handler in the background, so avoid
 // making the next track's first media request at that boundary.
@@ -63,8 +61,6 @@ let pendingStartSeconds = -1;
 let pendingShouldPlay = false;
 let autoplayTrackTransition = false;
 let lastObservedOnDemandTime = 0;
-let onDemandSourceHasPlayed = false;
-let loopWrapPendingSeeked = false;
 let manualSeekInProgress = false;
 let manualSeekResetTimer = 0;
 let selectedDuration = 0;
@@ -810,7 +806,6 @@ function seekOnDemandAudio(seconds) {
   const duration = Number(onDemandAudio.duration);
   const target = Math.max(0, Number(seconds) || 0);
   manualSeekInProgress = true;
-  loopWrapPendingSeeked = false;
   window.clearTimeout(manualSeekResetTimer);
   try {
     onDemandAudio.currentTime = Number.isFinite(duration) && duration > 0
@@ -829,37 +824,7 @@ function seekOnDemandAudio(seconds) {
 
 function handleOnDemandTimeUpdate(audio) {
   if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
-  const currentTime = Number(audio.currentTime) || 0;
-  const duration = Number(audio.duration);
-  const previousTime = lastObservedOnDemandTime;
-  lastObservedOnDemandTime = currentTime;
-  // Fallback for engines that don't report a loop wrap through `seeking`.
-  if (manualSeekInProgress || loopWrapPendingSeeked || autoplayTrackTransition ||
-      !onDemandSourceHasPlayed || !Number.isFinite(duration) || duration <= 0) return;
-  if (previousTime > 3 && currentTime < 1.5 && previousTime - currentTime > 2) {
-    logOnDemand('loop wrap detected by timeupdate', {
-      from: previousTime, to: currentTime, duration, hidden: document.hidden
-    });
-    advanceToSimilarSong('loop-timeupdate');
-  }
-}
-
-function handleOnDemandSeeking(audio) {
-  if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
-  const currentTime = Number(audio.currentTime) || 0;
-  const previousTime = lastObservedOnDemandTime;
-  lastObservedOnDemandTime = currentTime;
-  // A user seek to the beginning is not a track boundary. For a loop wrap,
-  // wait for `seeked` before replacing src; changing it during `seeking` can
-  // interrupt the native loop seek and reject play() on the next song.
-  if (manualSeekInProgress || autoplayTrackTransition ||
-      !onDemandSourceHasPlayed) return;
-  if (previousTime > 3 && currentTime < 1.5 && previousTime - currentTime > 2) {
-    loopWrapPendingSeeked = true;
-    logOnDemand('loop wrap seek started; waiting for seeked', {
-      from: previousTime, to: currentTime, hidden: document.hidden
-    });
-  }
+  lastObservedOnDemandTime = Number(audio.currentTime) || 0;
 }
 
 function bindScrubBar(bar) {
@@ -991,7 +956,6 @@ function bindOnDemandAudioEvents(audio) {
     }
   });
   audio.addEventListener('timeupdate', () => handleOnDemandTimeUpdate(audio));
-  audio.addEventListener('seeking', () => handleOnDemandSeeking(audio));
   audio.addEventListener('seeked', () => {
     if (audio !== onDemandAudio) return;
     if (manualSeekInProgress) {
@@ -999,22 +963,10 @@ function bindOnDemandAudioEvents(audio) {
       window.clearTimeout(manualSeekResetTimer);
       manualSeekResetTimer = 0;
       manualSeekInProgress = false;
-      loopWrapPendingSeeked = false;
-      return;
-    }
-    if (loopWrapPendingSeeked && window.onDemandPlaybackActive &&
-        !autoplayTrackTransition) {
-      loopWrapPendingSeeked = false;
-      lastObservedOnDemandTime = Number(audio.currentTime) || 0;
-      logOnDemand('loop wrap seek completed; advancing', {
-        time: lastObservedOnDemandTime, hidden: document.hidden
-      });
-      advanceToSimilarSong('loop-seeked');
     }
   });
   audio.addEventListener('playing', () => {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
-    onDemandSourceHasPlayed = true;
     autoplayTrackTransition = false;
     logOnDemand('playing', audio.currentTime.toFixed(1), 's');
     refreshOnDemandMediaSessionMetadata();
@@ -1188,33 +1140,51 @@ async function handlePlaybackError() {
    metadata is known (or shortly after), so callers can update state without
    waiting for the whole song to buffer; media errors are handled separately
    by the 'error' listener above. */
+function createOnDemandAudioForTrack(trackId) {
+  const nextTrackKey = String(trackId || '');
+  if (!nextTrackKey || nextTrackKey === onDemandAudioTrackId) return;
+
+  const previousAudio = onDemandAudio;
+  const nextAudio = new Audio();
+  nextAudio.preload = 'auto';
+  nextAudio.loop = false;
+  onDemandAudio = nextAudio;
+  onDemandAudioTrackId = nextTrackKey;
+  bindOnDemandAudioEvents(nextAudio);
+
+  // Retire the previous track after the new element is the active owner, so
+  // its late pause/error events cannot overwrite the new track's state.
+  previousAudio.pause();
+  previousAudio.removeAttribute('src');
+  previousAudio.load();
+}
+
 async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = true) {
   if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
   logOnDemand('load track', candidate.id || '(no id)', 'transition=', autoplayTrackTransition,
     'hidden=', document.hidden, 'readyState=', onDemandAudio.readyState);
   requestedTrackId = candidate.id || '';
   requestedStreamUrl = candidate.streamUrl || '';
+  if (!requestedStreamUrl) return;
+  createOnDemandAudioForTrack(requestedTrackId || requestedStreamUrl);
+  const audio = onDemandAudio;
   pendingStartSeconds = Math.max(0, Number(startSeconds) || 0);
   pendingShouldPlay = shouldPlay;
   syncOnDemandVolumeToStored();
 
   const sameSource = requestedStreamUrl
-    && onDemandAudio.getAttribute('src') === requestedStreamUrl;
+    && audio.getAttribute('src') === requestedStreamUrl;
   const alreadyLoaded = sameSource
-    && onDemandAudio.readyState >= 1 /* HAVE_METADATA */
-    && !onDemandAudio.error;
+    && audio.readyState >= 1 /* HAVE_METADATA */
+    && !audio.error;
 
   if (alreadyLoaded) {
     applyPendingMediaIntent();
     return;
   }
 
-  if (!requestedStreamUrl) return;
-
-  onDemandAudio.loop = true;
-  loopWrapPendingSeeked = false;
+  audio.loop = false;
   lastObservedOnDemandTime = 0;
-  onDemandSourceHasPlayed = false;
 
   const metadataPromise = new Promise((resolve) => {
     let settled = false;
@@ -1223,25 +1193,21 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
       if (settled) return;
       settled = true;
       window.clearTimeout(deadline);
-      onDemandAudio.removeEventListener('loadedmetadata', finish);
-      onDemandAudio.removeEventListener('error', finish);
+      audio.removeEventListener('loadedmetadata', finish);
+      audio.removeEventListener('error', finish);
       resolve();
     };
     // The deadline guarantees loadTrack() never hangs a caller indefinitely
     // (the element can already know the file and fire nothing new).
     deadline = window.setTimeout(finish, 12000);
-    onDemandAudio.addEventListener('loadedmetadata', finish, { once: true });
-    onDemandAudio.addEventListener('error', finish, { once: true });
+    audio.addEventListener('loadedmetadata', finish, { once: true });
+    audio.addEventListener('error', finish, { once: true });
   });
 
   if (!sameSource) {
-    // Do not explicitly pause the active media element at a background track
-    // handoff. Chrome can remove its lock-screen media notification on pause;
-    // replacing src already stops the old resource, then play() below starts
-    // the next one on this same element.
-    onDemandAudio.src = requestedStreamUrl;
+    audio.src = requestedStreamUrl;
   } else {
-    onDemandAudio.load();
+    audio.load();
   }
 
   // Request playback as soon as the next source is installed. Waiting until
@@ -1256,12 +1222,13 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
     let retryIssued = false;
     const retryAfterLoad = () => {
       if (!playRequestAborted || retryIssued || requestId !== songRequestId ||
-          !window.onDemandPlaybackActive || !onDemandAudio.paused) return;
+          !window.onDemandPlaybackActive || audio !== onDemandAudio || !audio.paused) return;
       retryIssued = true;
-      const retryPromise = onDemandAudio.play();
+      const retryPromise = audio.play();
       if (retryPromise) {
         retryPromise.catch((error) => {
           if (requestId !== songRequestId || !window.onDemandPlaybackActive ||
+              audio !== onDemandAudio ||
               error?.name === 'AbortError') return;
           logOnDemand('play() retry rejected:', error?.name || error);
           autoplayTrackTransition = false;
@@ -1272,11 +1239,12 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
     // load() can abort the first play request while replacing the ended
     // resource. If that happens, retry once when the new stream is playable;
     // otherwise the transition can leave the element paused with no recovery.
-    onDemandAudio.addEventListener('canplay', retryAfterLoad, { once: true });
-    const playPromise = onDemandAudio.play();
+    audio.addEventListener('canplay', retryAfterLoad, { once: true });
+    const playPromise = audio.play();
     if (playPromise) {
       playPromise.catch((error) => {
-        if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
+        if (requestId !== songRequestId || !window.onDemandPlaybackActive ||
+            audio !== onDemandAudio) return;
         if (error?.name === 'AbortError') {
           playRequestAborted = true;
           // canplay may already have fired by the time the promise rejects.
