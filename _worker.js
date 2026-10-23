@@ -13,6 +13,54 @@ const UPSTREAM_REQUEST_HEADERS = {
 };
 const SONG_ID_PATTERN = /^[A-Za-z0-9_-]{4,32}$/;
 
+async function handleMusicStream(request) {
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return new Response('Method not allowed.', { status: 405 });
+  }
+  const source = new URL(request.url).searchParams.get('src') || '';
+  let upstreamUrl;
+  try {
+    upstreamUrl = new URL(source);
+  } catch {
+    return new Response('A valid stream URL is required.', { status: 400 });
+  }
+  if (upstreamUrl.protocol !== 'https:' ||
+      !(upstreamUrl.hostname === 'saavncdn.com' || upstreamUrl.hostname.endsWith('.saavncdn.com')) ||
+      upstreamUrl.port || upstreamUrl.username || upstreamUrl.password) {
+    return new Response('Unsupported stream host.', { status: 403 });
+  }
+
+  const headers = new Headers();
+  for (const name of ['range', 'if-range', 'if-none-match', 'if-modified-since']) {
+    const value = request.headers.get(name);
+    if (value) headers.set(name, value);
+  }
+  try {
+    const upstream = await fetch(upstreamUrl, {
+      method: request.method,
+      headers,
+      redirect: 'follow'
+    });
+    const responseHeaders = new Headers();
+    for (const name of [
+      'accept-ranges', 'cache-control', 'content-length', 'content-range',
+      'content-type', 'etag', 'last-modified'
+    ]) {
+      const value = upstream.headers.get(name);
+      if (value) responseHeaders.set(name, value);
+    }
+    responseHeaders.set('Cache-Control', 'no-store');
+    responseHeaders.set('X-Content-Type-Options', 'nosniff');
+    return new Response(request.method === 'HEAD' ? null : upstream.body, {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      headers: responseHeaders
+    });
+  } catch {
+    return new Response('Audio stream is temporarily unavailable.', { status: 502 });
+  }
+}
+
 /* DES-ECB decryption (key 38346591) for encrypted_media_url, implemented in
    plain JS because Workers do not expose DES through their crypto APIs. */
 const DES_PC1 = [57,49,41,33,25,17,9,1,58,50,42,34,26,18,10,2,59,51,43,35,27,19,11,3,60,52,44,36,63,55,47,39,31,23,15,7,62,54,46,38,30,22,14,6,61,53,45,37,29,21,13,5,28,20,12,4];
@@ -768,6 +816,9 @@ export default {
         return Response.json({ error: 'Method not allowed.' }, { status: 405 });
       }
       return handleSong(request, env);
+    }
+    if (url.pathname === '/api/music-stream') {
+      return handleMusicStream(request);
     }
     return env.ASSETS.fetch(request);
   }
