@@ -34,9 +34,9 @@ const onDemandFallbackArtwork = new URL('thaalam-icon-512.png?v=1', window.locat
    while the page is backgrounded. */
 let onDemandAudio = new Audio();
 onDemandAudio.preload = 'auto';
-// Keep the media element active at the boundary. With loop enabled the browser
-// wraps to 0:00 without firing `ended`; timeupdate below turns that wrap into
-// our queue transition while the same element retains its Media Session.
+// Avoid a natural audio end. Some mobile browsers release the background audio
+// session at that boundary, preventing the next source from starting while
+// locked. Detect the loop wrap and replace the source from that same event.
 onDemandAudio.loop = true;
 // Warm the next queue stream while the current track is still playing.
 // Mobile browsers can delay the ended handler in the background, so avoid
@@ -809,16 +809,12 @@ function handleOnDemandTimeUpdate(audio) {
   const duration = Number(audio.duration);
   const previousTime = lastObservedOnDemandTime;
   lastObservedOnDemandTime = currentTime;
-
-  // A manual seek can also move the clock backwards. Its intent is recorded
-  // by seekOnDemandAudio(), so only an unrequested loop wrap advances the
-  // queue. `seeking` is the primary signal; this remains a fallback for
-  // engines that loop without dispatching that event.
+  // Fallback for engines that don't report a loop wrap through `seeking`.
   if (manualSeekInProgress || autoplayTrackTransition ||
       !onDemandSourceHasPlayed || !Number.isFinite(duration) || duration <= 0) return;
-  const wrapped = previousTime > 3 && currentTime < 1.5 &&
-    previousTime - currentTime > 2;
-  if (wrapped) advanceToSimilarSong();
+  if (previousTime > 3 && currentTime < 1.5 && previousTime - currentTime > 2) {
+    advanceToSimilarSong();
+  }
 }
 
 function handleOnDemandSeeking(audio) {
@@ -826,6 +822,8 @@ function handleOnDemandSeeking(audio) {
   const currentTime = Number(audio.currentTime) || 0;
   const previousTime = lastObservedOnDemandTime;
   lastObservedOnDemandTime = currentTime;
+  // A user seek to the beginning is not a track boundary. Only an unrequested
+  // backward wrap near the media end advances the queue.
   if (manualSeekInProgress || autoplayTrackTransition ||
       !onDemandSourceHasPlayed) return;
   if (previousTime > 3 && currentTime < 1.5 && previousTime - currentTime > 2) {
@@ -1140,8 +1138,6 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
 
   if (!requestedStreamUrl) return;
 
-  // loop suppresses the native `ended` event and keeps the element playing
-  // through the boundary until the wrap detector installs the next source.
   onDemandAudio.loop = true;
   lastObservedOnDemandTime = 0;
   onDemandSourceHasPlayed = false;
@@ -1165,12 +1161,14 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
   });
 
   if (!sameSource) {
-    // Pausing before replacing a naturally looping source keeps the active
-    // media session attached through the source handoff on mobile browsers.
+    // Pause and replace the source synchronously in the loop-wrap event. The
+    // transition guard suppresses the expected pause handler, and no timer or
+    // metadata wait is inserted before requesting the next track.
     if (autoplayTrackTransition && !onDemandAudio.paused) onDemandAudio.pause();
     onDemandAudio.src = requestedStreamUrl;
+  } else {
+    onDemandAudio.load();
   }
-  onDemandAudio.load();
 
   // Request playback as soon as the next source is installed. Waiting until
   // loadedmetadata to call play() can leave mobile browsers silent in the
@@ -1616,6 +1614,10 @@ function advanceToSimilarSong() {
   // same boundary. Claim it once so queue indices cannot advance twice.
   autoplayTrackTransition = true;
   onDemandModeLabel.textContent = 'ON DEMAND';
+  // Chrome may otherwise drop the notification while it sees the old resource
+  // ended and the next resource loading. Metadata is replaced by the next
+  // track synchronously in playRelatedTrack()/skipOnDemandSong().
+  if (navigator.mediaSession) navigator.mediaSession.playbackState = 'playing';
 
   if (onDemandQueueIndex >= 0 && onDemandQueueIndex < onDemandQueue.length - 1) {
     skipOnDemandSong(1);
@@ -1706,12 +1708,14 @@ async function playRelatedTrack(track) {
     updateOnDemandMetadata(song, { id: track.id, title: track.title, artist: track.artist, album: track.album, thumbnail: track.thumbnail });
   });
   prefetchUpcomingTrackArtwork();
+  // Start fetching the continuation before waiting for loadedmetadata. Mobile
+  // browsers can defer that event while locked; waiting here previously left
+  // the next queue empty when the following track reached its boundary.
+  playedTrackIds.add(track.id);
+  prefetchRelatedTracks(track.id);
   await loadTrack(trackCandidates[0] || { id: track.id, streamUrl: track.streamUrl }, requestId);
   if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
   updatePlaybackProgress();
-  // Chain: fetch the continuation queue for this track immediately.
-  playedTrackIds.add(track.id);
-  prefetchRelatedTracks(track.id);
 }
 
 async function startOnDemandSong(song, {
@@ -1839,11 +1843,13 @@ async function startOnDemandSong(song, {
     persistCurrentOnDemandSession();
     updateOnDemandMetadata(song, track);
     preloadNextLikedQueueTrack(onDemandQueueIndex);
+    // Resolve the following recommendations while this source is being
+    // installed, not after loadTrack() waits for a background metadata event.
+    playedTrackIds.add(track.id);
+    prefetchRelatedTracks(track.id);
     await loadTrack(trackCandidates[0] || { id: track.id, streamUrl: track.streamUrl }, requestId);
     if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
     updatePlaybackProgress();
-    playedTrackIds.add(track.id);
-    prefetchRelatedTracks(track.id);
   } catch (error) {
     if (requestId !== songRequestId) return;
     console.error('Unable to start on-demand playback:', error);
