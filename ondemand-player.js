@@ -36,6 +36,7 @@ let audioLoadGeneration = 0;
 
 let requestedTrackId = '';
 let requestedStreamUrl = '';
+let cancelAutomaticPlayRecovery = null;
 let requestedStartSeconds = 0;
 /* Seek/play intent recorded by loadTrack() and applied once metadata lands
    (currentTime cannot be set before the duration is known). */
@@ -930,19 +931,41 @@ function applyPendingMediaIntent(generation = audioLoadGeneration) {
   }
   if (pendingShouldPlay) {
     pendingShouldPlay = false;
-    const playPromise = onDemandAudio.play();
-    if (playPromise) {
-      playPromise.catch((error) => {
-        if (generation !== audioLoadGeneration) return;
-        // Autoplay policy or a transient rejection: stay visibly paused so the
-        // listener can press Play (their gesture always succeeds).
-        logOnDemand('play() rejected:', error?.name || error);
-        if (window.onDemandPlaybackActive) {
-          autoplayTrackTransition = false;
-          setOnDemandPlaying(false);
-        }
+    logOnDemand('play() call immediately before pending intent', {
+      generation, audio: getOnDemandAudioDiagnostics(onDemandAudio)
+    });
+    let playPromise;
+    try {
+      playPromise = onDemandAudio.play();
+    } catch (error) {
+      logOnDemand('play() threw synchronously for pending intent', {
+        name: error?.name || '', message: error?.message || String(error),
+        audio: getOnDemandAudioDiagnostics(onDemandAudio)
       });
+      autoplayTrackTransition = false;
+      setOnDemandPlaying(false);
+      return;
     }
+    logOnDemand('play() returned for pending intent', {
+      promiseReturned: Boolean(playPromise), generation,
+      audio: getOnDemandAudioDiagnostics(onDemandAudio)
+    });
+    Promise.resolve(playPromise).then(() => {
+      if (generation === audioLoadGeneration) {
+        logOnDemand('play() promise resolved for pending intent',
+          getOnDemandAudioDiagnostics(onDemandAudio));
+      }
+    }).catch((error) => {
+      if (generation !== audioLoadGeneration) return;
+      logOnDemand('play() promise rejected for pending intent', {
+        name: error?.name || '', message: error?.message || String(error),
+        audio: getOnDemandAudioDiagnostics(onDemandAudio)
+      });
+      if (window.onDemandPlaybackActive) {
+        autoplayTrackTransition = false;
+        setOnDemandPlaying(false);
+      }
+    });
   }
 }
 
@@ -967,7 +990,7 @@ function bindOnDemandAudioEvents(audio) {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
     if (!isCurrentOnDemandSource(audio)) return;
     autoplayTrackTransition = false;
-    logOnDemand('playing', getOnDemandAudioDiagnostics(audio));
+    logOnDemand('track event: playing', getOnDemandAudioDiagnostics(audio));
     refreshOnDemandMediaSessionMetadata();
     onDemandModeLabel.textContent = 'ON DEMAND';
     syncOnDemandVolumeToStored();
@@ -977,6 +1000,9 @@ function bindOnDemandAudioEvents(audio) {
     updateTransportButtonState();
   });
   audio.addEventListener('pause', () => {
+    if (audio === onDemandAudio) {
+      logOnDemand('track event: pause', getOnDemandAudioDiagnostics(audio));
+    }
   // Fires for track swaps, src teardown and listener-initiated pauses alike.
   // By the time a queued pause event lands, returnToLive() has usually already
   // cleared the active flag — this guard keeps teardown from repainting state.
@@ -1006,6 +1032,16 @@ function bindOnDemandAudioEvents(audio) {
     if (audio !== onDemandAudio) return;
     logOnDemand('track canplay', getOnDemandAudioDiagnostics(audio));
   });
+  audio.addEventListener('play', () => {
+    if (audio !== onDemandAudio) return;
+    logOnDemand('track event: play', getOnDemandAudioDiagnostics(audio));
+  });
+  for (const eventName of ['abort', 'emptied', 'suspend']) {
+    audio.addEventListener(eventName, () => {
+      if (audio !== onDemandAudio) return;
+      logOnDemand(`track event: ${eventName}`, getOnDemandAudioDiagnostics(audio));
+    });
+  }
   audio.addEventListener('ended', () => {
     if (audio !== onDemandAudio || !isCurrentOnDemandSource(audio) || !window.onDemandPlaybackActive ||
         autoplayTrackTransition) return;
@@ -1056,6 +1092,10 @@ function getOnDemandAudioDiagnostics(audio) {
       code, name: errorNames[code] || 'MEDIA_ERR_UNKNOWN',
       message: audio.error?.message || ''
     },
+    error: audio.error ? {
+      code: audio.error.code,
+      message: audio.error.message || ''
+    } : null,
     networkState: audio.networkState,
     readyState: audio.readyState,
     paused: audio.paused,
@@ -1205,7 +1245,19 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
     'hidden=', document.hidden, 'readyState=', onDemandAudio.readyState);
   requestedTrackId = candidate.id || '';
   requestedStreamUrl = candidate.streamUrl || '';
-  if (!requestedStreamUrl) return;
+  if (!requestedStreamUrl) {
+    logOnDemand('selected track has no stream URL', {
+      trackId: requestedTrackId, requestId, transition: autoplayTrackTransition
+    });
+    if (currentOnDemandTrackId) void handlePlaybackError();
+    else {
+      autoplayTrackTransition = false;
+      setOnDemandPlaying(false);
+    }
+    return;
+  }
+  cancelAutomaticPlayRecovery?.();
+  cancelAutomaticPlayRecovery = null;
   const audio = onDemandAudio;
   const loadGeneration = ++audioLoadGeneration;
   if (shouldPlay) autoplayTrackTransition = true;
@@ -1270,50 +1322,136 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
   // pending seek when metadata arrives.
   if (shouldPlay) {
     pendingShouldPlay = false;
-    let playRequestAborted = false;
-    let retryIssued = false;
-    const retryAfterLoad = () => {
-      if (!playRequestAborted || retryIssued || loadGeneration !== audioLoadGeneration || requestId !== songRequestId ||
-          !window.onDemandPlaybackActive || audio !== onDemandAudio || !audio.paused) return;
-      retryIssued = true;
-      const retryPromise = audio.play();
-      if (retryPromise) {
-        retryPromise.catch((error) => {
-          if (loadGeneration !== audioLoadGeneration || requestId !== songRequestId || !window.onDemandPlaybackActive ||
-              audio !== onDemandAudio ||
-              error?.name === 'AbortError') return;
-          logOnDemand('play() retry rejected:', {
-            name: error?.name || '', message: error?.message || String(error),
-            audio: getOnDemandAudioDiagnostics(audio)
-          });
-          autoplayTrackTransition = false;
-          setOnDemandPlaying(false);
-        });
+    let playAttempts = 0;
+    let playPending = false;
+    let canPlaySeen = audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA;
+    let recoveryTimer = 0;
+    let transitionSettled = false;
+    const isCurrentRequest = () => loadGeneration === audioLoadGeneration &&
+      requestId === songRequestId && window.onDemandPlaybackActive &&
+      audio === onDemandAudio && isCurrentOnDemandSource(audio) && !transitionSettled;
+    const stopRecovery = () => {
+      window.clearTimeout(recoveryTimer);
+      audio.removeEventListener('canplay', onCanPlay);
+      if (cancelAutomaticPlayRecovery === cancelRecovery) {
+        cancelAutomaticPlayRecovery = null;
       }
     };
-    // load() can abort the first play request while replacing the ended
-    // resource. If that happens, retry once when the new stream is playable;
-    // otherwise the transition can leave the element paused with no recovery.
-    audio.addEventListener('canplay', retryAfterLoad, { once: true });
-    const playPromise = audio.play();
-    if (playPromise) {
-      playPromise.catch((error) => {
-        if (loadGeneration !== audioLoadGeneration || requestId !== songRequestId || !window.onDemandPlaybackActive ||
-            audio !== onDemandAudio) return;
-        if (error?.name === 'AbortError') {
-          playRequestAborted = true;
-          // canplay may already have fired by the time the promise rejects.
-          window.setTimeout(retryAfterLoad, 0);
-          return;
+    const cancelRecovery = () => {
+      transitionSettled = true;
+      stopRecovery();
+    };
+    const failUnstartedTransition = (reason) => {
+      if (!isCurrentRequest()) return;
+      transitionSettled = true;
+      stopRecovery();
+      logOnDemand('transition did not reach playing; leaving paused', {
+        reason, attempts: playAttempts, audio: getOnDemandAudioDiagnostics(audio)
+      });
+      autoplayTrackTransition = false;
+      setOnDemandPlaying(false);
+    };
+    const armWatchdog = () => {
+      window.clearTimeout(recoveryTimer);
+      recoveryTimer = window.setTimeout(() => {
+        if (!isCurrentRequest()) return;
+        logOnDemand('automatic playback watchdog', {
+          attempts: playAttempts, playPending,
+          audio: getOnDemandAudioDiagnostics(audio)
+        });
+        if (audio.paused && !playPending && playAttempts < 2 &&
+            audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+          canPlaySeen = true;
+          attemptPlay('playback watchdog retry');
+        } else {
+          failUnstartedTransition('playback watchdog expired');
         }
-        logOnDemand('play() rejected during track load:', {
+      }, 10000);
+    };
+    const onCanPlay = () => {
+      canPlaySeen = true;
+      if (!isCurrentRequest()) return stopRecovery();
+      if (!playPending && audio.paused && playAttempts < 2) {
+        attemptPlay('canplay recovery');
+      }
+    };
+    const attemptPlay = (reason) => {
+      if (!isCurrentRequest() || playPending || !audio.paused || playAttempts >= 2) return;
+      playAttempts += 1;
+      playPending = true;
+      logOnDemand('play() call immediately before', {
+        reason, attempt: playAttempts, generation: loadGeneration,
+        audio: getOnDemandAudioDiagnostics(audio)
+      });
+      let playPromise;
+      try {
+        playPromise = audio.play();
+      } catch (error) {
+        playPending = false;
+        logOnDemand('play() threw synchronously', {
+          reason, attempt: playAttempts, name: error?.name || '',
+          message: error?.message || String(error),
+          audio: getOnDemandAudioDiagnostics(audio)
+        });
+        if (canPlaySeen && playAttempts < 2) window.setTimeout(() => attemptPlay('after synchronous failure'), 0);
+        else failUnstartedTransition('synchronous play failure');
+        return;
+      }
+      logOnDemand('play() returned; awaiting promise', {
+        reason, attempt: playAttempts, generation: loadGeneration,
+        promiseReturned: Boolean(playPromise),
+        audio: getOnDemandAudioDiagnostics(audio)
+      });
+      Promise.resolve(playPromise).then(() => {
+        if (!isCurrentRequest()) return;
+        logOnDemand('play() promise resolved', {
+          reason, attempt: playAttempts, generation: loadGeneration,
+          audio: getOnDemandAudioDiagnostics(audio)
+        });
+        // Promise resolution alone is not treated as a successful transition;
+        // the `playing` event is the only place that clears the transition.
+        if (audio.paused && canPlaySeen && playAttempts < 2) {
+          window.setTimeout(() => attemptPlay('resolved but still paused'), 0);
+        }
+      }).catch((error) => {
+        if (!isCurrentRequest()) return;
+        logOnDemand('play() promise rejected', {
+          reason, attempt: playAttempts, generation: loadGeneration,
           name: error?.name || '', message: error?.message || String(error),
           audio: getOnDemandAudioDiagnostics(audio)
         });
-        autoplayTrackTransition = false;
-        setOnDemandPlaying(false);
+        if (canPlaySeen && audio.paused && playAttempts < 2) {
+          window.setTimeout(() => attemptPlay('retry after play rejection'), 0);
+        } else if (playAttempts >= 2) {
+          failUnstartedTransition(error?.name || 'play rejection');
+        }
+      }).finally(() => {
+        playPending = false;
+        if (!isCurrentRequest()) return;
+        if (audio.paused && canPlaySeen && playAttempts < 2) {
+          window.setTimeout(() => attemptPlay('canplay after play attempt'), 0);
+        } else if (playAttempts >= 2 && audio.paused) {
+          failUnstartedTransition('play attempts exhausted');
+        } else {
+          // Resolving play() is not success until `playing` fires. Bound the
+          // wait so a suppressed event cannot leave the transition locked.
+          armWatchdog();
+        }
       });
-    }
+    };
+    audio.addEventListener('canplay', onCanPlay);
+    cancelAutomaticPlayRecovery = cancelRecovery;
+    armWatchdog();
+    logOnDemand('audio state immediately before automatic play', {
+      generation: loadGeneration, source: requestedStreamUrl,
+      audio: getOnDemandAudioDiagnostics(audio)
+    });
+    // `playing` is not inferred from the play promise. This listener only
+    // clears the recovery watchdog for this exact source generation.
+    audio.addEventListener('playing', () => {
+      if (loadGeneration === audioLoadGeneration && isCurrentOnDemandSource(audio)) stopRecovery();
+    }, { once: true });
+    attemptPlay('automatic track load');
   }
 
   await metadataPromise;
@@ -1415,6 +1553,9 @@ function updateOnDemandMetadata(song, track) {
   window.updateMiniPlayerMarquees?.();
   window.dispatchEvent(new CustomEvent('thaalam:nowplaying', { detail: data }));
 
+  logOnDemand('Media Session metadata assigned before confirmed playback', {
+    title, artist, requestedTrackId, audio: getOnDemandAudioDiagnostics(onDemandAudio)
+  });
   refreshOnDemandMediaSessionMetadata(nowPlaying);
 }
 
@@ -1704,10 +1845,9 @@ function advanceToSimilarSong(reason = 'unknown') {
     '/', relatedTrackCache.length, 'fetching=', isFetchingRelated,
     'hidden=', document.hidden);
   onDemandModeLabel.textContent = 'ON DEMAND';
-  // Chrome may otherwise drop the notification while it sees the old resource
-  // ended and the next resource loading. Metadata is replaced by the next
-  // track synchronously in playRelatedTrack()/skipOnDemandSong().
-  if (navigator.mediaSession) navigator.mediaSession.playbackState = 'playing';
+  // Metadata changes synchronously when the next track is selected, but the
+  // Media Session playback state is only set to playing by the audio element's
+  // `playing` event after the new source actually starts.
 
   if (onDemandQueueIndex >= 0 && onDemandQueueIndex < onDemandQueue.length - 1) {
     skipOnDemandSong(1);
@@ -2009,15 +2149,41 @@ function toggleOnDemandPlayback(shouldPlay) {
   const isPlaying = !onDemandAudio.paused && !onDemandAudio.ended;
   if (shouldPlay === false || (shouldPlay !== true && isPlaying)) {
     pendingShouldPlay = false;
+    cancelAutomaticPlayRecovery?.();
+    cancelAutomaticPlayRecovery = null;
+    autoplayTrackTransition = false;
+    logOnDemand('lock-screen/in-app pause requested', getOnDemandAudioDiagnostics(onDemandAudio));
     onDemandAudio.pause();
   } else {
-    const playPromise = onDemandAudio.play();
-    if (playPromise) {
-      playPromise.catch((error) => {
-        logOnDemand('toggle play() rejected:', error?.name || error);
-        if (window.onDemandPlaybackActive) setOnDemandPlaying(false);
+    cancelAutomaticPlayRecovery?.();
+    cancelAutomaticPlayRecovery = null;
+    logOnDemand('lock-screen/in-app play() call immediately before',
+      getOnDemandAudioDiagnostics(onDemandAudio));
+    let playPromise;
+    try {
+      playPromise = onDemandAudio.play();
+    } catch (error) {
+      logOnDemand('lock-screen/in-app play() threw synchronously', {
+        name: error?.name || '', message: error?.message || String(error),
+        audio: getOnDemandAudioDiagnostics(onDemandAudio)
       });
+      if (window.onDemandPlaybackActive) setOnDemandPlaying(false);
+      return;
     }
+    logOnDemand('lock-screen/in-app play() returned; awaiting promise', {
+      promiseReturned: Boolean(playPromise),
+      audio: getOnDemandAudioDiagnostics(onDemandAudio)
+    });
+    Promise.resolve(playPromise).then(() => {
+      logOnDemand('lock-screen/in-app play() promise resolved',
+        getOnDemandAudioDiagnostics(onDemandAudio));
+    }).catch((error) => {
+      logOnDemand('lock-screen/in-app play() promise rejected', {
+        name: error?.name || '', message: error?.message || String(error),
+        audio: getOnDemandAudioDiagnostics(onDemandAudio)
+      });
+      if (window.onDemandPlaybackActive) setOnDemandPlaying(false);
+    });
   }
 }
 
@@ -2145,6 +2311,8 @@ function returnToLive() {
   }
   savePlaybackMode('live');
   songRequestId += 1;
+  cancelAutomaticPlayRecovery?.();
+  cancelAutomaticPlayRecovery = null;
   // Stop and release the stream so nothing keeps buffering in the background.
   pendingShouldPlay = false;
   autoplayTrackTransition = false;
