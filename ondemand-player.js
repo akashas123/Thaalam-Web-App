@@ -63,6 +63,7 @@ let pendingStartSeconds = -1;
 let pendingShouldPlay = false;
 let autoplayTrackTransition = false;
 let lastObservedOnDemandTime = 0;
+let onDemandSourceHasPlayed = false;
 let manualSeekInProgress = false;
 let manualSeekResetTimer = 0;
 let selectedDuration = 0;
@@ -810,14 +811,26 @@ function handleOnDemandTimeUpdate(audio) {
   lastObservedOnDemandTime = currentTime;
 
   // A manual seek can also move the clock backwards. Its intent is recorded
-  // by seekOnDemandAudio(), so only an unrequested near-end-to-start wrap
-  // advances the queue. The wider boundary tolerates delayed background
-  // timeupdate delivery without mistaking ordinary progress for a wrap.
+  // by seekOnDemandAudio(), so only an unrequested loop wrap advances the
+  // queue. `seeking` is the primary signal; this remains a fallback for
+  // engines that loop without dispatching that event.
   if (manualSeekInProgress || autoplayTrackTransition ||
-      !Number.isFinite(duration) || duration <= 0) return;
-  const wrapped = previousTime >= duration * 0.75 &&
-    currentTime < duration * 0.75 && previousTime - currentTime > 5;
+      !onDemandSourceHasPlayed || !Number.isFinite(duration) || duration <= 0) return;
+  const wrapped = previousTime > 3 && currentTime < 1.5 &&
+    previousTime - currentTime > 2;
   if (wrapped) advanceToSimilarSong();
+}
+
+function handleOnDemandSeeking(audio) {
+  if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
+  const currentTime = Number(audio.currentTime) || 0;
+  const previousTime = lastObservedOnDemandTime;
+  lastObservedOnDemandTime = currentTime;
+  if (manualSeekInProgress || autoplayTrackTransition ||
+      !onDemandSourceHasPlayed) return;
+  if (previousTime > 3 && currentTime < 1.5 && previousTime - currentTime > 2) {
+    advanceToSimilarSong();
+  }
 }
 
 function bindScrubBar(bar) {
@@ -949,6 +962,7 @@ function bindOnDemandAudioEvents(audio) {
     }
   });
   audio.addEventListener('timeupdate', () => handleOnDemandTimeUpdate(audio));
+  audio.addEventListener('seeking', () => handleOnDemandSeeking(audio));
   audio.addEventListener('seeked', () => {
     if (audio !== onDemandAudio) return;
     if (manualSeekInProgress) {
@@ -960,12 +974,16 @@ function bindOnDemandAudioEvents(audio) {
   });
   audio.addEventListener('playing', () => {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
+    onDemandSourceHasPlayed = true;
     autoplayTrackTransition = false;
     logOnDemand('playing', audio.currentTime.toFixed(1), 's');
     refreshOnDemandMediaSessionMetadata();
     onDemandModeLabel.textContent = 'ON DEMAND';
     syncOnDemandVolumeToStored();
     setOnDemandPlaying(true);
+    // Re-register transport actions once Chrome has made this source the
+    // active Now Playing item.
+    updateTransportButtonState();
   });
   audio.addEventListener('pause', () => {
   // Fires for track swaps, src teardown and listener-initiated pauses alike.
@@ -1126,6 +1144,7 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
   // through the boundary until the wrap detector installs the next source.
   onDemandAudio.loop = true;
   lastObservedOnDemandTime = 0;
+  onDemandSourceHasPlayed = false;
 
   const metadataPromise = new Promise((resolve) => {
     let settled = false;
@@ -1145,7 +1164,12 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
     onDemandAudio.addEventListener('error', finish, { once: true });
   });
 
-  if (!sameSource) onDemandAudio.src = requestedStreamUrl;
+  if (!sameSource) {
+    // Pausing before replacing a naturally looping source keeps the active
+    // media session attached through the source handoff on mobile browsers.
+    if (autoplayTrackTransition && !onDemandAudio.paused) onDemandAudio.pause();
+    onDemandAudio.src = requestedStreamUrl;
+  }
   onDemandAudio.load();
 
   // Request playback as soon as the next source is installed. Waiting until
