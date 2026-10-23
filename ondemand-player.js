@@ -44,6 +44,7 @@ let pendingStartSeconds = -1;
 let pendingShouldPlay = false;
 let autoplayTrackTransition = false;
 let lastObservedOnDemandTime = 0;
+let nearEndDiagnosticGeneration = 0;
 let manualSeekInProgress = false;
 let manualSeekResetTimer = 0;
 let selectedDuration = 0;
@@ -802,6 +803,16 @@ function commitScrub(event) {
 function seekOnDemandAudio(seconds) {
   const duration = Number(onDemandAudio.duration);
   const target = Math.max(0, Number(seconds) || 0);
+  logOnDemand('seek requested', {
+    from: Number(onDemandAudio.currentTime) || 0, target,
+    duration: Number.isFinite(duration) ? duration : null,
+    remainingAfterSeek: Number.isFinite(duration) ? Math.max(0, duration - target) : null,
+    hidden: document.hidden, generation: audioLoadGeneration,
+    audio: getOnDemandAudioDiagnostics(onDemandAudio)
+  });
+  // Allow the final-10-seconds diagnostic to record the post-seek timeupdate
+  // even if this track previously crossed that point during normal playback.
+  nearEndDiagnosticGeneration = 0;
   manualSeekInProgress = true;
   window.clearTimeout(manualSeekResetTimer);
   try {
@@ -821,7 +832,20 @@ function seekOnDemandAudio(seconds) {
 
 function handleOnDemandTimeUpdate(audio) {
   if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
+  const previousTime = lastObservedOnDemandTime;
   lastObservedOnDemandTime = Number(audio.currentTime) || 0;
+  const duration = Number(audio.duration);
+  const remaining = duration - lastObservedOnDemandTime;
+  if (Number.isFinite(duration) && duration > 0 && remaining >= 0 && remaining <= 10 &&
+      nearEndDiagnosticGeneration !== audioLoadGeneration) {
+    nearEndDiagnosticGeneration = audioLoadGeneration;
+    logOnDemand('timeupdate entered final 10 seconds (diagnostic only)', {
+      previousTime, currentTime: lastObservedOnDemandTime, duration, remaining,
+      hidden: document.hidden, manualSeekInProgress,
+      generation: audioLoadGeneration,
+      audio: getOnDemandAudioDiagnostics(audio)
+    });
+  }
 }
 
 function bindScrubBar(bar) {
@@ -979,12 +1003,23 @@ function bindOnDemandAudioEvents(audio) {
   audio.addEventListener('timeupdate', () => handleOnDemandTimeUpdate(audio));
   audio.addEventListener('seeked', () => {
     if (audio !== onDemandAudio) return;
+    logOnDemand('audio seeked event', {
+      manualSeekInProgress, generation: audioLoadGeneration,
+      audio: getOnDemandAudioDiagnostics(audio)
+    });
     if (manualSeekInProgress) {
       lastObservedOnDemandTime = Number(audio.currentTime) || 0;
       window.clearTimeout(manualSeekResetTimer);
       manualSeekResetTimer = 0;
       manualSeekInProgress = false;
     }
+  });
+  audio.addEventListener('seeking', () => {
+    if (audio !== onDemandAudio) return;
+    logOnDemand('audio seeking event', {
+      manualSeekInProgress, generation: audioLoadGeneration,
+      audio: getOnDemandAudioDiagnostics(audio)
+    });
   });
   audio.addEventListener('playing', () => {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
@@ -1043,9 +1078,17 @@ function bindOnDemandAudioEvents(audio) {
     });
   }
   audio.addEventListener('ended', () => {
-    if (audio !== onDemandAudio || !isCurrentOnDemandSource(audio) || !window.onDemandPlaybackActive ||
-        autoplayTrackTransition) return;
-    logOnDemand('track ended; advancing', getOnDemandAudioDiagnostics(audio));
+    if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
+    const details = getOnDemandAudioDiagnostics(audio);
+    if (!isCurrentOnDemandSource(audio)) {
+      logOnDemand('ended event ignored for stale source', details);
+      return;
+    }
+    if (autoplayTrackTransition) {
+      logOnDemand('ended event ignored; transition already claimed', details);
+      return;
+    }
+    logOnDemand('natural ended event; advancing', details);
     advanceToSimilarSong('ended');
   });
   audio.addEventListener('error', () => {
@@ -1100,6 +1143,11 @@ function getOnDemandAudioDiagnostics(audio) {
     readyState: audio.readyState,
     paused: audio.paused,
     ended: audio.ended,
+    currentTime: Number.isFinite(audio.currentTime) ? Number(audio.currentTime.toFixed(3)) : null,
+    duration: Number.isFinite(audio.duration) ? Number(audio.duration.toFixed(3)) : null,
+    remainingSeconds: Number.isFinite(audio.duration)
+      ? Number(Math.max(0, audio.duration - audio.currentTime).toFixed(3)) : null,
+    loop: audio.loop,
     visibility: document.visibilityState,
     resourceTiming: timing ? {
       durationMs: Math.round(timing.duration),
@@ -1143,6 +1191,10 @@ function resumeMobilePlaybackAfterBackground() {
   const reachedTrackEnd = onDemandAudio.ended ||
     (Number.isFinite(duration) && duration > 0 &&
       onDemandAudio.currentTime >= duration - 0.35);
+  logOnDemand('background resume boundary check', {
+    reachedTrackEnd, transition: autoplayTrackTransition,
+    audio: getOnDemandAudioDiagnostics(onDemandAudio)
+  });
   if (reachedTrackEnd) {
     advanceToSimilarSong();
   } else if (onDemandAudio.paused) {
@@ -1718,11 +1770,22 @@ function prefetchRelatedTracks(trackId, isRetry = false) {
 
   const token = ++prefetchToken;
   isFetchingRelated = true;
+  const startedAt = performance.now();
+  logOnDemand('recommendation prefetch started', {
+    trackId, token, isRetry, hidden: document.hidden,
+    queueReady: relatedTrackCache.length - relatedTrackCursor
+  });
 
   fetchRelatedTracks(trackId)
     .then((tracks) => {
       // Ignore a response for a track the listener has already moved past.
-      if (token !== prefetchToken) return;
+      if (token !== prefetchToken) {
+        logOnDemand('recommendation prefetch response stale', {
+          trackId, token, currentToken: prefetchToken,
+          elapsedMs: Math.round(performance.now() - startedAt)
+        });
+        return;
+      }
 
       if (!Array.isArray(tracks)) {
         // Keep any already-buffered, unplayed recommendations. A transient
@@ -1737,6 +1800,11 @@ function prefetchRelatedTracks(trackId, isRetry = false) {
             prefetchRelatedTracks(currentOnDemandTrackId, true);
           }
         }, retryDelay);
+        logOnDemand('recommendation prefetch failed', {
+          trackId, token, retryDelay, hidden: document.hidden,
+          queueReady: relatedTrackCache.length - relatedTrackCursor,
+          elapsedMs: Math.round(performance.now() - startedAt)
+        });
         updateTransportButtonState();
         return;
       }
@@ -1756,6 +1824,13 @@ function prefetchRelatedTracks(trackId, isRetry = false) {
         return true;
       });
       relatedTrackCursor = 0;
+      logOnDemand('recommendation prefetch completed', {
+        trackId, token, resultCount: tracks.length,
+        queueReady: relatedTrackCache.length,
+        nextTrackId: relatedTrackCache[0]?.id || '',
+        elapsedMs: Math.round(performance.now() - startedAt),
+        hidden: document.hidden
+      });
       prefetchUpcomingTrackArtwork();
       if (onDemandQueueSource === 'favourites' &&
           onDemandQueueIndex < onDemandFavouriteQueueLength - 1) {
