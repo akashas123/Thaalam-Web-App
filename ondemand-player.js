@@ -1156,11 +1156,37 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
   // pending seek when metadata arrives.
   if (shouldPlay) {
     pendingShouldPlay = false;
+    let playRequestAborted = false;
+    let retryIssued = false;
+    const retryAfterLoad = () => {
+      if (!playRequestAborted || retryIssued || requestId !== songRequestId ||
+          !window.onDemandPlaybackActive || !onDemandAudio.paused) return;
+      retryIssued = true;
+      const retryPromise = onDemandAudio.play();
+      if (retryPromise) {
+        retryPromise.catch((error) => {
+          if (requestId !== songRequestId || !window.onDemandPlaybackActive ||
+              error?.name === 'AbortError') return;
+          logOnDemand('play() retry rejected:', error?.name || error);
+          autoplayTrackTransition = false;
+          setOnDemandPlaying(false);
+        });
+      }
+    };
+    // load() can abort the first play request while replacing the ended
+    // resource. If that happens, retry once when the new stream is playable;
+    // otherwise the transition can leave the element paused with no recovery.
+    onDemandAudio.addEventListener('canplay', retryAfterLoad, { once: true });
     const playPromise = onDemandAudio.play();
     if (playPromise) {
       playPromise.catch((error) => {
-        if (requestId !== songRequestId || !window.onDemandPlaybackActive ||
-            error?.name === 'AbortError') return;
+        if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
+        if (error?.name === 'AbortError') {
+          playRequestAborted = true;
+          // canplay may already have fired by the time the promise rejects.
+          window.setTimeout(retryAfterLoad, 0);
+          return;
+        }
         logOnDemand('play() rejected during track load:', error?.name || error);
         autoplayTrackTransition = false;
         setOnDemandPlaying(false);
