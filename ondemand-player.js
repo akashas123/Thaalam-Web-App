@@ -28,29 +28,11 @@ const onDemandPrevButton = document.getElementById('onDemandPrevButton');
 const onDemandNextButton = document.getElementById('onDemandNextButton');
 const onDemandFallbackArtwork = new URL('thaalam-icon-512.png?v=1', window.location.href).href;
 
-/* Each on-demand track gets its own audio element. Only the current track's
-   element is active; the separate preloader remains silent and is never
-   promoted into the playback/Media Session role. */
+/* Keep one playback element for the lifetime of the on-demand player. */
 let onDemandAudio = new Audio();
 onDemandAudio.preload = 'auto';
-// Each on-demand song gets its own native audio instance and ends normally.
 onDemandAudio.loop = false;
-let onDemandAudioTrackId = '';
-// Warm the next queue stream while the current track is still playing.
-// Mobile browsers can delay the ended handler in the background, so avoid
-// making the next track's first media request at that boundary.
-let autoplayPreloadAudio = new Audio();
-autoplayPreloadAudio.preload = 'auto';
-let autoplayPreloadedTrackId = '';
-let autoplayPreloadedStreamUrl = '';
-
-function clearAutoplayPreload() {
-  autoplayPreloadAudio.pause();
-  autoplayPreloadAudio.removeAttribute('src');
-  autoplayPreloadAudio.load();
-  autoplayPreloadedTrackId = '';
-  autoplayPreloadedStreamUrl = '';
-}
+let audioLoadGeneration = 0;
 
 let requestedTrackId = '';
 let requestedStreamUrl = '';
@@ -303,8 +285,22 @@ async function resolveSong(trackId) {
   const controller = new AbortController();
   const deadline = window.setTimeout(() => controller.abort(), 10000);
   let response;
+  const requestStartedAt = performance.now();
   try {
     response = await fetch(url, { cache: 'no-store', signal: controller.signal });
+    logOnDemand('stream refresh HTTP response', {
+      trackId, url: url.href, status: response.status, ok: response.ok,
+      contentType: response.headers.get('content-type'),
+      elapsedMs: Math.round(performance.now() - requestStartedAt)
+    });
+  } catch (error) {
+    logOnDemand('stream refresh request failed', {
+      trackId, url: url.href, name: error?.name || '',
+      message: error?.message || String(error),
+      elapsedMs: Math.round(performance.now() - requestStartedAt),
+      hidden: document.hidden
+    });
+    throw error;
   } finally {
     window.clearTimeout(deadline);
   }
@@ -922,7 +918,8 @@ function syncOnDemandVolumeToStored() {
 
 /* Applies the seek/auto-play intent recorded by loadTrack() once the element
    knows its duration. currentTime cannot be set reliably before then. */
-function applyPendingMediaIntent() {
+function applyPendingMediaIntent(generation = audioLoadGeneration) {
+  if (generation !== audioLoadGeneration) return;
   if (!window.onDemandPlaybackActive) return;
   if (pendingStartSeconds >= 0) {
     const target = pendingStartSeconds;
@@ -936,6 +933,7 @@ function applyPendingMediaIntent() {
     const playPromise = onDemandAudio.play();
     if (playPromise) {
       playPromise.catch((error) => {
+        if (generation !== audioLoadGeneration) return;
         // Autoplay policy or a transient rejection: stay visibly paused so the
         // listener can press Play (their gesture always succeeds).
         logOnDemand('play() rejected:', error?.name || error);
@@ -950,9 +948,9 @@ function applyPendingMediaIntent() {
 
 function bindOnDemandAudioEvents(audio) {
   audio.addEventListener('loadedmetadata', () => {
-    if (audio === onDemandAudio) {
+    if (audio === onDemandAudio && isCurrentOnDemandSource(audio)) {
       lastObservedOnDemandTime = Number(audio.currentTime) || 0;
-      applyPendingMediaIntent();
+      applyPendingMediaIntent(audioLoadGeneration);
     }
   });
   audio.addEventListener('timeupdate', () => handleOnDemandTimeUpdate(audio));
@@ -967,8 +965,9 @@ function bindOnDemandAudioEvents(audio) {
   });
   audio.addEventListener('playing', () => {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
+    if (!isCurrentOnDemandSource(audio)) return;
     autoplayTrackTransition = false;
-    logOnDemand('playing', audio.currentTime.toFixed(1), 's');
+    logOnDemand('playing', getOnDemandAudioDiagnostics(audio));
     refreshOnDemandMediaSessionMetadata();
     onDemandModeLabel.textContent = 'ON DEMAND';
     syncOnDemandVolumeToStored();
@@ -992,24 +991,86 @@ function bindOnDemandAudioEvents(audio) {
       onDemandModeLabel.textContent = 'BUFFERING';
       onDemandPlayButton?.classList.add('is-loading');
       onDemandMiniToggle?.classList.add('is-loading');
+      logOnDemand(`track ${eventName}`, getOnDemandAudioDiagnostics(audio));
     });
   }
+  audio.addEventListener('loadstart', () => {
+    if (audio !== onDemandAudio) return;
+    logOnDemand('track loadstart', getOnDemandAudioDiagnostics(audio));
+  });
+  audio.addEventListener('loadedmetadata', () => {
+    if (audio !== onDemandAudio) return;
+    logOnDemand('track loadedmetadata', getOnDemandAudioDiagnostics(audio));
+  });
+  audio.addEventListener('canplay', () => {
+    if (audio !== onDemandAudio) return;
+    logOnDemand('track canplay', getOnDemandAudioDiagnostics(audio));
+  });
   audio.addEventListener('ended', () => {
-    if (audio !== onDemandAudio || !window.onDemandPlaybackActive ||
+    if (audio !== onDemandAudio || !isCurrentOnDemandSource(audio) || !window.onDemandPlaybackActive ||
         autoplayTrackTransition) return;
+    logOnDemand('track ended; advancing', getOnDemandAudioDiagnostics(audio));
     advanceToSimilarSong('ended');
   });
   audio.addEventListener('error', () => {
-    if (audio !== onDemandAudio) return;
-    logOnDemand('media ERROR', audio.error?.code,
-      '(active =', window.onDemandPlaybackActive,
-      ', candidates =', trackCandidates.length, ')');
+    const details = getOnDemandAudioDiagnostics(audio);
+    if (audio !== onDemandAudio || !isCurrentOnDemandSource(audio)) {
+      logOnDemand('stale audio error ignored', details);
+      return;
+    }
+    logOnDemand('media ERROR', details,
+      'active=', window.onDemandPlaybackActive,
+      'candidates=', trackCandidates.length);
     handlePlaybackError();
   });
 }
 
+function isCurrentOnDemandSource(audio) {
+  if (audio !== onDemandAudio || !requestedStreamUrl) return false;
+  const actual = audio.currentSrc || audio.src || '';
+  if (!actual) return false;
+  try {
+    return new URL(actual, window.location.href).href ===
+      new URL(requestedStreamUrl, window.location.href).href;
+  } catch (_) {
+    return actual === requestedStreamUrl;
+  }
+}
+
+function getOnDemandAudioDiagnostics(audio) {
+  const source = audio.currentSrc || audio.src || '';
+  const timings = source
+    ? performance.getEntriesByName(source).filter((entry) => entry.entryType === 'resource')
+    : [];
+  const timing = timings[timings.length - 1] || null;
+  const code = audio.error?.code ?? null;
+  const errorNames = {
+    1: 'MEDIA_ERR_ABORTED', 2: 'MEDIA_ERR_NETWORK',
+    3: 'MEDIA_ERR_DECODE', 4: 'MEDIA_ERR_SRC_NOT_SUPPORTED'
+  };
+  return {
+    trackId: audio === onDemandAudio ? requestedTrackId : '',
+    loadGeneration: audio === onDemandAudio ? audioLoadGeneration : null,
+    src: source,
+    mediaError: code === null ? null : {
+      code, name: errorNames[code] || 'MEDIA_ERR_UNKNOWN',
+      message: audio.error?.message || ''
+    },
+    networkState: audio.networkState,
+    readyState: audio.readyState,
+    paused: audio.paused,
+    ended: audio.ended,
+    visibility: document.visibilityState,
+    resourceTiming: timing ? {
+      durationMs: Math.round(timing.duration),
+      transferSize: timing.transferSize,
+      encodedBodySize: timing.encodedBodySize,
+      responseStatus: Number.isFinite(timing.responseStatus) ? timing.responseStatus : null
+    } : null
+  };
+}
+
 bindOnDemandAudioEvents(onDemandAudio);
-bindOnDemandAudioEvents(autoplayPreloadAudio);
 
 // Some mobile browsers suspend a PWA's media when the screen is off, and may
 // restore it through pageshow instead of a visibilitychange event. Resume only
@@ -1136,29 +1197,8 @@ async function handlePlaybackError() {
   returnToLiveButton.hidden = false;
 }
 
-/* Loads one { id, streamUrl } candidate into the audio element. Resolves once
-   metadata is known (or shortly after), so callers can update state without
-   waiting for the whole song to buffer; media errors are handled separately
-   by the 'error' listener above. */
-function createOnDemandAudioForTrack(trackId) {
-  const nextTrackKey = String(trackId || '');
-  if (!nextTrackKey || nextTrackKey === onDemandAudioTrackId) return;
-
-  const previousAudio = onDemandAudio;
-  const nextAudio = new Audio();
-  nextAudio.preload = 'auto';
-  nextAudio.loop = false;
-  onDemandAudio = nextAudio;
-  onDemandAudioTrackId = nextTrackKey;
-  bindOnDemandAudioEvents(nextAudio);
-
-  // Retire the previous track after the new element is the active owner, so
-  // its late pause/error events cannot overwrite the new track's state.
-  previousAudio.pause();
-  previousAudio.removeAttribute('src');
-  previousAudio.load();
-}
-
+/* Loads a candidate into the persistent audio element. The transition is
+   considered successful only after this element emits `playing`. */
 async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = true) {
   if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
   logOnDemand('load track', candidate.id || '(no id)', 'transition=', autoplayTrackTransition,
@@ -1166,8 +1206,13 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
   requestedTrackId = candidate.id || '';
   requestedStreamUrl = candidate.streamUrl || '';
   if (!requestedStreamUrl) return;
-  createOnDemandAudioForTrack(requestedTrackId || requestedStreamUrl);
   const audio = onDemandAudio;
+  const loadGeneration = ++audioLoadGeneration;
+  if (shouldPlay) autoplayTrackTransition = true;
+  logOnDemand('track load generation started', {
+    generation: loadGeneration, trackId: requestedTrackId,
+    src: requestedStreamUrl, hidden: document.hidden
+  });
   pendingStartSeconds = Math.max(0, Number(startSeconds) || 0);
   pendingShouldPlay = shouldPlay;
   syncOnDemandVolumeToStored();
@@ -1205,7 +1250,14 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
   });
 
   if (!sameSource) {
+    logOnDemand('assigning next audio source', {
+      trackId: requestedTrackId,
+      src: requestedStreamUrl,
+      generation: loadGeneration,
+      hidden: document.hidden
+    });
     audio.src = requestedStreamUrl;
+    audio.load();
   } else {
     audio.load();
   }
@@ -1221,16 +1273,19 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
     let playRequestAborted = false;
     let retryIssued = false;
     const retryAfterLoad = () => {
-      if (!playRequestAborted || retryIssued || requestId !== songRequestId ||
+      if (!playRequestAborted || retryIssued || loadGeneration !== audioLoadGeneration || requestId !== songRequestId ||
           !window.onDemandPlaybackActive || audio !== onDemandAudio || !audio.paused) return;
       retryIssued = true;
       const retryPromise = audio.play();
       if (retryPromise) {
         retryPromise.catch((error) => {
-          if (requestId !== songRequestId || !window.onDemandPlaybackActive ||
+          if (loadGeneration !== audioLoadGeneration || requestId !== songRequestId || !window.onDemandPlaybackActive ||
               audio !== onDemandAudio ||
               error?.name === 'AbortError') return;
-          logOnDemand('play() retry rejected:', error?.name || error);
+          logOnDemand('play() retry rejected:', {
+            name: error?.name || '', message: error?.message || String(error),
+            audio: getOnDemandAudioDiagnostics(audio)
+          });
           autoplayTrackTransition = false;
           setOnDemandPlaying(false);
         });
@@ -1243,7 +1298,7 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
     const playPromise = audio.play();
     if (playPromise) {
       playPromise.catch((error) => {
-        if (requestId !== songRequestId || !window.onDemandPlaybackActive ||
+        if (loadGeneration !== audioLoadGeneration || requestId !== songRequestId || !window.onDemandPlaybackActive ||
             audio !== onDemandAudio) return;
         if (error?.name === 'AbortError') {
           playRequestAborted = true;
@@ -1251,7 +1306,10 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
           window.setTimeout(retryAfterLoad, 0);
           return;
         }
-        logOnDemand('play() rejected during track load:', error?.name || error);
+        logOnDemand('play() rejected during track load:', {
+          name: error?.name || '', message: error?.message || String(error),
+          audio: getOnDemandAudioDiagnostics(audio)
+        });
         autoplayTrackTransition = false;
         setOnDemandPlaying(false);
       });
@@ -1561,31 +1619,12 @@ function prefetchRelatedTracks(trackId, isRetry = false) {
       if (onDemandQueueSource === 'favourites' &&
           onDemandQueueIndex < onDemandFavouriteQueueLength - 1) {
         preloadNextLikedQueueTrack();
-      } else {
-        preloadNextAutoplayTrack();
       }
       updateTransportButtonState();
     })
     .finally(() => {
       if (token === prefetchToken) isFetchingRelated = false;
     });
-}
-
-function preloadNextAutoplayTrack() {
-  const nextTrack = relatedTrackCache[relatedTrackCursor];
-  if (!nextTrack?.id || !nextTrack.streamUrl ||
-      nextTrack.id === autoplayPreloadedTrackId) return;
-  preloadTrackAudio(nextTrack);
-}
-
-function preloadTrackAudio(track) {
-  if (!track?.id || !track.streamUrl || track.id === autoplayPreloadedTrackId) return;
-  autoplayPreloadedTrackId = track.id;
-  autoplayPreloadedStreamUrl = track.streamUrl;
-  autoplayPreloadAudio.src = track.streamUrl;
-  // Explicit load() asks the browser to start buffering this media now while
-  // the active audio element continues playing the current song.
-  autoplayPreloadAudio.load();
 }
 
 function preloadNextLikedQueueTrack(queueIndex = onDemandQueueIndex) {
@@ -1603,7 +1642,8 @@ function preloadNextLikedQueueTrack(queueIndex = onDemandQueueIndex) {
     if (onDemandQueueSource !== 'favourites' ||
         onDemandQueue[onDemandQueueIndex + 1] !== nextSong ||
         !track?.id || !track.streamUrl) return;
-    preloadTrackAudio(track);
+    // Candidate resolution is cached for the boundary; audio loads through
+    // the single persistent playback element when selected.
   }).catch(() => {});
 }
 
@@ -1679,7 +1719,6 @@ function advanceToSimilarSong(reason = 'unknown') {
     logOnDemand('next related track selected', nextTrack.id, nextTrack.title);
     relatedTrackCursor += 1;
     playRelatedTrack(nextTrack);
-    preloadNextAutoplayTrack();
     return;
   }
 
@@ -1701,7 +1740,6 @@ function advanceToSimilarSong(reason = 'unknown') {
       window.clearInterval(autoplayRetryTimer);
       relatedTrackCursor += 1;
       playRelatedTrack(retryTrack);
-      preloadNextAutoplayTrack();
       return;
     }
 
@@ -1793,7 +1831,6 @@ async function startOnDemandSong(song, {
     const current = onDemandQueue[onDemandQueueIndex];
     const isSameAsCurrent = isSameOnDemandSong(current, song);
     if (!isSameAsCurrent) {
-      clearAutoplayPreload();
       // A listener's new selection starts a fresh history. Autoplay tracks
       // added afterward can still be played next and navigated back to.
       onDemandQueue = [];
@@ -1933,7 +1970,6 @@ function startOnDemandQueue(songs, startIndex = 0, options = {}) {
     return pendingLikedQueueStart;
   }
 
-  clearAutoplayPreload();
   onDemandQueue = queue;
   onDemandQueueIndex = selectedIndex;
   onDemandQueueSource = 'favourites';
@@ -2120,7 +2156,6 @@ function returnToLive() {
   persistCurrentOnDemandSession();
   onDemandAudio.removeAttribute('src');
   onDemandAudio.load();
-  clearAutoplayPreload();
   resetScrub();
   // Cancel any in-flight related-tracks lookup so a late response cannot
   // restart on-demand playback after the listener has gone back to live.
