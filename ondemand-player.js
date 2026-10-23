@@ -64,6 +64,7 @@ let pendingShouldPlay = false;
 let autoplayTrackTransition = false;
 let lastObservedOnDemandTime = 0;
 let onDemandSourceHasPlayed = false;
+let loopWrapPendingSeeked = false;
 let manualSeekInProgress = false;
 let manualSeekResetTimer = 0;
 let selectedDuration = 0;
@@ -809,6 +810,7 @@ function seekOnDemandAudio(seconds) {
   const duration = Number(onDemandAudio.duration);
   const target = Math.max(0, Number(seconds) || 0);
   manualSeekInProgress = true;
+  loopWrapPendingSeeked = false;
   window.clearTimeout(manualSeekResetTimer);
   try {
     onDemandAudio.currentTime = Number.isFinite(duration) && duration > 0
@@ -832,7 +834,7 @@ function handleOnDemandTimeUpdate(audio) {
   const previousTime = lastObservedOnDemandTime;
   lastObservedOnDemandTime = currentTime;
   // Fallback for engines that don't report a loop wrap through `seeking`.
-  if (manualSeekInProgress || autoplayTrackTransition ||
+  if (manualSeekInProgress || loopWrapPendingSeeked || autoplayTrackTransition ||
       !onDemandSourceHasPlayed || !Number.isFinite(duration) || duration <= 0) return;
   if (previousTime > 3 && currentTime < 1.5 && previousTime - currentTime > 2) {
     logOnDemand('loop wrap detected by timeupdate', {
@@ -847,15 +849,16 @@ function handleOnDemandSeeking(audio) {
   const currentTime = Number(audio.currentTime) || 0;
   const previousTime = lastObservedOnDemandTime;
   lastObservedOnDemandTime = currentTime;
-  // A user seek to the beginning is not a track boundary. Only an unrequested
-  // backward wrap near the media end advances the queue.
+  // A user seek to the beginning is not a track boundary. For a loop wrap,
+  // wait for `seeked` before replacing src; changing it during `seeking` can
+  // interrupt the native loop seek and reject play() on the next song.
   if (manualSeekInProgress || autoplayTrackTransition ||
       !onDemandSourceHasPlayed) return;
   if (previousTime > 3 && currentTime < 1.5 && previousTime - currentTime > 2) {
-    logOnDemand('loop wrap detected by seeking', {
+    loopWrapPendingSeeked = true;
+    logOnDemand('loop wrap seek started; waiting for seeked', {
       from: previousTime, to: currentTime, hidden: document.hidden
     });
-    advanceToSimilarSong('loop-seeking');
   }
 }
 
@@ -996,6 +999,17 @@ function bindOnDemandAudioEvents(audio) {
       window.clearTimeout(manualSeekResetTimer);
       manualSeekResetTimer = 0;
       manualSeekInProgress = false;
+      loopWrapPendingSeeked = false;
+      return;
+    }
+    if (loopWrapPendingSeeked && window.onDemandPlaybackActive &&
+        !autoplayTrackTransition) {
+      loopWrapPendingSeeked = false;
+      lastObservedOnDemandTime = Number(audio.currentTime) || 0;
+      logOnDemand('loop wrap seek completed; advancing', {
+        time: lastObservedOnDemandTime, hidden: document.hidden
+      });
+      advanceToSimilarSong('loop-seeked');
     }
   });
   audio.addEventListener('playing', () => {
@@ -1198,6 +1212,7 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
   if (!requestedStreamUrl) return;
 
   onDemandAudio.loop = true;
+  loopWrapPendingSeeked = false;
   lastObservedOnDemandTime = 0;
   onDemandSourceHasPlayed = false;
 
