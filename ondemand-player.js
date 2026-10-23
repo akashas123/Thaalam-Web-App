@@ -148,9 +148,24 @@ const UNOFFICIAL_MIX_TITLE = /\b(?:unofficial|remix(?:es)?|mix(?:es)?|mash[ -]?u
 /* TEMPORARY DIAGNOSTIC: set to false to silence. Reports what is written, what
    is read back, and which branch the restore actually takes. */
 const ON_DEMAND_DEBUG = true;
+const ON_DEMAND_DEBUG_STORAGE_KEY = 'thaalam-on-demand-debug-v1';
 const logOnDemand = (...parts) => {
-  if (ON_DEMAND_DEBUG) console.log('[on-demand]', ...parts);
+  if (!ON_DEMAND_DEBUG) return;
+  console.log('[on-demand]', ...parts);
+  try {
+    const entries = JSON.parse(localStorage.getItem(ON_DEMAND_DEBUG_STORAGE_KEY) || '[]');
+    entries.push({ at: new Date().toISOString(), message: parts.map((part) => {
+      if (typeof part === 'string') return part;
+      try { return JSON.stringify(part); } catch { return String(part); }
+    }).join(' ') });
+    localStorage.setItem(ON_DEMAND_DEBUG_STORAGE_KEY, JSON.stringify(entries.slice(-100)));
+  } catch { /* Diagnostics must never interfere with playback. */ }
 };
+window.getOnDemandDebugLog = () => {
+  try { return JSON.parse(localStorage.getItem(ON_DEMAND_DEBUG_STORAGE_KEY) || '[]'); }
+  catch { return []; }
+};
+window.clearOnDemandDebugLog = () => localStorage.removeItem(ON_DEMAND_DEBUG_STORAGE_KEY);
 
 let onDemandRecentHistory = [];
 try {
@@ -813,7 +828,10 @@ function handleOnDemandTimeUpdate(audio) {
   if (manualSeekInProgress || autoplayTrackTransition ||
       !onDemandSourceHasPlayed || !Number.isFinite(duration) || duration <= 0) return;
   if (previousTime > 3 && currentTime < 1.5 && previousTime - currentTime > 2) {
-    advanceToSimilarSong();
+    logOnDemand('loop wrap detected by timeupdate', {
+      from: previousTime, to: currentTime, duration, hidden: document.hidden
+    });
+    advanceToSimilarSong('loop-timeupdate');
   }
 }
 
@@ -827,7 +845,10 @@ function handleOnDemandSeeking(audio) {
   if (manualSeekInProgress || autoplayTrackTransition ||
       !onDemandSourceHasPlayed) return;
   if (previousTime > 3 && currentTime < 1.5 && previousTime - currentTime > 2) {
-    advanceToSimilarSong();
+    logOnDemand('loop wrap detected by seeking', {
+      from: previousTime, to: currentTime, hidden: document.hidden
+    });
+    advanceToSimilarSong('loop-seeking');
   }
 }
 
@@ -1003,7 +1024,7 @@ function bindOnDemandAudioEvents(audio) {
   audio.addEventListener('ended', () => {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive ||
         autoplayTrackTransition) return;
-    advanceToSimilarSong();
+    advanceToSimilarSong('ended');
   });
   audio.addEventListener('error', () => {
     if (audio !== onDemandAudio) return;
@@ -1024,6 +1045,8 @@ bindOnDemandAudioEvents(autoplayPreloadAudio);
 function resumeMobilePlaybackAfterBackground() {
   if (!isMobilePlaybackLayout()) return;
   if (document.hidden) {
+    logOnDemand('page hidden', 'audioPaused=', onDemandAudio.paused,
+      'time=', Number(onDemandAudio.currentTime).toFixed(1));
     mobilePlaybackWasActiveBeforeHide ||=
       Boolean(window.onDemandPlaybackActive && window.onDemandPlaying);
     return;
@@ -1061,6 +1084,14 @@ function resumeMobilePlaybackAfterBackground() {
 document.addEventListener('visibilitychange', resumeMobilePlaybackAfterBackground);
 window.addEventListener('pageshow', resumeMobilePlaybackAfterBackground);
 document.addEventListener('resume', resumeMobilePlaybackAfterBackground);
+document.addEventListener('freeze', () => {
+  logOnDemand('document freeze', 'time=', Number(onDemandAudio.currentTime).toFixed(1),
+    'paused=', onDemandAudio.paused);
+});
+document.addEventListener('resume', () => {
+  logOnDemand('document resume', 'time=', Number(onDemandAudio.currentTime).toFixed(1),
+    'paused=', onDemandAudio.paused);
+});
 
 /* Called when a stream fails: fall through to the next search result first,
    then ask the server for one fresh stream URL per track (expired CDN links),
@@ -1119,6 +1150,8 @@ async function handlePlaybackError() {
    by the 'error' listener above. */
 async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = true) {
   if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
+  logOnDemand('load track', candidate.id || '(no id)', 'transition=', autoplayTrackTransition,
+    'hidden=', document.hidden, 'readyState=', onDemandAudio.readyState);
   requestedTrackId = candidate.id || '';
   requestedStreamUrl = candidate.streamUrl || '';
   pendingStartSeconds = Math.max(0, Number(startSeconds) || 0);
@@ -1608,11 +1641,19 @@ function prefetchUpcomingTrackArtwork() {
 }
 
 /* Called when a track ends. Plays the next prefetched queue item. */
-function advanceToSimilarSong() {
-  if (!window.onDemandPlaybackActive || autoplayTrackTransition) return;
+function advanceToSimilarSong(reason = 'unknown') {
+  if (!window.onDemandPlaybackActive || autoplayTrackTransition) {
+    logOnDemand('advance ignored', reason, 'active=', window.onDemandPlaybackActive,
+      'transition=', autoplayTrackTransition);
+    return;
+  }
   // `ended` and a delayed pageshow/visibility recovery can both observe the
   // same boundary. Claim it once so queue indices cannot advance twice.
   autoplayTrackTransition = true;
+  logOnDemand('advance started', reason, 'queue=', onDemandQueueIndex,
+    '/', onDemandQueue.length, 'related=', relatedTrackCursor,
+    '/', relatedTrackCache.length, 'fetching=', isFetchingRelated,
+    'hidden=', document.hidden);
   onDemandModeLabel.textContent = 'ON DEMAND';
   // Chrome may otherwise drop the notification while it sees the old resource
   // ended and the next resource loading. Metadata is replaced by the next
@@ -1626,6 +1667,7 @@ function advanceToSimilarSong() {
 
   const nextTrack = relatedTrackCache[relatedTrackCursor];
   if (nextTrack) {
+    logOnDemand('next related track selected', nextTrack.id, nextTrack.title);
     relatedTrackCursor += 1;
     playRelatedTrack(nextTrack);
     preloadNextAutoplayTrack();
@@ -1634,6 +1676,8 @@ function advanceToSimilarSong() {
 
   // The prefetch has not landed yet (or returned no eligible tracks). Wait for
   // the in-flight request or a scheduled transient-error retry before stopping.
+  logOnDemand('no next track ready', 'fetching=', isFetchingRelated,
+    'prefetchFailed=', autoplayPrefetchFailed, 'hidden=', document.hidden);
   let attempts = 0;
   window.clearInterval(autoplayRetryTimer);
   autoplayRetryTimer = window.setInterval(() => {
@@ -1644,6 +1688,7 @@ function advanceToSimilarSong() {
 
     const retryTrack = relatedTrackCache[relatedTrackCursor];
     if (retryTrack) {
+      logOnDemand('delayed next track available', retryTrack.id, retryTrack.title);
       window.clearInterval(autoplayRetryTimer);
       relatedTrackCursor += 1;
       playRelatedTrack(retryTrack);
