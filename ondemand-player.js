@@ -85,6 +85,21 @@ function getOnDemandSpatialContext() {
   }
   return onDemandSpatialContext;
 }
+function createOnDemandReverbImpulse(context) {
+  const sampleRate = context.sampleRate;
+  const length = Math.floor(sampleRate * 0.45);
+  const impulse = context.createBuffer(2, length, sampleRate);
+  for (let channel = 0; channel < 2; channel++) {
+    const data = impulse.getChannelData(channel);
+    for (let i = 0; i < length; i++) {
+      const t = i / length;
+      // Short, bright decay for space without mud.
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 2.2) * (0.7 + 0.3 * Math.sin(i * 0.05));
+    }
+  }
+  return impulse;
+}
+
 function connectOnDemandSpatialAudio(element) {
   if (!element || onDemandSpatialNodes.has(element)) return onDemandSpatialNodes.get(element) || null;
   const context = getOnDemandSpatialContext();
@@ -92,10 +107,9 @@ function connectOnDemandSpatialAudio(element) {
   try {
     const source = context.createMediaElementSource(element);
 
-    // Clean spatialization without HRTF coloration/reverb: keeps the
-    // original mix and treble intact while placing it in 3D space.
+    // Balanced 3D placement (centered, slightly above/in front).
     const panner = context.createPanner();
-    panner.panningModel = 'equalpower';
+    panner.panningModel = 'HRTF';
     panner.distanceModel = 'linear';
     panner.refDistance = 1;
     panner.maxDistance = 100000;
@@ -103,15 +117,32 @@ function connectOnDemandSpatialAudio(element) {
     panner.coneInnerAngle = 360;
     panner.coneOuterAngle = 360;
     panner.coneOuterGain = 1;
-    // Fixed, gentle off-center position (no spinning).
-    panner.positionX.value = 0.55;
-    panner.positionY.value = 0.2;
-    panner.positionZ.value = -1;
+    panner.positionX.value = 0;
+    panner.positionY.value = 0.35;
+    panner.positionZ.value = -1.2;
+
+    // Keep the mix bright.
+    const presence = context.createBiquadFilter();
+    presence.type = 'highshelf';
+    presence.frequency.value = 6000;
+    presence.gain.value = 4;
+    presence.Q.value = 0.7;
+
+    // Subtle surround/space (all-around ambience, no spinning).
+    const convolver = context.createConvolver();
+    convolver.buffer = createOnDemandReverbImpulse(context);
+    const wetGain = context.createGain();
+    wetGain.gain.value = 0.06;
 
     source.connect(panner);
-    panner.connect(context.destination);
+    panner.connect(presence);
+    presence.connect(context.destination);
 
-    const node = { source, panner };
+    source.connect(convolver);
+    convolver.connect(wetGain);
+    wetGain.connect(context.destination);
+
+    const node = { source, panner, presence, convolver, wetGain };
     onDemandSpatialNodes.set(element, node);
     return node;
   } catch (error) {
