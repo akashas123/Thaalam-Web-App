@@ -163,22 +163,76 @@ function connectOnDemandSpatialAudio(element) {
     feedback.gain.value = 0.08;
     wet.gain.value = 0.04;
 
+    // Automatic gain control: measure RMS and gently boost quiet tracks /
+    // tame loud ones, so very different source levels land on a consistent
+    // loudness without hard limiting.
+    const agcGain = context.createGain();
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.8;
+    agcGain.gain.value = 1;
+
+    // Gentle loudness normalization (transparent compressor) ...
+    const compressor = context.createDynamicsCompressor();
+    compressor.threshold.value = -18;
+    compressor.knee.value = 30;
+    compressor.ratio.value = 2.5;
+    compressor.attack.value = 0.003;
+    compressor.release.value = 0.25;
+
+    merger.connect(agcGain);
+    agcGain.connect(analyser);
+    agcGain.connect(compressor);
+
     merger.connect(delay);
     delay.connect(feedback);
     feedback.connect(delay);
     delay.connect(wet);
-    wet.connect(context.destination);
+    wet.connect(compressor);
 
-    merger.connect(context.destination);
+    compressor.connect(context.destination);
 
-    const node = { source, splitter, merger };
+    const node = { source, splitter, merger, agcGain, analyser, compressor, delay, feedback, wet };
     onDemandSpatialNodes.set(element, node);
+    startOnDemandAgc();
     return node;
   } catch (error) {
     logOnDemand('spatial audio connect failed:', error?.name || error);
     return null;
   }
 }
+let onDemandAgcInterval = null;
+const ON_DEMAND_AGC_TARGET_RMS = 0.12;
+function startOnDemandAgc() {
+  if (onDemandAgcInterval) return;
+  onDemandAgcInterval = setInterval(() => {
+    onDemandSpatialNodes.forEach((node) => {
+      if (!node || !node.analyser || !node.agcGain) return;
+      const context = node.agcGain.context;
+      if (!context || context.state !== 'running') return;
+      const data = new Float32Array(node.analyser.fftSize);
+      try {
+        node.analyser.getFloatTimeDomainData(data);
+      } catch {
+        return;
+      }
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+      const rms = Math.sqrt(sum / data.length);
+      if (!Number.isFinite(rms) || rms < 0.001) return;
+      const desired = Math.min(6, Math.max(0.5, ON_DEMAND_AGC_TARGET_RMS / rms));
+      const now = context.currentTime;
+      const current = node.agcGain.gain.value;
+      const next = current + (desired - current) * 0.15;
+      try {
+        node.agcGain.gain.setTargetAtTime(next, now, 0.2);
+      } catch {
+        /* ignore */
+      }
+    });
+  }, 250);
+}
+
 function resumeOnDemandSpatialContext() {
   const context = getOnDemandSpatialContext();
   if (context && context.state === 'suspended') {
