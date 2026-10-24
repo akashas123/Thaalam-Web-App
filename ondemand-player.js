@@ -91,22 +91,26 @@ function connectOnDemandSpatialAudio(element) {
   if (!context) return null;
   try {
     const source = context.createMediaElementSource(element);
+
+    // Clean spatialization without HRTF coloration/reverb: keeps the
+    // original mix and treble intact while placing it in 3D space.
     const panner = context.createPanner();
-    panner.panningModel = 'HRTF';
-    panner.distanceModel = 'inverse';
+    panner.panningModel = 'equalpower';
+    panner.distanceModel = 'linear';
     panner.refDistance = 1;
-    panner.maxDistance = 10000;
-    panner.rolloffFactor = 1;
+    panner.maxDistance = 100000;
+    panner.rolloffFactor = 0;
     panner.coneInnerAngle = 360;
-    panner.coneOuterAngle = 0;
-    panner.coneOuterGain = 0;
-    // Fixed 3D position (slightly right/front/above the listener) for a
-    // stable spatial image instead of the rotating 8D effect.
-    panner.positionX.value = 0.9;
-    panner.positionY.value = 0.35;
-    panner.positionZ.value = -1.1;
+    panner.coneOuterAngle = 360;
+    panner.coneOuterGain = 1;
+    // Fixed, gentle off-center position (no spinning).
+    panner.positionX.value = 0.55;
+    panner.positionY.value = 0.2;
+    panner.positionZ.value = -1;
+
     source.connect(panner);
     panner.connect(context.destination);
+
     const node = { source, panner };
     onDemandSpatialNodes.set(element, node);
     return node;
@@ -123,23 +127,7 @@ function resumeOnDemandSpatialContext() {
 }
 let onDemandSpatialAnimationId = null;
 function updateOnDemandSpatialAudio() {
-  const context = onDemandSpatialContext;
-  if (!context) return;
-  // Move the sound source around the listener in 3D (HRTF) for a
-  // Dolby/8D-style "all directions" effect, one full orbit every ~10s.
-  const angle = context.currentTime * (2 * Math.PI / 10);
-  const radius = 1.6;
-  const x = Math.cos(angle) * radius;
-  const z = Math.sin(angle) * radius;
-  const y = 0.35;
-  for (const node of onDemandSpatialNodes.values()) {
-    try {
-      node.panner.positionX.value = x;
-      node.panner.positionY.value = y;
-      node.panner.positionZ.value = z;
-    } catch { /* ignore */ }
-  }
-  onDemandSpatialAnimationId = window.requestAnimationFrame(updateOnDemandSpatialAudio);
+  // Spatial position is fixed; no animation.
 }
 function getOnDemandSilenceContext() {
   if (onDemandSilenceAudioContext) return onDemandSilenceAudioContext;
@@ -155,22 +143,9 @@ function getOnDemandSilenceContext() {
 
 function startOnDemandSpatialAudio() {
   resumeOnDemandSpatialContext();
-  if (onDemandSpatialAnimationId === null) {
-    onDemandSpatialAnimationId = window.requestAnimationFrame(updateOnDemandSpatialAudio);
-  }
 }
 function stopOnDemandSpatialAudio() {
-  if (onDemandSpatialAnimationId !== null) {
-    window.cancelAnimationFrame(onDemandSpatialAnimationId);
-    onDemandSpatialAnimationId = null;
-  }
-  for (const node of onDemandSpatialNodes.values()) {
-    try {
-      node.panner.positionX.value = 0;
-      node.panner.positionY.value = 0.35;
-      node.panner.positionZ.value = -1.1;
-    } catch { /* ignore */ }
-  }
+  // Fixed spatial position; nothing to stop.
 }
 
 async function analyzeOnDemandTrackSilence(streamUrl) {
