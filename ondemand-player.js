@@ -1039,6 +1039,14 @@ function setOnDemandPlaying(isPlaying) {
   if (navigator.mediaSession) {
     navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
   }
+  // The silent loop keeps background JS alive while a track plays. It must not
+  // keep running while paused, otherwise Chrome's media session can stay in the
+  // "playing" state and the lock-screen play/pause button stops responding.
+  if (isPlaying) {
+    if (window.onDemandPlaybackActive) startOnDemandSilentLoop();
+  } else {
+    stopOnDemandSilentLoop();
+  }
   onDemandPlayButton?.setAttribute('aria-label', isPlaying ? 'Pause' : 'Play');
   onDemandMiniToggle?.setAttribute('aria-label', isPlaying ? 'Pause' : 'Play');
   if (isPlaying) window.showPlayerPauseIcon?.();
