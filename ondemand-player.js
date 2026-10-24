@@ -752,6 +752,7 @@ function setCurrentOnDemandTrack(song, trackId, position = 0) {
   currentOnDemandSong = song;
   currentOnDemandTrackId = trackId || '';
   currentOnDemandPosition = Math.max(0, Number(position) || 0);
+  syncDesktopNowPlayingTab();
 }
 
 function persistCurrentOnDemandSession() {
@@ -2254,6 +2255,7 @@ async function restoreOnDemandSession() {
   updateTransportButtonState();
   const requestId = ++songRequestId;
   setCurrentOnDemandTrack(song, stored.trackId, stored.position || 0);
+  syncDesktopNowPlayingTab();
 
   try {
     // Resolve a stream URL: the session may hold one, but it can be stale, so
@@ -2447,6 +2449,22 @@ onDemandModeButton?.addEventListener('click', () => {
   onDemandArtwork?.click();
 });
 
+const desktopNowPlayingTab = document.querySelector('.desktop-nav-links [data-view="now-playing"]');
+
+function hasOnDemandInMemory() {
+  return Boolean(currentOnDemandSong?.trackName || readOnDemandSession());
+}
+
+const syncDesktopNowPlayingTab = () => {
+  const enabled = hasOnDemandInMemory();
+  if (desktopNowPlayingTab) {
+    desktopNowPlayingTab.disabled = !enabled;
+    desktopNowPlayingTab.classList.toggle('is-disabled', !enabled);
+    desktopNowPlayingTab.setAttribute('aria-disabled', String(!enabled));
+    if (!enabled) desktopNowPlayingTab.removeAttribute('aria-current');
+  }
+};
+
 const syncModeToggle = () => {
   const onDemand = Boolean(window.onDemandPlaybackActive);
   const session = readOnDemandSession();
@@ -2467,8 +2485,10 @@ const syncModeToggle = () => {
     onDemandModeButton.disabled = !onDemand && !hasOnDemandData;
     onDemandModeButton.setAttribute('aria-disabled', String(onDemandModeButton.disabled));
   }
+  syncDesktopNowPlayingTab();
 };
 syncModeToggle();
+syncDesktopNowPlayingTab();
 window.addEventListener('thaalam:nowplaying', syncModeToggle);
 new MutationObserver(syncModeToggle).observe(document.body, {
   attributes: true,

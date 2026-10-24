@@ -2466,7 +2466,9 @@ body.view-rises-from-mini.view-now-playing .player-view {
   position: relative;
 }
 
+/* Hide the Live / On-Demand mode pill visually while keeping its logic wired. */
 .player-mode-toggle {
+  display: none !important;
   position: absolute;
   z-index: 7;
   top: 0.75rem;
@@ -6163,4 +6165,18 @@ img {
   body.view-now-playing * {
     -webkit-tap-highlight-color: transparent;
   }
+}
+
+/* Greyed-out / disabled state for the desktop Now Playing tab. */
+.desktop-nav-links button[data-view="now-playing"]:disabled,
+.desktop-nav-links button[data-view="now-playing"].is-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  filter: grayscale(1);
+}
+.desktop-nav-links button[data-view="now-playing"]:disabled:hover,
+.desktop-nav-links button[data-view="now-playing"].is-disabled:hover {
+  background: transparent;
+  color: inherit;
+  box-shadow: none;
 }
