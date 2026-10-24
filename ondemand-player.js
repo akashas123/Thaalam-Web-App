@@ -107,42 +107,56 @@ function connectOnDemandSpatialAudio(element) {
   try {
     const source = context.createMediaElementSource(element);
 
-    // Balanced 3D placement (centered, slightly above/in front).
-    const panner = context.createPanner();
-    panner.panningModel = 'HRTF';
-    panner.distanceModel = 'linear';
-    panner.refDistance = 1;
-    panner.maxDistance = 100000;
-    panner.rolloffFactor = 0;
-    panner.coneInnerAngle = 360;
-    panner.coneOuterAngle = 360;
-    panner.coneOuterGain = 1;
-    panner.positionX.value = 0;
-    panner.positionY.value = 0.35;
-    panner.positionZ.value = -1.2;
+    // Stereo widening (mid/side) — spatial feel without HRTF dullness,
+    // EQ, or reverb. Mono-compatible (no phase cancellation).
+    const splitter = context.createChannelSplitter(2);
+    const merger = context.createChannelMerger(2);
+    const midInL = context.createGain();
+    const midInR = context.createGain();
+    const sideInL = context.createGain();
+    const sideInR = context.createGain();
+    const midBus = context.createGain();
+    const sideBus = context.createGain();
+    const midOutL = context.createGain();
+    const midOutR = context.createGain();
+    const sideOutL = context.createGain();
+    const sideOutR = context.createGain();
 
-    // Keep the mix bright.
-    const presence = context.createBiquadFilter();
-    presence.type = 'highshelf';
-    presence.frequency.value = 6000;
-    presence.gain.value = 4;
-    presence.Q.value = 0.7;
+    midInL.gain.value = 0.5;
+    midInR.gain.value = 0.5;
+    sideInL.gain.value = 0.5;
+    sideInR.gain.value = -0.5;
+    midBus.gain.value = 1;
+    sideBus.gain.value = 1.4;
+    midOutL.gain.value = 1;
+    midOutR.gain.value = 1;
+    sideOutL.gain.value = 1;
+    sideOutR.gain.value = -1;
 
-    // Subtle surround/space (all-around ambience, no spinning).
-    const convolver = context.createConvolver();
-    convolver.buffer = createOnDemandReverbImpulse(context);
-    const wetGain = context.createGain();
-    wetGain.gain.value = 0.06;
+    source.connect(splitter);
+    splitter.connect(midInL, 0);
+    splitter.connect(midInR, 1);
+    splitter.connect(sideInL, 0);
+    splitter.connect(sideInR, 1);
 
-    source.connect(panner);
-    panner.connect(presence);
-    presence.connect(context.destination);
+    midInL.connect(midBus);
+    midInR.connect(midBus);
+    sideInL.connect(sideBus);
+    sideInR.connect(sideBus);
 
-    source.connect(convolver);
-    convolver.connect(wetGain);
-    wetGain.connect(context.destination);
+    midBus.connect(midOutL);
+    midBus.connect(midOutR);
+    sideBus.connect(sideOutL);
+    sideBus.connect(sideOutR);
 
-    const node = { source, panner, presence, convolver, wetGain };
+    midOutL.connect(merger, 0, 0);
+    sideOutL.connect(merger, 0, 0);
+    midOutR.connect(merger, 0, 1);
+    sideOutR.connect(merger, 0, 1);
+
+    merger.connect(context.destination);
+
+    const node = { source, splitter, merger };
     onDemandSpatialNodes.set(element, node);
     return node;
   } catch (error) {
