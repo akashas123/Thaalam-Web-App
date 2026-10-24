@@ -33,6 +33,7 @@ const onDemandFallbackArtwork = new URL('thaalam-icon-512.png?v=1', window.locat
    continue from already-buffered media instead of loading a new source on the
    just-ended element. */
 let onDemandAudio = new Audio();
+onDemandAudio.crossOrigin = 'anonymous';
 onDemandAudio.preload = 'auto';
 onDemandAudio.setAttribute('playsinline', '');
 onDemandAudio.setAttribute('webkit-playsinline', '');
@@ -40,6 +41,7 @@ onDemandAudio.setAttribute('webkit-playsinline', '');
 // Mobile browsers can delay the ended handler in the background, so avoid
 // making the next track's first media request at that boundary.
 let autoplayPreloadAudio = new Audio();
+autoplayPreloadAudio.crossOrigin = 'anonymous';
 autoplayPreloadAudio.preload = 'auto';
 let autoplayPreloadedTrackId = '';
 let autoplayPreloadedStreamUrl = '';
@@ -66,6 +68,79 @@ const ON_DEMAND_HANDOFF_LEAD_SECONDS = 3.0;
 const ON_DEMAND_SILENCE_THRESHOLD = 0.01;
 const ON_DEMAND_SILENCE_CACHE = new Map();
 let onDemandSilenceAudioContext = null;
+
+// Spatial audio: route on-demand playback through a Web Audio graph so a
+// slowly rotating stereo pan can be applied to every track. The CDN streams are
+// CORS-enabled, so MediaElementAudioSourceNode works without a proxy.
+let onDemandSpatialContext = null;
+const onDemandSpatialNodes = new Map();
+function getOnDemandSpatialContext() {
+  if (onDemandSpatialContext) return onDemandSpatialContext;
+  const Ctor = window.AudioContext || window.webkitAudioContext;
+  if (!Ctor) return null;
+  try {
+    onDemandSpatialContext = new Ctor();
+  } catch {
+    onDemandSpatialContext = null;
+  }
+  return onDemandSpatialContext;
+}
+function connectOnDemandSpatialAudio(element) {
+  if (!element || onDemandSpatialNodes.has(element)) return onDemandSpatialNodes.get(element) || null;
+  const context = getOnDemandSpatialContext();
+  if (!context) return null;
+  try {
+    const source = context.createMediaElementSource(element);
+    const panner = context.createPanner();
+    panner.panningModel = 'HRTF';
+    panner.distanceModel = 'inverse';
+    panner.refDistance = 1;
+    panner.maxDistance = 10000;
+    panner.rolloffFactor = 1;
+    panner.coneInnerAngle = 360;
+    panner.coneOuterAngle = 0;
+    panner.coneOuterGain = 0;
+    // Fixed 3D position (slightly right/front/above the listener) for a
+    // stable spatial image instead of the rotating 8D effect.
+    panner.positionX.value = 0.9;
+    panner.positionY.value = 0.35;
+    panner.positionZ.value = -1.1;
+    source.connect(panner);
+    panner.connect(context.destination);
+    const node = { source, panner };
+    onDemandSpatialNodes.set(element, node);
+    return node;
+  } catch (error) {
+    logOnDemand('spatial audio connect failed:', error?.name || error);
+    return null;
+  }
+}
+function resumeOnDemandSpatialContext() {
+  const context = getOnDemandSpatialContext();
+  if (context && context.state === 'suspended') {
+    void context.resume().catch(() => { /* ignore */ });
+  }
+}
+let onDemandSpatialAnimationId = null;
+function updateOnDemandSpatialAudio() {
+  const context = onDemandSpatialContext;
+  if (!context) return;
+  // Move the sound source around the listener in 3D (HRTF) for a
+  // Dolby/8D-style "all directions" effect, one full orbit every ~10s.
+  const angle = context.currentTime * (2 * Math.PI / 10);
+  const radius = 1.6;
+  const x = Math.cos(angle) * radius;
+  const z = Math.sin(angle) * radius;
+  const y = 0.35;
+  for (const node of onDemandSpatialNodes.values()) {
+    try {
+      node.panner.positionX.value = x;
+      node.panner.positionY.value = y;
+      node.panner.positionZ.value = z;
+    } catch { /* ignore */ }
+  }
+  onDemandSpatialAnimationId = window.requestAnimationFrame(updateOnDemandSpatialAudio);
+}
 function getOnDemandSilenceContext() {
   if (onDemandSilenceAudioContext) return onDemandSilenceAudioContext;
   const Ctor = window.AudioContext || window.webkitAudioContext;
@@ -76,6 +151,26 @@ function getOnDemandSilenceContext() {
     onDemandSilenceAudioContext = null;
   }
   return onDemandSilenceAudioContext;
+}
+
+function startOnDemandSpatialAudio() {
+  resumeOnDemandSpatialContext();
+  if (onDemandSpatialAnimationId === null) {
+    onDemandSpatialAnimationId = window.requestAnimationFrame(updateOnDemandSpatialAudio);
+  }
+}
+function stopOnDemandSpatialAudio() {
+  if (onDemandSpatialAnimationId !== null) {
+    window.cancelAnimationFrame(onDemandSpatialAnimationId);
+    onDemandSpatialAnimationId = null;
+  }
+  for (const node of onDemandSpatialNodes.values()) {
+    try {
+      node.panner.positionX.value = 0;
+      node.panner.positionY.value = 0.35;
+      node.panner.positionZ.value = -1.1;
+    } catch { /* ignore */ }
+  }
 }
 
 async function analyzeOnDemandTrackSilence(streamUrl) {
@@ -1043,9 +1138,13 @@ function setOnDemandPlaying(isPlaying) {
   // keep running while paused, otherwise Chrome's media session can stay in the
   // "playing" state and the lock-screen play/pause button stops responding.
   if (isPlaying) {
-    if (window.onDemandPlaybackActive) startOnDemandSilentLoop();
+    if (window.onDemandPlaybackActive) {
+      startOnDemandSilentLoop();
+      startOnDemandSpatialAudio();
+    }
   } else {
     stopOnDemandSilentLoop();
+    stopOnDemandSpatialAudio();
   }
   onDemandPlayButton?.setAttribute('aria-label', isPlaying ? 'Pause' : 'Play');
   onDemandMiniToggle?.setAttribute('aria-label', isPlaying ? 'Pause' : 'Play');
@@ -1152,6 +1251,7 @@ function applyPendingMediaIntent() {
   }
   if (pendingShouldPlay) {
     pendingShouldPlay = false;
+    resumeOnDemandSpatialContext();
     const playPromise = onDemandAudio.play();
     if (playPromise) {
       playPromise.catch((error) => {
@@ -1234,6 +1334,8 @@ function bindOnDemandAudioEvents(audio) {
 
 bindOnDemandAudioEvents(onDemandAudio);
 bindOnDemandAudioEvents(autoplayPreloadAudio);
+connectOnDemandSpatialAudio(onDemandAudio);
+connectOnDemandSpatialAudio(autoplayPreloadAudio);
 
 // Some mobile browsers suspend a PWA's media when the screen is off, and may
 // restore it through pageshow instead of a visibilitychange event. Resume only
@@ -1263,6 +1365,7 @@ function resumeMobilePlaybackAfterBackground() {
     autoplayTrackTransition = true;
     advanceToSimilarSong();
   } else if (onDemandAudio.paused) {
+    resumeOnDemandSpatialContext();
     const playPromise = onDemandAudio.play();
     if (playPromise) {
       playPromise.catch((error) => {
@@ -1397,6 +1500,7 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
   // pending seek when metadata arrives.
   if (shouldPlay) {
     pendingShouldPlay = false;
+    resumeOnDemandSpatialContext();
     const playPromise = onDemandAudio.play();
     if (playPromise) {
       playPromise.catch((error) => {
@@ -2180,6 +2284,7 @@ function toggleOnDemandPlayback(shouldPlay) {
     pendingShouldPlay = false;
     onDemandAudio.pause();
   } else {
+    resumeOnDemandSpatialContext();
     const playPromise = onDemandAudio.play();
     if (playPromise) {
       playPromise.catch((error) => {

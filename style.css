@@ -3009,6 +3009,19 @@ body.on-demand-active .live-row .live-text {
   background: rgba(255, 255, 255, 0.2);
   color: #fff;
 }
+
+.stream-quality.is-spatial {
+  gap: 0.2rem;
+}
+
+.stream-quality.is-spatial::before {
+  content: "";
+  width: 0.72rem;
+  height: 0.72rem;
+  flex: 0 0 auto;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 18v-6a9 9 0 0 1 18 0v6'/%3E%3Cpath d='M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
 .track-time {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
