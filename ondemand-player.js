@@ -45,6 +45,21 @@ let autoplayPreloadedTrackId = '';
 let autoplayPreloadedStreamUrl = '';
 let handoffOutgoingAudio = null;
 let handoffVolume = 1;
+// A continuously looping, inaudible stream. Mobile browsers (notably Android
+// Chrome) suspend a page's timers/JS when no audio is playing - including when
+// the screen locks - which stops on-demand track transitions. Keeping this
+// silent track playing keeps the page (and its JS) alive in the background.
+const onDemandSilentLoopAudio = new Audio();
+try {
+  onDemandSilentLoopAudio.src = new URL('silent.wav?v=1', window.location.href).href;
+} catch (_) {
+  onDemandSilentLoopAudio.src = 'silent.wav?v=1';
+}
+onDemandSilentLoopAudio.loop = true;
+onDemandSilentLoopAudio.preload = 'auto';
+onDemandSilentLoopAudio.volume = 1;
+onDemandSilentLoopAudio.setAttribute('playsinline', '');
+onDemandSilentLoopAudio.setAttribute('webkit-playsinline', '');
 // Silence analysis (decoded waveform) lets on-demand playback skip the real
 // trailing/leading silence of each track instead of a fixed 2.5 s guess.
 const ON_DEMAND_HANDOFF_LEAD_SECONDS = 3.0;
@@ -1000,6 +1015,18 @@ function releaseOnDemandWakeLock() {
   try { onDemandWakeLock.release(); } catch { /* ignore */ }
   onDemandWakeLock = null;
 }
+function startOnDemandSilentLoop() {
+  if (!window.onDemandPlaybackActive) return;
+  try { onDemandSilentLoopAudio.currentTime = 0; } catch (_) { /* ignore */ }
+  const playPromise = onDemandSilentLoopAudio.play();
+  if (playPromise) playPromise.catch(() => { /* autoplay blocked until a gesture */ });
+}
+function stopOnDemandSilentLoop() {
+  try {
+    onDemandSilentLoopAudio.pause();
+    onDemandSilentLoopAudio.currentTime = 0;
+  } catch (_) { /* ignore */ }
+}
 function setOnDemandPlaying(isPlaying) {
   // Mirror of the live flag, so a restored session can reapply the pause state
   // the listener had chosen instead of always resuming with sound.
@@ -1127,6 +1154,8 @@ function bindOnDemandAudioEvents(audio) {
     }
     setOnDemandPlaying(true);
     void acquireOnDemandWakeLock();
+    if (window.onDemandPlaybackActive) startOnDemandSilentLoop();
+
   });
   audio.addEventListener('pause', () => {
   // Fires for track swaps, src teardown and listener-initiated pauses alike.
@@ -1204,6 +1233,8 @@ function resumeMobilePlaybackAfterBackground() {
     }
   }
   if (window.onDemandPlaybackActive && window.onDemandPlaying) void acquireOnDemandWakeLock();
+  if (window.onDemandPlaybackActive) startOnDemandSilentLoop();
+
 }
 
 document.addEventListener('visibilitychange', resumeMobilePlaybackAfterBackground);
@@ -1893,6 +1924,8 @@ async function startOnDemandSong(song, {
   updateTransportButtonState();
   resetScrub();
   window.onDemandPlaybackActive = true;
+  startOnDemandSilentLoop();
+
   updateTransportButtonState();
   savePlaybackMode('on-demand');
   updateNowPlayingSubtitle(true);
@@ -2092,6 +2125,8 @@ async function restoreOnDemandSession() {
   // Enter the same on-demand state a fresh selection would, before any live
   // radio UI can repaint itself over the restored track.
   window.onDemandPlaybackActive = true;
+  startOnDemandSilentLoop();
+
   updateNowPlayingSubtitle(true);
   window.setOnDemandAudioQuality?.(true);
   document.body.classList.add('on-demand-active');
@@ -2193,6 +2228,8 @@ function returnToLive() {
   isFetchingRelated = false;
   // Preserve the saved queue and current track while Live is active.
   window.onDemandPlaying = false;
+  stopOnDemandSilentLoop();
+
   window.onDemandPlaybackActive = false;
   updateTransportButtonState();
   updateNowPlayingSubtitle(false);
