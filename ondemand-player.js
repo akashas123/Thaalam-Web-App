@@ -154,6 +154,21 @@ function connectOnDemandSpatialAudio(element) {
     midOutR.connect(merger, 0, 1);
     sideOutR.connect(merger, 0, 1);
 
+    // Tiny (millisecond) echo for subtle depth — very low wet/feedback
+    // so it stays transparent and never muddies the mix.
+    const delay = context.createDelay(0.05);
+    const feedback = context.createGain();
+    const wet = context.createGain();
+    delay.delayTime.value = 0.012; // 12 ms
+    feedback.gain.value = 0.08;
+    wet.gain.value = 0.04;
+
+    merger.connect(delay);
+    delay.connect(feedback);
+    feedback.connect(delay);
+    delay.connect(wet);
+    wet.connect(context.destination);
+
     merger.connect(context.destination);
 
     const node = { source, splitter, merger };
