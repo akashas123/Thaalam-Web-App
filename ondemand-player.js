@@ -34,6 +34,8 @@ const onDemandFallbackArtwork = new URL('thaalam-icon-512.png?v=1', window.locat
    just-ended element. */
 let onDemandAudio = new Audio();
 onDemandAudio.preload = 'auto';
+onDemandAudio.setAttribute('playsinline', '');
+onDemandAudio.setAttribute('webkit-playsinline', '');
 // Warm the next queue stream while the current track is still playing.
 // Mobile browsers can delay the ended handler in the background, so avoid
 // making the next track's first media request at that boundary.
@@ -983,6 +985,21 @@ document.addEventListener('pointerdown', (event) => {
   if (hitBar) beginScrub(event, hitBar);
 }, { capture: true });
 
+let onDemandWakeLock = null;
+async function acquireOnDemandWakeLock() {
+  if (!('wakeLock' in navigator) || onDemandWakeLock) return;
+  try {
+    onDemandWakeLock = await navigator.wakeLock.request('screen');
+    onDemandWakeLock.addEventListener('release', () => { onDemandWakeLock = null; });
+  } catch {
+    onDemandWakeLock = null;
+  }
+}
+function releaseOnDemandWakeLock() {
+  if (!onDemandWakeLock) return;
+  try { onDemandWakeLock.release(); } catch { /* ignore */ }
+  onDemandWakeLock = null;
+}
 function setOnDemandPlaying(isPlaying) {
   // Mirror of the live flag, so a restored session can reapply the pause state
   // the listener had chosen instead of always resuming with sound.
@@ -1100,12 +1117,16 @@ function bindOnDemandAudioEvents(audio) {
     logOnDemand('playing', audio.currentTime.toFixed(1), 's');
     refreshOnDemandMediaSessionMetadata();
     onDemandModeLabel.textContent = 'ON DEMAND';
+    if (navigator.mediaSession) {
+      try { navigator.mediaSession.playbackState = 'playing'; } catch { /* ignore */ }
+    }
     if (handoffOutgoingAudio && audio === onDemandAudio) {
       finishOnDemandHandoffWhenPlaying();
     } else {
       syncOnDemandVolumeToStored();
     }
     setOnDemandPlaying(true);
+    void acquireOnDemandWakeLock();
   });
   audio.addEventListener('pause', () => {
   // Fires for track swaps, src teardown and listener-initiated pauses alike.
@@ -1114,7 +1135,11 @@ function bindOnDemandAudioEvents(audio) {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive ||
         audio.ended || autoplayTrackTransition) return;
     onDemandModeLabel.textContent = 'ON DEMAND';
+    if (navigator.mediaSession) {
+      try { navigator.mediaSession.playbackState = 'paused'; } catch { /* ignore */ }
+    }
     setOnDemandPlaying(false);
+    releaseOnDemandWakeLock();
   });
   for (const eventName of ['waiting', 'stalled']) {
     audio.addEventListener(eventName, () => {
@@ -1178,6 +1203,7 @@ function resumeMobilePlaybackAfterBackground() {
       });
     }
   }
+  if (window.onDemandPlaybackActive && window.onDemandPlaying) void acquireOnDemandWakeLock();
 }
 
 document.addEventListener('visibilitychange', resumeMobilePlaybackAfterBackground);
@@ -2336,14 +2362,3 @@ if (document.readyState === 'loading') {
 } else {
   if (readPlaybackMode() !== 'live') void restoreOnDemandSession();
 }
-
-
-
-
-
-
-
-
-
-
-
