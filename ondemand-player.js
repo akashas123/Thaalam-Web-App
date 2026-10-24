@@ -805,6 +805,7 @@ function updatePlaybackProgress() {
     onDemandElapsed.textContent = formatOnDemandTime(elapsed);
     onDemandDuration.textContent = formatOnDemandTime(duration);
     setPlaybackProgress(elapsed, duration);
+    updateOnDemandMediaSessionPositionState(elapsed, duration);
     return;
   }
 
@@ -1073,6 +1074,34 @@ function refreshOnDemandMediaSessionMetadata(song = window.currentNowPlayingSong
   }
 }
 
+function updateOnDemandMediaSessionPositionState(elapsed, duration) {
+  if (!window.onDemandPlaybackActive || !navigator.mediaSession?.setPositionState) return;
+  let position = Number(elapsed);
+  let length = Number(duration);
+  const hasSource = Boolean(onDemandAudio?.getAttribute?.('src'));
+  if (!Number.isFinite(position)) {
+    position = hasSource ? (onDemandAudio.currentTime || 0) : 0;
+  }
+  if (!Number.isFinite(length) || length <= 0) {
+    const mediaDuration = Number(onDemandAudio?.duration);
+    length = Number.isFinite(mediaDuration) && mediaDuration > 0
+      ? mediaDuration
+      : (Number(selectedDuration) || 0);
+  }
+  if (!Number.isFinite(length) || length <= 0) return;
+  const safePosition = Math.min(Math.max(0, position), length);
+  const playbackRate = Number(onDemandAudio?.playbackRate) || 1;
+  try {
+    navigator.mediaSession.setPositionState({
+      duration: length,
+      playbackRate,
+      position: safePosition
+    });
+  } catch (error) {
+    // Some browsers reject incomplete or out-of-range position states.
+  }
+}
+
 /* Re-assert the listener's stored volume level + mute flag on the audio
    element. Called after every load and again on 'playing' so a track change
    can never come up at a level the slider does not show. */
@@ -1143,6 +1172,7 @@ function bindOnDemandAudioEvents(audio) {
     autoplayTrackTransition = false;
     logOnDemand('playing', audio.currentTime.toFixed(1), 's');
     refreshOnDemandMediaSessionMetadata();
+    updateOnDemandMediaSessionPositionState();
     onDemandModeLabel.textContent = 'ON DEMAND';
     if (navigator.mediaSession) {
       try { navigator.mediaSession.playbackState = 'playing'; } catch { /* ignore */ }
@@ -1391,7 +1421,11 @@ function updateOnDemandMetadata(song, track) {
   const artist = String(song?.artistName || track.artist || 'Unknown artist')
     .replace(/\s-\sTopic$/i, '')
     .trim();
-  const album = song?.collectionName || track.album || '';
+  // Prefer the resolved provider track's album (the audio actually being
+  // played) over a stale catalog album name, keeping song info and the
+  // Chrome media session in sync.
+  const album = String(track?.album || song?.collectionName || '').trim();
+  if (track?.album) song.collectionName = track.album;
   const catalogArtwork = song?.artworkUrl100
     ?.replace(/^http:/, 'https:')
     .replace(/\d+x\d+bb\./, '600x600bb.') || '';
@@ -1482,8 +1516,8 @@ function updateOnDemandMetadata(song, track) {
   window.dispatchEvent(new CustomEvent('thaalam:nowplaying', { detail: data }));
 
   refreshOnDemandMediaSessionMetadata(nowPlaying);
+  updateOnDemandMediaSessionPositionState(0, selectedDuration);
 }
-
 /* Appends a song to the session queue unless it is already the current entry
    (re-selecting the same track should not create a duplicate step). */
 function isSameOnDemandSong(first, second) {
@@ -1542,6 +1576,59 @@ function updateTransportButtonState() {
       navigator.mediaSession.setActionHandler(
         'nexttrack',
         canGoNext ? () => skipOnDemandSong(1) : null
+      );
+    } catch {
+      // Some browsers expose Media Session without supporting every action.
+    }
+    try {
+      navigator.mediaSession.setActionHandler(
+        'seekto',
+        window.onDemandPlaybackActive
+          ? (details) => {
+              const seekTime = Number(details?.seekTime);
+              if (!Number.isFinite(seekTime)) return;
+              const hasSource = Boolean(onDemandAudio?.getAttribute?.('src'));
+              if (!hasSource) return;
+              onDemandAudio.currentTime = Math.min(Math.max(0, seekTime), onDemandAudio.duration || selectedDuration || Infinity);
+              updatePlaybackProgress();
+              updateOnDemandMediaSessionPositionState(onDemandAudio.currentTime, onDemandAudio.duration || selectedDuration);
+            }
+          : null
+      );
+    } catch {
+      // Some browsers expose Media Session without supporting every action.
+    }
+    try {
+      navigator.mediaSession.setActionHandler(
+        'seekbackward',
+        window.onDemandPlaybackActive
+          ? (details) => {
+              const skip = Number(details?.seekOffset) || 10;
+              const hasSource = Boolean(onDemandAudio?.getAttribute?.('src'));
+              if (!hasSource) return;
+              onDemandAudio.currentTime = Math.max(0, (onDemandAudio.currentTime || 0) - skip);
+              updatePlaybackProgress();
+              updateOnDemandMediaSessionPositionState(onDemandAudio.currentTime, onDemandAudio.duration || selectedDuration);
+            }
+          : null
+      );
+    } catch {
+      // Some browsers expose Media Session without supporting every action.
+    }
+    try {
+      navigator.mediaSession.setActionHandler(
+        'seekforward',
+        window.onDemandPlaybackActive
+          ? (details) => {
+              const skip = Number(details?.seekOffset) || 10;
+              const hasSource = Boolean(onDemandAudio?.getAttribute?.('src'));
+              if (!hasSource) return;
+              const duration = onDemandAudio.duration || selectedDuration || Infinity;
+              onDemandAudio.currentTime = Math.min(duration, (onDemandAudio.currentTime || 0) + skip);
+              updatePlaybackProgress();
+              updateOnDemandMediaSessionPositionState(onDemandAudio.currentTime, duration);
+            }
+          : null
       );
     } catch {
       // Some browsers expose Media Session without supporting every action.
@@ -2274,6 +2361,9 @@ function returnToLive() {
 window.startOnDemandSong = startOnDemandSong;
 window.startOnDemandQueue = startOnDemandQueue;
 window.toggleOnDemandPlayback = toggleOnDemandPlayback;
+window.skipOnDemandSong = skipOnDemandSong;
+window.refreshOnDemandMediaSessionMetadata = refreshOnDemandMediaSessionMetadata;
+window.updateOnDemandMediaSessionPositionState = updateOnDemandMediaSessionPositionState;
 window.returnToLive = returnToLive;
 // Legacy liked rows keep a `youtubeVideoId`; expose it so their rating key
 // stays `youtube:ID` while such a row is playing. JioSaavn picks have none.
