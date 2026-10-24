@@ -1549,7 +1549,8 @@ function updateTransportButtonState() {
   }
 }
 
-function skipOnDemandSong(offset) {
+function skipOnDemandSong(offset, manual = true) {
+  if (manual) autoplayTrackTransition = false;
   // At the end of the played queue, move into the related list we already
   // fetched rather than trying to walk past the last entry.
   if (offset > 0 && onDemandQueueIndex >= onDemandQueue.length - 1) {
@@ -1557,7 +1558,7 @@ function skipOnDemandSong(offset) {
     if (!nextRelated) return;
 
     relatedTrackCursor += 1;
-    playRelatedTrack(nextRelated);
+    playRelatedTrack(nextRelated, !manual);
     return;
   }
 
@@ -1576,7 +1577,8 @@ function skipOnDemandSong(offset) {
   startOnDemandSong(nextSong, {
     preserveQueue: true,
     openNowPlaying: false,
-    recordRecent: false
+    recordRecent: false,
+    gapless: !manual
   });
 }
 
@@ -1765,7 +1767,7 @@ function advanceToSimilarSong() {
   if (!window.onDemandPlaybackActive) return;
 
   if (onDemandQueueIndex >= 0 && onDemandQueueIndex < onDemandQueue.length - 1) {
-    skipOnDemandSong(1);
+    skipOnDemandSong(1, false);
     return;
   }
 
@@ -1817,7 +1819,11 @@ function advanceToSimilarSong() {
 
 /* Starts a track that came from the queue list. It already has a resolved
    stream, so it skips the search round-trip that startOnDemandSong performs. */
-async function playRelatedTrack(track) {
+async function playRelatedTrack(track, gapless = true) {
+  if (!gapless) {
+    finishOnDemandHandoff();
+    clearAutoplayPreload();
+  }
   onDemandQueueSource = 'autoplay';
   const artworkPromise = prefetchTrackArtwork(track);
   const song = relatedTrackToSong(track);
@@ -1853,7 +1859,11 @@ async function playRelatedTrack(track) {
     updateOnDemandMetadata(song, { id: track.id, title: track.title, artist: track.artist, album: track.album, thumbnail: track.thumbnail });
   });
   prefetchUpcomingTrackArtwork();
-  promotePreloadedTrack(track);
+  if (gapless) {
+    promotePreloadedTrack(track);
+  } else {
+    clearAutoplayPreload();
+  }
   await loadTrack(trackCandidates[0] || { id: track.id, streamUrl: track.streamUrl }, requestId);
   if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
   updatePlaybackProgress();
@@ -1865,9 +1875,14 @@ async function playRelatedTrack(track) {
 async function startOnDemandSong(song, {
   preserveQueue = false,
   openNowPlaying = true,
-  recordRecent = !preserveQueue
+  recordRecent = !preserveQueue,
+  gapless = true
 } = {}) {
   if (!song?.trackName) return;
+  if (!gapless) {
+    finishOnDemandHandoff();
+    clearAutoplayPreload();
+  }
   // Ratings-backed favourites may contain partial or older metadata. Keep the
   // player input shape consistent before artwork lookup, search, and queueing.
   song = {
@@ -1989,7 +2004,11 @@ async function startOnDemandSong(song, {
     persistCurrentOnDemandSession();
     updateOnDemandMetadata(song, track);
     preloadNextLikedQueueTrack(onDemandQueueIndex);
-    promotePreloadedTrack(track);
+    if (gapless) {
+      promotePreloadedTrack(track);
+    } else {
+      clearAutoplayPreload();
+    }
     await loadTrack(trackCandidates[0] || { id: track.id, streamUrl: track.streamUrl }, requestId);
     if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
     updatePlaybackProgress();
