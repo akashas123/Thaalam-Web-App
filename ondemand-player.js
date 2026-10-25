@@ -327,7 +327,7 @@ const UNOFFICIAL_MIX_TITLE = /\b(?:unofficial|remix(?:es)?|mix(?:es)?|mash[ -]?u
 
 /* TEMPORARY DIAGNOSTIC: set to false to silence. Reports what is written, what
    is read back, and which branch the restore actually takes. */
-const ON_DEMAND_DEBUG = true;
+const ON_DEMAND_DEBUG = false;
 const logOnDemand = (...parts) => {
   if (ON_DEMAND_DEBUG) console.log('[on-demand]', ...parts);
 };
@@ -364,6 +364,41 @@ try {
   }
 } catch { /* Keep playback history available for this visit if storage is blocked. */ }
 
+let pendingHistoryCommit = 0;
+let recentHistoryDirty = false;
+let playbackHistoryDirty = false;
+function scheduleOnDemandHistoryCommit({ recent = false, playback = false } = {}) {
+  recentHistoryDirty ||= recent;
+  playbackHistoryDirty ||= playback;
+  if (pendingHistoryCommit) return;
+
+  const commit = () => {
+    pendingHistoryCommit = 0;
+    const saveRecents = recentHistoryDirty;
+    const savePlaybackHistory = playbackHistoryDirty;
+    recentHistoryDirty = false;
+    playbackHistoryDirty = false;
+    if (saveRecents) {
+      try { localStorage.setItem(ON_DEMAND_RECENTS_KEY, JSON.stringify(onDemandRecentHistory)); }
+      catch { /* Keep the in-memory recents list for this visit. */ }
+      window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
+    }
+    if (savePlaybackHistory) {
+      try { localStorage.setItem(ON_DEMAND_PLAYBACK_HISTORY_KEY, JSON.stringify(onDemandPlaybackHistory)); }
+      catch { /* Keep the in-memory playback history for this visit. */ }
+      window.dispatchEvent(new CustomEvent('thaalam-on-demand-playback-history-change'));
+    }
+    // Include entries added during a commit in a subsequent idle task.
+    if (recentHistoryDirty || playbackHistoryDirty) scheduleOnDemandHistoryCommit();
+  };
+
+  if ('requestIdleCallback' in window) {
+    pendingHistoryCommit = window.requestIdleCallback(commit, { timeout: 1200 });
+  } else {
+    pendingHistoryCommit = window.setTimeout(commit, 100);
+  }
+}
+
 function rememberOnDemandPlayback(song) {
   if (!song?.trackName) return;
   const entry = {
@@ -380,10 +415,7 @@ function rememberOnDemandPlayback(song) {
     playedAt: Date.now()
   };
   onDemandPlaybackHistory = [entry, ...onDemandPlaybackHistory].slice(0, 500);
-  try {
-    localStorage.setItem(ON_DEMAND_PLAYBACK_HISTORY_KEY, JSON.stringify(onDemandPlaybackHistory));
-  } catch { /* Keep the in-memory playback history for this visit. */ }
-  window.dispatchEvent(new CustomEvent('thaalam-on-demand-playback-history-change'));
+  scheduleOnDemandHistoryCommit({ playback: true });
 }
 
 function rememberOnDemandSong(song, { fromLikedFolder = false } = {}) {
@@ -398,10 +430,7 @@ function rememberOnDemandSong(song, { fromLikedFolder = false } = {}) {
     recentSong,
     ...onDemandRecentHistory.filter((entry) => identity(entry) !== key)
   ].slice(0, 10);
-  try {
-    localStorage.setItem(ON_DEMAND_RECENTS_KEY, JSON.stringify(onDemandRecentHistory));
-  } catch { /* Keep the in-memory recents list for this visit. */ }
-  window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
+  scheduleOnDemandHistoryCommit({ recent: true });
 }
 
 function savePlaybackMode(mode) {
