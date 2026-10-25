@@ -22,7 +22,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=471">
+  <link rel="stylesheet" href="style.css?v=493">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -171,6 +171,42 @@
 <body class="view-now-playing">
 
   <script>
+    // Hide the desktop cursor after a short pause on the non-player views.
+    // Moving the mouse, using the keyboard, or switching views restores it.
+    (() => {
+      const desktop = window.matchMedia('(min-width: 56.25rem)');
+      const idleDelay = 2500;
+      let idleTimer = 0;
+      let lastNowPlayingState = document.body.classList.contains('view-now-playing');
+
+      function updateCursorState() {
+        window.clearTimeout(idleTimer);
+        document.body.classList.remove('desktop-cursor-hidden');
+        if (!desktop.matches || document.body.classList.contains('view-now-playing')) return;
+        idleTimer = window.setTimeout(() => {
+          if (desktop.matches && !document.body.classList.contains('view-now-playing')) {
+            document.body.classList.add('desktop-cursor-hidden');
+          }
+        }, idleDelay);
+      }
+
+      ['mousemove', 'mousedown', 'keydown', 'pointerdown'].forEach((eventName) => {
+        window.addEventListener(eventName, updateCursorState, { passive: true });
+      });
+      new MutationObserver(() => {
+        const nowPlaying = document.body.classList.contains('view-now-playing');
+        if (nowPlaying === lastNowPlayingState) return;
+        lastNowPlayingState = nowPlaying;
+        updateCursorState();
+      }).observe(document.body, {
+        attributes: true,
+        attributeFilter: ['class']
+      });
+      desktop.addEventListener('change', updateCursorState);
+      updateCursorState();
+    })();
+  </script>
+  <script>
     // Home is the landing page on every device. A saved Now Playing view is
     // reset to Home on refresh so playback does not take over the screen.
     (function () {
@@ -270,6 +306,7 @@
         <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="hindi">Hindi</button>
         <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="malayalam">Malayalam</button>
         <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="tamil">Tamil</button>
+        <button class="genre-tab desktop-recents-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="recently-played">Recents</button>
         <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="you-like">Favourites</button>
       </div>
       <div class="favourite-sort-control" id="favouriteSortControl" hidden>
@@ -821,7 +858,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=83"></script>
-  <script src="ondemand-player.js?v=68"></script>
+  <script src="ondemand-player.js?v=77"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=12"></script>
@@ -1026,7 +1063,8 @@
     let activeGenre = 'international';
     try {
       const savedGenre = localStorage.getItem(ACTIVE_GENRE_KEY);
-      if (savedGenre === 'you-like' || Object.prototype.hasOwnProperty.call(genreFeedIds, savedGenre)) {
+      if (savedGenre === 'you-like' || Object.prototype.hasOwnProperty.call(genreFeedIds, savedGenre) ||
+          (savedGenre === 'recently-played' && desktopNavigation.matches)) {
         activeGenre = savedGenre;
       }
     } catch { /* Use International when browser storage is unavailable. */ }
@@ -1649,14 +1687,22 @@
         ? window.getCurrentOnDemandSong?.()
         : null);
       const playing = window.onDemandPlaying === true;
+      const recentQueuePosition = genreResults.classList.contains('recent-history-layout') &&
+        window.onDemandPlaybackActive
+        ? window.getOnDemandQueuePosition?.()
+        : null;
       genreResults.querySelectorAll('.genre-card').forEach((card) => {
         const artwork = card.querySelector('.genre-card-art');
-        const active = isSameFavouriteTrack({
+        const sameTrack = isSameFavouriteTrack({
           trackKey: card.dataset.favouriteTrackKey,
           trackName: card.dataset.favouriteTrackName,
           artistName: card.dataset.favouriteArtistName,
           artworkUrl100: artwork?.dataset.artworkUrl || card.dataset.favouriteArtworkUrl
         }, current);
+        const active = sameTrack && (!recentQueuePosition || (
+          card.dataset.queueSessionId === recentQueuePosition.queueSessionId &&
+          Number(card.dataset.queueStep) === recentQueuePosition.queueStep
+        ));
         card.classList.toggle('is-active-track', active);
         const button = card.querySelector('.genre-play-button');
         if (!button) return;
@@ -1812,6 +1858,10 @@
         'favourites-list-layout',
         activeGenre === 'you-like' && favouriteLayout === 'list'
       );
+      const recentHistoryLayout = activeGenre === 'recently-played';
+      genreResults.classList.toggle('recent-history-layout', recentHistoryLayout);
+      const desktopSearchListLayout = activeGenre.startsWith('search:') && desktopNavigation.matches;
+      genreResults.classList.toggle('desktop-search-list-layout', desktopSearchListLayout);
       // Search cards keep grid-tile DOM on desktop (info button overlaid on
       // the thumbnail) and become list rows where the mobile
       // body.mobile-search-active CSS applies — the media query mirrors the
@@ -1834,7 +1884,9 @@
         delete genreResults.dataset.renderKey;
         const empty = document.createElement('p');
         empty.className = 'genre-empty';
-        empty.textContent = activeGenre === 'you-like' ? 'No liked songs' : 'No matching songs were found.';
+        empty.textContent = activeGenre === 'you-like'
+          ? 'No liked songs'
+          : recentHistoryLayout ? 'No playback history available' : 'No matching songs were found.';
         genreResults.appendChild(empty);
         if (!desktopNavigation.matches && !document.body.classList.contains('mobile-search-active')) {
           updateMobileHomeTint();
@@ -1846,16 +1898,17 @@
 
       const orderedSongs = activeGenre === 'you-like'
         ? sortFavouriteSongs(songs)
-        : diversifyGenreSongs(songs);
+        : recentHistoryLayout ? orderRecentPlaybackHistory(songs) : diversifyGenreSongs(songs);
       // Identity of everything the cards actually show, in display order.
       // The liked-songs rescue passes patch titles/artwork on the same
       // objects, so those fields must bust the key and force a rebuild.
-      const renderKey = `${activeGenre}:${activeGenre === 'you-like' ? favouriteLayout : searchListLayout ? 'search-list' : 'grid'}:` + orderedSongs
+      const renderKey = `${activeGenre}:${activeGenre === 'you-like' ? favouriteLayout : recentHistoryLayout ? 'recent-list' : desktopSearchListLayout ? 'desktop-search-list' : searchListLayout ? 'mobile-search-list' : 'grid'}:` + orderedSongs
         .map((song) => [
           song.trackId ?? `${song.trackName}|${song.artistName}`,
           song.trackViewUrl || '',
           song.youtubeVideoId || '',
-          song.artworkUrl100 || ''
+          song.artworkUrl100 || '',
+          recentHistoryLayout ? song.playedAt || '' : ''
         ].join('::'))
         .join(' ');
       // Switching back to Home re-runs the loader for the grid that is
@@ -1875,9 +1928,52 @@
 
       catalogArtworkObserver?.disconnect();
       genreResults.replaceChildren();
+      let previousRecentDate = '';
+      let previousRecentSessionId = '';
       orderedSongs.forEach((song, cardIndex) => {
+        if (recentHistoryLayout) {
+          const playedAt = Number(song.playedAt) || Date.now();
+          const date = new Date(playedAt);
+          const dateKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+          if (dateKey !== previousRecentDate) {
+            const heading = document.createElement('h2');
+            heading.className = 'recent-history-date';
+            const today = new Date();
+            const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+            if (date.toDateString() === today.toDateString()) heading.textContent = 'Today';
+            else if (date.toDateString() === yesterday.toDateString()) heading.textContent = 'Yesterday';
+            else heading.textContent = new Intl.DateTimeFormat(undefined, {
+              weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+            }).format(date);
+            genreResults.appendChild(heading);
+            previousRecentDate = dateKey;
+            previousRecentSessionId = '';
+          }
+
+          const sessionId = song.displayQueueSessionId || song.queueSessionId || '';
+          if (sessionId && sessionId !== previousRecentSessionId) {
+            const sessionHeading = document.createElement('h3');
+            sessionHeading.className = 'recent-history-session-heading';
+            const source = document.createElement('span');
+            source.className = 'recent-history-session-source';
+            source.textContent = song.displayQueueSource === 'favourites' || song.queueSource === 'favourites'
+              ? 'Favourites queue'
+              : 'Autoplay';
+            const startingSong = document.createElement('span');
+            startingSong.className = 'recent-history-session-start';
+            startingSong.textContent = `Started with ${song.queueStartTrackName || song.trackName || 'Unknown song'}`;
+            sessionHeading.append(source, startingSong);
+            genreResults.appendChild(sessionHeading);
+            previousRecentSessionId = sessionId;
+          }
+        }
         const card = document.createElement('article');
         card.className = 'genre-card';
+        if (recentHistoryLayout) {
+          card.dataset.queueSessionId = song.queueSessionId || '';
+          card.dataset.queueStep = String(Number(song.queueStep) || 0);
+          if ((Number(song.queueStep) || 0) > 0) card.style.marginInlineStart = '1.25rem';
+        }
         card.dataset.favouriteTrackKey = song.trackKey || '';
         card.dataset.favouriteTrackName = song.trackName || '';
         card.dataset.favouriteArtistName = song.artistName || '';
@@ -1906,8 +2002,13 @@
           const current = window.onDemandPlaybackActive
             ? window.getCurrentOnDemandSong?.()
             : null;
-          if (activeGenre === 'you-like' && favouriteLayout === 'list' && isSameFavouriteTrack(song, current)) {
+          if (activeGenre === 'you-like' && favouriteLayout === 'list' && desktopNavigation.matches &&
+              isSameFavouriteTrack(song, current)) {
             window.recordOnDemandLikedRecent?.(song);
+            window.toggleOnDemandPlayback?.();
+            return;
+          }
+          if (desktopNavigation.matches && isSameFavouriteTrack(song, current)) {
             window.toggleOnDemandPlayback?.();
             return;
           }
@@ -1962,7 +2063,9 @@
 
         const listActions = document.createElement('div');
         listActions.className = 'genre-card-list-actions';
-        listActions.append(infoButton, removeFavouriteButton, mobileFavouriteHeartButton);
+        if (!recentHistoryLayout && !desktopSearchListLayout) {
+          listActions.append(infoButton, removeFavouriteButton, mobileFavouriteHeartButton);
+        }
 
         const artworkFrame = document.createElement('span');
         artworkFrame.className = 'genre-card-art-frame';
@@ -1988,7 +2091,7 @@
           // stretched <button> appended below covers the whole row (artwork +
           // metadata) as one tap target.
           media.append(artworkFrame);
-        } else if (isFavouriteList) {
+        } else if (isFavouriteList || recentHistoryLayout || desktopSearchListLayout) {
           media.append(artworkFrame, playButton);
         } else if (activeGenre === 'you-like') {
           media.append(artworkFrame, playButton, infoButton, removeFavouriteButton);
@@ -2031,21 +2134,13 @@
           metadataPlayButton.setAttribute('aria-label', `Play ${song.trackName || 'song'}`);
           metadataPlayButton.append(title, artist);
           metadataPlayButton.addEventListener('click', () => {
-            const current = window.onDemandPlaybackActive
-              ? window.getCurrentOnDemandSong?.()
-              : null;
-            if (isSameFavouriteTrack(song, current)) {
-              window.recordOnDemandLikedRecent?.(song);
-              window.toggleOnDemandPlayback?.();
-              return;
-            }
             const queue = sortFavouriteSongs(currentFavouriteSongs);
             const songIndex = queue.findIndex((item) => item.trackKey && item.trackKey === song.trackKey);
             window.startOnDemandQueue?.(queue, songIndex >= 0 ? songIndex : 0, { openNowPlaying: false });
           });
           details.append(metadataPlayButton);
           card.append(media, details);
-        } else if (song.trackViewUrl && !searchListLayout) {
+        } else if (song.trackViewUrl && !searchListLayout && !desktopSearchListLayout) {
           const link = document.createElement('a');
           link.className = 'genre-card-link';
           link.href = song.trackViewUrl.replace(/^http:/, 'https:');
@@ -2360,6 +2455,68 @@
       updateMobileHomeTint();
     }
 
+    function orderRecentPlaybackHistory(songs) {
+      const dates = new Map();
+      const inferredLegacySessionIds = new Map();
+      const legacyEntries = songs
+        .map((song, index) => ({ song, index, playedAt: Number(song.playedAt) || 0 }))
+        .filter(({ song }) => !song.queueSessionId)
+        .sort((first, second) => first.playedAt - second.playedAt);
+      let legacySessionId = '';
+      let previousLegacyStep = -1;
+      let previousLegacyPlayAt = 0;
+      let legacySessionIndex = 0;
+      legacyEntries.forEach(({ song, index, playedAt }) => {
+        const queueStep = Math.max(0, Number(song.queueStep) || 0);
+        if (!legacySessionId || queueStep <= previousLegacyStep || playedAt - previousLegacyPlayAt > 6 * 60 * 60 * 1000) {
+          legacySessionId = `legacy-queue-${legacySessionIndex++}`;
+        }
+        inferredLegacySessionIds.set(index, legacySessionId);
+        previousLegacyStep = queueStep;
+        previousLegacyPlayAt = playedAt;
+      });
+
+      songs.forEach((song, index) => {
+        const playedAt = Number(song.playedAt) || Date.now();
+        const date = new Date(playedAt);
+        const dateKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+        if (!dates.has(dateKey)) {
+          dates.set(dateKey, {
+            dateStart: new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime(),
+            sessions: new Map()
+          });
+        }
+        const day = dates.get(dateKey);
+        const sessionKey = song.queueSessionId || inferredLegacySessionIds.get(index) || `legacy-${playedAt}-${index}`;
+        if (!day.sessions.has(sessionKey)) {
+          day.sessions.set(sessionKey, {
+            id: sessionKey,
+            latestAt: playedAt,
+            queueSource: song.queueSource || 'autoplay',
+            songs: []
+          });
+        }
+        const session = day.sessions.get(sessionKey);
+        session.latestAt = Math.max(session.latestAt, playedAt);
+        session.songs.push(song);
+      });
+
+      return [...dates.values()]
+        .sort((first, second) => second.dateStart - first.dateStart)
+        .flatMap((day) => [...day.sessions.values()]
+          .sort((first, second) => second.latestAt - first.latestAt)
+          .flatMap((session) => session.songs
+            .sort((first, second) =>
+              (Number(first.queueStep) || 0) - (Number(second.queueStep) || 0) ||
+              (Number(first.playedAt) || 0) - (Number(second.playedAt) || 0)
+            )
+            .map((song) => ({
+              ...song,
+              displayQueueSessionId: session.id,
+              displayQueueSource: session.queueSource
+            }))));
+    }
+
     async function loadMobileHomeGenres() {
       const shelves = document.getElementById('mobileGenreShelves');
       if (!shelves || mobileHomeGenresLoaded) return;
@@ -2559,6 +2716,7 @@
       catalogClearButton.hidden = true;
       hideCatalogSuggestions();
       if (activeGenre === 'you-like') renderGenreResults(currentFavouriteSongs);
+      else if (activeGenre === 'recently-played') renderGenreResults(window.getOnDemandPlaybackHistory?.() || []);
       else loadGenre('international');
       catalogSearchInput.focus();
     }
@@ -3055,14 +3213,21 @@
         catalogClearButton.hidden = true;
         hideCatalogSuggestions();
       }
-      catalogSearchInput.placeholder = genre === 'you-like' ? 'Search your library' : 'Search songs or artists';
-      catalogSearchInput.setAttribute('aria-label', genre === 'you-like' ? 'Search your library' : 'Search songs or artists');
+      catalogSearchInput.placeholder = genre === 'you-like'
+        ? 'Search your library'
+        : genre === 'recently-played' ? 'Search recent songs' : 'Search songs or artists';
+      catalogSearchInput.setAttribute('aria-label', genre === 'you-like'
+        ? 'Search your library'
+        : genre === 'recently-played' ? 'Search recent songs' : 'Search songs or artists');
       catalogSearchForm.querySelector('[type="submit"]').setAttribute(
-        'aria-label', genre === 'you-like' ? 'Search your library' : 'Search songs'
+        'aria-label', genre === 'you-like'
+          ? 'Search your library'
+          : genre === 'recently-played' ? 'Search recent songs' : 'Search songs'
       );
       if (desktopNavigation.matches) {
         homeSubtitle.textContent = genre === 'you-like'
           ? 'Explore songs from your library'
+          : genre === 'recently-played' ? 'Your playback history, grouped by date'
           : 'Explore songs by genre';
       }
       genreTabList.hidden = false;
@@ -3079,8 +3244,19 @@
         return loadLikedSongs(requestId);
       }
       favouriteSortControl.hidden = true;
+      if (genre === 'recently-played') {
+        activeGenre = genre;
+        genreRequestId += 1;
+        return renderGenreResults(window.getOnDemandPlaybackHistory?.() || []);
+      }
       return loadCatalog(genre, '', genreFeedIds[genre]);
     }
+
+    window.addEventListener('thaalam-on-demand-playback-history-change', () => {
+      if (desktopNavigation.matches && activeGenre === 'recently-played') {
+        renderGenreResults(window.getOnDemandPlaybackHistory?.() || []);
+      }
+    });
 
     let likedSongsPollInFlight = false;
     const refreshOpenLikedSongs = async () => {
@@ -3142,6 +3318,15 @@
         hideCatalogSuggestions();
         renderGenreResults(currentFavouriteSongs.filter((song) =>
           `${song.trackName || ''} ${song.artistName || ''} ${song.albumName || ''}`
+            .toLocaleLowerCase()
+            .includes(query)));
+        return;
+      }
+      if (activeGenre === 'recently-played') {
+        const query = normalizedTerm.toLocaleLowerCase();
+        hideCatalogSuggestions();
+        renderGenreResults((window.getOnDemandPlaybackHistory?.() || []).filter((song) =>
+          `${song.trackName || ''} ${song.artistName || ''} ${song.collectionName || ''}`
             .toLocaleLowerCase()
             .includes(query)));
         return;
@@ -3208,7 +3393,7 @@
       tab.addEventListener('keydown', (event) => {
         if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
         event.preventDefault();
-        const tabs = Array.from(genreTabs);
+        const tabs = Array.from(genreTabs).filter((candidate) => candidate.getClientRects().length > 0);
         const direction = event.key === 'ArrowRight' ? 1 : -1;
         const currentIndex = tabs.indexOf(tab);
         const nextTab = tabs[(currentIndex + direction + tabs.length) % tabs.length];

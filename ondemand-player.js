@@ -256,6 +256,12 @@ const albumArtworkCache = new Map();
    buttons walk this list; the live feed is not part of it. */
 let onDemandQueue = [];
 let onDemandQueueIndex = -1;
+let onDemandQueueStartIndex = 0;
+function createOnDemandQueueSessionId() {
+  return window.crypto?.randomUUID?.() ||
+    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+let onDemandQueueSessionId = createOnDemandQueueSessionId();
 let onDemandQueueSource = 'autoplay';
 let onDemandFavouriteQueueLength = 0;
 let isScrubbing = false;
@@ -294,12 +300,12 @@ function updateNowPlayingSubtitle(isOnDemand) {
   }
   if (nowPlayingAutoplayContext) {
     const firstSong = onDemandQueue[0]?.trackName;
-    const showAutoplayOrigin = isOnDemand &&
-      onDemandQueueSource !== 'favourites' &&
-      Boolean(firstSong);
-    nowPlayingAutoplayContext.hidden = !showAutoplayOrigin;
-    nowPlayingAutoplayContext.textContent = showAutoplayOrigin
-      ? `Autoplay started from “${firstSong}”`
+    const showPlaybackContext = isOnDemand && Boolean(firstSong);
+    nowPlayingAutoplayContext.hidden = !showPlaybackContext;
+    nowPlayingAutoplayContext.textContent = showPlaybackContext
+      ? onDemandQueueSource === 'favourites'
+        ? 'Playing from your library'
+        : `Autoplay started from “${firstSong}”`
       : '';
   }
 }
@@ -310,6 +316,7 @@ function updateNowPlayingSubtitle(isOnDemand) {
    was bumped and stale v1/v2-era payloads are dropped on read. */
 const ON_DEMAND_STORAGE_KEY = 'thaalam-on-demand-session-v2';
 const ON_DEMAND_RECENTS_KEY = 'thaalam-on-demand-recents-v1';
+const ON_DEMAND_PLAYBACK_HISTORY_KEY = 'thaalam-on-demand-playback-history-v1';
 const PLAYBACK_MODE_STORAGE_KEY = 'thaalam-playback-mode-v1';
 const isMobilePlaybackLayout = () => window.matchMedia('(max-width: 56.1875rem)').matches;
 const LEGACY_ON_DEMAND_STORAGE_KEYS = ['thaalam-on-demand-session-v1'];
@@ -347,6 +354,38 @@ try {
   }
 } catch { /* Recent tracks remain available for this visit if storage is blocked. */ }
 
+let onDemandPlaybackHistory = [];
+try {
+  const storedHistory = JSON.parse(localStorage.getItem(ON_DEMAND_PLAYBACK_HISTORY_KEY) || '[]');
+  if (Array.isArray(storedHistory)) {
+    onDemandPlaybackHistory = storedHistory
+      .filter((song) => song && typeof song.trackName === 'string' && song.trackName.trim())
+      .slice(0, 500);
+  }
+} catch { /* Keep playback history available for this visit if storage is blocked. */ }
+
+function rememberOnDemandPlayback(song) {
+  if (!song?.trackName) return;
+  const entry = {
+    trackName: String(song.trackName),
+    artistName: String(song.artistName || ''),
+    collectionName: String(song.collectionName || ''),
+    artworkUrl100: String(song.artworkUrl100 || ''),
+    trackTimeMillis: Number(song.trackTimeMillis) || 0,
+    providerTrackId: String(song.providerTrackId || ''),
+    queueSource: onDemandQueueSource === 'favourites' ? 'favourites' : 'autoplay',
+    queueStartTrackName: String(onDemandQueue[onDemandQueueStartIndex]?.trackName || song.trackName),
+    queueSessionId: onDemandQueueSessionId,
+    queueStep: Math.max(0, onDemandQueueIndex - onDemandQueueStartIndex),
+    playedAt: Date.now()
+  };
+  onDemandPlaybackHistory = [entry, ...onDemandPlaybackHistory].slice(0, 500);
+  try {
+    localStorage.setItem(ON_DEMAND_PLAYBACK_HISTORY_KEY, JSON.stringify(onDemandPlaybackHistory));
+  } catch { /* Keep the in-memory playback history for this visit. */ }
+  window.dispatchEvent(new CustomEvent('thaalam-on-demand-playback-history-change'));
+}
+
 function rememberOnDemandSong(song, { fromLikedFolder = false } = {}) {
   const recentSong = fromLikedFolder
     ? { ...song, recentDisplayType: 'liked-folder', recentDisplayName: 'Liked Songs', recentDisplayArtist: 'Your library' }
@@ -355,11 +394,9 @@ function rememberOnDemandSong(song, { fromLikedFolder = false } = {}) {
     ? 'liked-folder'
     : `${entry.trackName || ''}\n${entry.artistName || ''}`.toLowerCase();
   const key = identity(recentSong);
-  const playedSongKey = `${song.trackName || ''}\n${song.artistName || ''}`.toLowerCase();
   onDemandRecentHistory = [
     recentSong,
-    ...onDemandRecentHistory.filter((entry) =>
-      identity(entry) !== key && !(fromLikedFolder && identity(entry) === playedSongKey))
+    ...onDemandRecentHistory.filter((entry) => identity(entry) !== key)
   ].slice(0, 10);
   try {
     localStorage.setItem(ON_DEMAND_RECENTS_KEY, JSON.stringify(onDemandRecentHistory));
@@ -681,12 +718,11 @@ function saveOnDemandSession(song, trackId, position = 0) {
       position: Math.max(0, Number(position) || 0),
       queue: onDemandQueue,
       queueIndex: onDemandQueueIndex,
+      queueStartIndex: onDemandQueueStartIndex,
+      queueSessionId: onDemandQueueSessionId,
       queueSource: onDemandQueueSource,
       favouriteQueueLength: onDemandFavouriteQueueLength,
-      autoplayAnchorTrackId,
-      // Paused state is part of the session: reopening should not start making
-      // noise on its own if the listener had deliberately stopped the song.
-      playing: window.onDemandPlaying === true
+      autoplayAnchorTrackId
     });
     localStorage.setItem(ON_DEMAND_STORAGE_KEY, payload);
     logOnDemand('saved', {
@@ -1550,6 +1586,7 @@ function enqueueOnDemandSong(song) {
   onDemandQueue = onDemandQueue.slice(0, onDemandQueueIndex + 1);
   onDemandQueue.push(song);
   onDemandQueueIndex = onDemandQueue.length - 1;
+  if (onDemandQueue.length === 1) onDemandQueueStartIndex = 0;
   window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
 }
 
@@ -1963,6 +2000,7 @@ async function playRelatedTrack(track, gapless = true) {
   await loadTrack(trackCandidates[0] || { id: track.id, streamUrl: track.streamUrl }, requestId);
   if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
   updatePlaybackProgress();
+  rememberOnDemandPlayback(song);
   // Chain: fetch the continuation queue for this track immediately.
   playedTrackIds.add(track.id);
   prefetchRelatedTracks(track.id);
@@ -1999,6 +2037,8 @@ async function startOnDemandSong(song, {
       // added afterward can still be played next and navigated back to.
       onDemandQueue = [];
       onDemandQueueIndex = -1;
+      onDemandQueueStartIndex = 0;
+      onDemandQueueSessionId = createOnDemandQueueSessionId();
       onDemandQueueSource = 'autoplay';
       onDemandFavouriteQueueLength = 0;
       playedTrackIds.clear();
@@ -2108,6 +2148,7 @@ async function startOnDemandSong(song, {
     await loadTrack(trackCandidates[0] || { id: track.id, streamUrl: track.streamUrl }, requestId);
     if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
     updatePlaybackProgress();
+    rememberOnDemandPlayback(song);
     playedTrackIds.add(track.id);
     prefetchRelatedTracks(track.id);
   } catch (error) {
@@ -2142,6 +2183,8 @@ function startOnDemandQueue(songs, startIndex = 0, options = {}) {
   clearAutoplayPreload();
   onDemandQueue = queue;
   onDemandQueueIndex = selectedIndex;
+  onDemandQueueStartIndex = selectedIndex;
+  onDemandQueueSessionId = createOnDemandQueueSessionId();
   onDemandQueueSource = 'favourites';
   onDemandFavouriteQueueLength = queue.length;
   playedTrackIds.clear();
@@ -2203,10 +2246,9 @@ async function restoreOnDemandSession() {
 
   const song = stored.song;
   savePlaybackMode('on-demand');
-  // Mobile restores the current track and queue paused. Playback must require
-  // an explicit tap after a refresh or app reopen; desktop keeps its prior
-  // resume behavior.
-  const shouldResume = stored.playing === true && !isMobilePlaybackLayout();
+  // Restore the current song and queue paused on every device. Starting audio
+  // after an app reopen always requires an explicit play action.
+  const shouldResume = false;
   // Keep the session's navigation history across refreshes. Entries without a
   // track name are dropped; entries missing a resolved stream re-search on tap.
   const savedQueue = Array.isArray(stored.queue)
@@ -2217,6 +2259,10 @@ async function restoreOnDemandSession() {
   if (savedQueue.length && savedIndex >= 0 && savedIndex < savedQueue.length) {
     onDemandQueue = savedQueue;
     onDemandQueueIndex = savedIndex;
+    onDemandQueueStartIndex = Number.isInteger(stored.queueStartIndex)
+      ? stored.queueStartIndex
+      : savedIndex;
+    onDemandQueueSessionId = String(stored.queueSessionId || createOnDemandQueueSessionId());
     onDemandFavouriteQueueLength = Math.max(
       0,
       Math.min(savedQueue.length, Number(stored.favouriteQueueLength) || 0)
@@ -2233,6 +2279,8 @@ async function restoreOnDemandSession() {
   } else {
     onDemandQueue = [];
     onDemandQueueIndex = -1;
+    onDemandQueueStartIndex = 0;
+    onDemandQueueSessionId = createOnDemandQueueSessionId();
     onDemandQueueSource = 'autoplay';
     onDemandFavouriteQueueLength = 0;
     enqueueOnDemandSong({ ...song, providerTrackId: stored.trackId });
@@ -2289,9 +2337,7 @@ async function restoreOnDemandSession() {
     playedTrackIds.add(stored.trackId);
     prefetchRelatedTracks(stored.trackId);
     preloadNextLikedQueueTrack(onDemandQueueIndex);
-    // Reflect the media element's real state. Mobile browsers can reject the
-    // post-refresh play() call without a user gesture even when the saved
-    // session says it had been playing before the reload.
+    // Reflect the media element's real state after restoring it paused.
     setOnDemandPlaying(!onDemandAudio.paused && !onDemandAudio.ended);
   } catch (error) {
     console.error('Unable to restore on-demand playback:', error);
@@ -2382,6 +2428,12 @@ window.getCurrentOnDemandSong = () => currentOnDemandSong
   : null;
 window.getOnDemandHistory = () => onDemandRecentHistory
   .map((song) => ({ ...song }));
+window.getOnDemandPlaybackHistory = () => onDemandPlaybackHistory
+  .map((song) => ({ ...song }));
+window.getOnDemandQueuePosition = () => ({
+  queueSessionId: onDemandQueueSessionId,
+  queueStep: Math.max(0, onDemandQueueIndex - onDemandQueueStartIndex)
+});
 window.recordOnDemandLikedRecent = (song) => {
   if (song?.trackName) rememberOnDemandSong(song, { fromLikedFolder: true });
 };

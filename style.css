@@ -76,8 +76,23 @@
     content: attr(data-track-artist) "\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0" attr(data-track-artist) "\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0";
   }
 
+  body.view-now-playing.on-demand-active .tagline.title-marquee #nowPlaying,
+  body.view-now-playing.on-demand-active .tagline.artist-marquee #nowPlaying {
+    -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 1rem), transparent 100%);
+    mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 1rem), transparent 100%);
+  }
+
   body.view-now-playing.on-demand-active .tagline.paused.title-marquee #nowPlaying::before,
   body.view-now-playing.on-demand-active .tagline.paused.artist-marquee #nowPlaying::after {
+    animation-play-state: paused !important;
+  }
+
+  /* Mobile can have the legacy duplicated-text marquee on #nowPlaying at the
+     same time as the on-demand pseudo-element marquee. Pause both layers. */
+  body.view-now-playing.on-demand-active .tagline.paused > #nowPlaying,
+  body.view-now-playing.on-demand-active .tagline.paused > #nowPlaying > span,
+  body.view-now-playing.on-demand-active .tagline.paused > #nowPlaying::before,
+  body.view-now-playing.on-demand-active .tagline.paused > #nowPlaying::after {
     animation-play-state: paused !important;
   }
 }
@@ -185,7 +200,7 @@ body.view-about {
   position: fixed;
   inset: -35%;
   z-index: 0;
-  cursor: pointer;
+  cursor: default;
   background: var(--album-dominant-color, #05070d);
   opacity: 1;
   transition: background-color 800ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -194,6 +209,13 @@ body.view-about {
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
   transform: translateZ(0);
+}
+
+@media (min-width: 56.25rem) {
+  body.desktop-cursor-hidden,
+  body.desktop-cursor-hidden * {
+    cursor: none !important;
+  }
 }
 
 [class~="album-background"]::after {
@@ -1591,6 +1613,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
 
   .genre-results.favourites-list-layout {
     max-height: max(8rem, calc(100dvh - 20rem));
+    padding-right: 1rem;
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior-y: contain;
@@ -1946,10 +1969,22 @@ body.view-rises-from-mini.view-now-playing .player-view {
     grid-template-columns: 3.5rem minmax(0, 1fr) auto;
     align-items: center;
     gap: 0.65rem;
-    padding: 0.15rem 0;
+    padding: 0.15rem 0.5rem;
     border: 0;
     border-radius: 0;
     background: transparent;
+    overflow: visible;
+    transition: background-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  }
+
+  .genre-results.favourites-list-layout .genre-card:hover,
+  .genre-results.favourites-list-layout .genre-card:focus-within {
+    border-radius: 0.5rem;
+    position: relative;
+    z-index: 1;
+    background: rgba(215, 236, 255, 0.1);
+    box-shadow: 0 0.55rem 1.4rem rgba(0, 0, 0, 0.38);
+    transform: translateY(-2px);
   }
 
   .genre-results.favourites-list-layout .genre-card-media {
@@ -2000,6 +2035,11 @@ body.view-rises-from-mini.view-now-playing .player-view {
     display: flex;
     align-items: center;
     gap: 0.45rem;
+    overflow: visible;
+  }
+
+  .genre-results.favourites-list-layout .genre-card-list-actions > button {
+    overflow: visible;
   }
 
   .genre-results.favourites-list-layout .genre-card-details {
@@ -4235,7 +4275,7 @@ body.has-lyrics .lyrics-panel {
   body.view-now-playing.on-demand-active .now-playing-track {
     display: block;
     min-height: 2.8rem;
-    padding-right: 3.25rem;
+    padding-right: 4rem;
     overflow: visible;
     white-space: normal;
     text-align: left;
@@ -4244,6 +4284,8 @@ body.has-lyrics .lyrics-panel {
   body.view-now-playing.on-demand-active #nowPlaying {
     display: flex;
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
     flex-direction: column;
     gap: 0.16rem;
     overflow: hidden;
@@ -4254,6 +4296,12 @@ body.has-lyrics .lyrics-panel {
     transform: none !important;
     -webkit-mask-image: none;
     mask-image: none;
+  }
+
+  /* on-demand metadata is rendered from data attributes below; hide the
+     legacy duplicated marquee spans so they cannot sit over the metadata. */
+  body.view-now-playing.on-demand-active #nowPlaying > span {
+    display: none !important;
   }
 
   body.view-now-playing.on-demand-active #nowPlaying::before,
@@ -4283,7 +4331,7 @@ body.has-lyrics .lyrics-panel {
   }
 
   body.view-now-playing.on-demand-active .on-demand-like-button {
-    top: 0;
+    top: -1.4rem;
     right: 0;
     transform: none;
   }
@@ -5332,7 +5380,7 @@ body.has-lyrics .lyrics-panel {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-rows: auto auto;
     align-items: start;
-    column-gap: 0.5rem;
+    column-gap: 2rem;
     white-space: normal;
   }
 
@@ -5348,7 +5396,9 @@ body.has-lyrics .lyrics-panel {
     position: relative;
     top: auto;
     right: auto;
-    left: -0.5rem;
+    left: -0.65rem;
+    width: 2.5rem;
+    height: 2.5rem;
     transform: none;
   }
 
@@ -5368,7 +5418,8 @@ body.has-lyrics .lyrics-panel {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
-    width: auto;
+    width: 100%;
+    max-width: 100%;
     min-width: 0;
     overflow: hidden;
     color: transparent;
@@ -5414,6 +5465,12 @@ body.has-lyrics .lyrics-panel {
     white-space: nowrap;
     content: attr(data-track-artist) "\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0" attr(data-track-artist) "\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0";
     animation: desktopArtistMarquee var(--artist-marquee-duration, 9s) linear infinite;
+  }
+
+  body.view-now-playing .tagline.title-marquee #nowPlaying,
+  body.view-now-playing .tagline.artist-marquee #nowPlaying {
+    -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 1.35rem), transparent 100%);
+    mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 1.35rem), transparent 100%);
   }
 
   body.view-now-playing .tagline.paused.title-marquee #nowPlaying::before,
@@ -5683,7 +5740,7 @@ img {
 
 @media (min-width: 56.25rem) and (max-width: 75rem) {
   body.view-now-playing .now-playing-track > .on-demand-like-button {
-    left: 0;
+    left: -0.65rem;
   }
 }
 
@@ -6187,4 +6244,159 @@ img {
   background: transparent;
   color: inherit;
   box-shadow: none;
+}
+
+@media (max-width: 56.1875rem) {
+  .genre-tab[data-genre="recently-played"] { display: none; }
+}
+
+@media (min-width: 56.25rem) {
+  .genre-results.desktop-search-list-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.1rem;
+    margin-top: 2.5rem;
+  }
+
+  .genre-results.desktop-search-list-layout .genre-card {
+    display: grid;
+    grid-template-columns: 3.5rem minmax(0, 1fr);
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.15rem 0.5rem;
+    border: 0;
+    border-radius: 0.5rem;
+    background: transparent;
+    overflow: visible;
+    transition: background-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  }
+
+  .genre-results.desktop-search-list-layout .genre-card:hover,
+  .genre-results.desktop-search-list-layout .genre-card:focus-within {
+    position: relative;
+    z-index: 1;
+    background: rgba(215, 236, 255, 0.1);
+    box-shadow: 0 0.55rem 1.4rem rgba(0, 0, 0, 0.38);
+    transform: translateY(-2px);
+  }
+
+  .genre-results.desktop-search-list-layout .genre-card-media {
+    width: 3.5rem;
+    height: 3.5rem;
+  }
+
+  .genre-results.desktop-search-list-layout .genre-card-art-frame {
+    width: 100%;
+    height: 100%;
+    aspect-ratio: 1;
+    border-radius: 0.2rem;
+  }
+
+  .genre-results.desktop-search-list-layout .genre-card-details { margin-top: 0; }
+
+  .genre-results.desktop-search-list-layout .genre-card.is-active-track .genre-card-title {
+    color: var(--liked-folder-color);
+    text-shadow: none;
+  }
+
+  .genre-results.desktop-search-list-layout .genre-card.is-active-track .genre-card-artist {
+    color: color-mix(in srgb, var(--liked-folder-color) 86%, white);
+    text-shadow: none;
+  }
+
+  .genre-results.recent-history-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.1rem;
+  }
+
+  .recent-history-date {
+    grid-column: 1 / -1;
+    margin: 0.9rem 0.5rem 0.2rem;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 0.82rem;
+    font-weight: 650;
+    letter-spacing: 0.02em;
+  }
+
+  .recent-history-session-heading {
+    grid-column: 1 / -1;
+    display: flex;
+    min-height: 2rem;
+    align-items: center;
+    gap: 0.65rem;
+    margin: 0.55rem 0.5rem 0.15rem;
+    padding: 0.35rem 0.65rem;
+    border-left: 2px solid rgba(145, 196, 255, 0.72);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0.2rem 0.2rem 0 0;
+    background: linear-gradient(90deg, rgba(145, 196, 255, 0.1), rgba(145, 196, 255, 0.015));
+  }
+
+  .recent-history-session-source {
+    color: #c6e1ff;
+    font-size: 0.68rem;
+    font-weight: 750;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .recent-history-session-start {
+    overflow: hidden;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.76rem;
+    font-weight: 550;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .genre-results.recent-history-layout .recent-history-date:first-child {
+    margin-top: 0.2rem;
+  }
+
+  .genre-results.recent-history-layout .genre-card {
+    display: grid;
+    grid-template-columns: 3.5rem minmax(0, 1fr);
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.15rem 0.5rem;
+    border: 0;
+    border-radius: 0.5rem;
+    background: transparent;
+    overflow: visible;
+    transition: background-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  }
+
+  .genre-results.recent-history-layout .genre-card:hover,
+  .genre-results.recent-history-layout .genre-card:focus-within {
+    position: relative;
+    z-index: 1;
+    background: rgba(215, 236, 255, 0.1);
+    box-shadow: 0 0.55rem 1.4rem rgba(0, 0, 0, 0.38);
+    transform: translateY(-2px);
+  }
+
+  .genre-results.recent-history-layout .genre-card-media {
+    width: 3.5rem;
+    height: 3.5rem;
+  }
+
+  .genre-results.recent-history-layout .genre-card-art-frame {
+    width: 100%;
+    height: 100%;
+    aspect-ratio: 1;
+    border-radius: 0.2rem;
+  }
+
+  .genre-results.recent-history-layout .genre-card-details { margin-top: 0; }
+
+  .genre-results.recent-history-layout .genre-card.is-active-track .genre-card-title {
+    color: var(--liked-folder-color);
+    text-shadow: none;
+  }
+
+  .genre-results.recent-history-layout .genre-card.is-active-track .genre-card-artist {
+    color: color-mix(in srgb, var(--liked-folder-color) 86%, white);
+    text-shadow: none;
+  }
+
 }
