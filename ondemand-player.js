@@ -63,7 +63,17 @@ onDemandSilentLoopAudio.setAttribute('playsinline', '');
 onDemandSilentLoopAudio.setAttribute('webkit-playsinline', '');
 // A fixed crossfade avoids downloading and decoding another full copy of each
 // song just to inspect its waveform.
-const ON_DEMAND_CROSSFADE_SECONDS = 5;
+const ON_DEMAND_CROSSFADE_MIN_SECONDS = 3;
+const ON_DEMAND_CROSSFADE_MAX_SECONDS = 8;
+
+function getAdaptiveCrossfadeSeconds(trackDuration) {
+  const duration = Number(trackDuration);
+  if (!Number.isFinite(duration) || duration <= 0) return 5;
+  return Math.min(
+    ON_DEMAND_CROSSFADE_MAX_SECONDS,
+    Math.max(ON_DEMAND_CROSSFADE_MIN_SECONDS, duration * 0.04)
+  );
+}
 
 function clearAutoplayPreload() {
   autoplayPreloadAudio.pause();
@@ -134,7 +144,12 @@ function finishOnDemandHandoffWhenPlaying() {
   const outgoingAudio = handoffOutgoingAudio;
   handoffFadeIncomingAudio = incomingAudio;
   const fadeStartedAt = performance.now();
-  const fadeDurationMs = ON_DEMAND_CROSSFADE_SECONDS * 1000;
+  const plannedFadeMs = getAdaptiveCrossfadeSeconds(outgoingAudio.duration) * 1000;
+  const outgoingDuration = Number(outgoingAudio.duration);
+  const outgoingRemainingMs = Number.isFinite(outgoingDuration) && outgoingDuration > 0
+    ? Math.max(0, (outgoingDuration - outgoingAudio.currentTime) * 1000)
+    : plannedFadeMs;
+  const fadeDurationMs = Math.min(plannedFadeMs, outgoingRemainingMs);
   handoffVolume = getOnDemandVolumeLevel();
   window.clearTimeout(handoffFinishTimer);
   if (fadeDurationMs <= 30 || outgoingAudio.ended) {
@@ -802,7 +817,7 @@ function updatePlaybackProgress() {
     const nextTrackIsAvailable = Boolean(upcomingTrackId) &&
       autoplayPreloadedTrackId === upcomingTrackId &&
       autoplayPreloadedStreamUrl && !autoplayPreloadAudio.error;
-    const handoffLeadSeconds = ON_DEMAND_CROSSFADE_SECONDS;
+    const handoffLeadSeconds = getAdaptiveCrossfadeSeconds(duration);
     if (!autoplayTrackTransition && hasUpcomingTrack && nextTrackIsAvailable &&
         duration > 0 && elapsed >= duration - handoffLeadSeconds) {
       // Start early enough to buffer and crossfade, keeping the outgoing audio
