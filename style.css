@@ -5785,6 +5785,14 @@ img {
     opacity: 0 !important;
     pointer-events: none !important;
   }
+
+  /* On mobile, unsynced lyrics stay in a capped scroll area (max-height: 68vh).
+     Add bottom padding so the last line isn't flush against the panel edge and
+     cut off when the user scrolls to the end. */
+  body.has-lyrics .lyrics-content {
+    padding-bottom: 2rem;
+    scroll-padding-bottom: 2rem;
+  }
 }
 
 /* Narrow-screen-only refinements (width query only — no `pointer: coarse`,
