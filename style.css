@@ -6239,6 +6239,66 @@ img {
   cursor: not-allowed;
   filter: grayscale(1);
 }
+
+/* Desktop favourites use clean glyph actions instead of circular controls. */
+@media (min-width: 56.25rem) {
+  .genre-results.favourites-view .genre-info-button,
+  .genre-results.favourites-view .genre-remove-favourite-button {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .genre-results.favourites-view .genre-info-button {
+    display: grid;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    place-items: center;
+    color: rgba(255, 255, 255, 0.78);
+    font: 700 1.05rem/1 system-ui, sans-serif;
+    text-shadow: none;
+  }
+
+  .genre-results.favourites-view .genre-info-button:hover {
+    border-color: transparent;
+    background: transparent;
+    color: #fff;
+    filter: drop-shadow(0 0 0.35rem rgba(255, 255, 255, 0.55));
+    transform: scale(1.14);
+  }
+
+  .genre-results.favourites-view .genre-remove-favourite-button {
+    color: var(--liked-folder-color);
+  }
+
+  .genre-results.favourites-view .genre-remove-favourite-button svg {
+    width: 70%;
+    height: 70%;
+    fill: currentColor;
+    stroke: none;
+  }
+
+  .genre-results.favourites-view .genre-remove-favourite-button:hover {
+    border-color: transparent;
+    background: transparent;
+    color: var(--liked-folder-color);
+    filter: none;
+    transform: none;
+  }
+
+  .genre-results.favourites-view .genre-card:has(.genre-info-button:hover) {
+    position: relative;
+    z-index: 1;
+    border-radius: 0.5rem;
+    background: rgba(215, 236, 255, 0.1);
+    box-shadow: 0 0.55rem 1.4rem rgba(0, 0, 0, 0.38);
+    transform: translateY(-2px);
+  }
+}
 .desktop-nav-links button[data-view="now-playing"]:disabled:hover,
 .desktop-nav-links button[data-view="now-playing"].is-disabled:hover {
   background: transparent;
