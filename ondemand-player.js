@@ -111,6 +111,8 @@ function promotePreloadedTrack(track) {
   autoplayPreloadedTrackId = '';
   autoplayPreloadedStreamUrl = '';
   syncOnDemandVolumeToStored();
+  // Keep the loop running across the source swap and volume handoff.
+  startOnDemandSilentLoop();
   logOnDemand('promoted buffered next track', track.id);
   return true;
 }
@@ -135,6 +137,10 @@ function finishOnDemandHandoff() {
   handoffOutgoingAudio = null;
   handoffFadeIncomingAudio = null;
   if (onDemandAudio) onDemandAudio.volume = handoffVolume;
+  if (window.onDemandPlaying !== true) {
+    stopOnDemandSilentLoop();
+    if (navigator.mediaSession) navigator.mediaSession.playbackState = 'paused';
+  }
 }
 
 let handoffFinishTimer = 0;
@@ -1071,12 +1077,16 @@ function setOnDemandPlaying(isPlaying) {
   if (window.onDemandPlaybackActive) persistCurrentOnDemandSession();
   window.setPlayerVisualState?.(isPlaying);
   if (navigator.mediaSession) {
-    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+    const outgoingStillPlaying = Boolean(handoffOutgoingAudio &&
+      !handoffOutgoingAudio.paused && !handoffOutgoingAudio.ended);
+    navigator.mediaSession.playbackState = isPlaying || outgoingStillPlaying
+      ? 'playing'
+      : 'paused';
   }
-  // The silent loop keeps background JS alive while a track plays. It must not
-  // keep running while paused, otherwise Chrome's media session can stay in the
-  // "playing" state and the lock-screen play/pause button stops responding.
-  if (isPlaying) {
+  // Keep the loop through a source handoff: the outgoing element may still be
+  // carrying playback while the incoming element starts. Stop it once the
+  // handoff ends if the listener has paused playback.
+  if (isPlaying || autoplayTrackTransition || handoffOutgoingAudio) {
     if (window.onDemandPlaybackActive) startOnDemandSilentLoop();
   } else {
     stopOnDemandSilentLoop();
