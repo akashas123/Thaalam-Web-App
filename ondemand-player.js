@@ -1049,6 +1049,8 @@ function releaseOnDemandWakeLock() {
 }
 function startOnDemandSilentLoop() {
   if (!window.onDemandPlaybackActive) return;
+  // Repeated play/visibility events should not rewind an already-running loop.
+  if (!onDemandSilentLoopAudio.paused && !onDemandSilentLoopAudio.ended) return;
   try { onDemandSilentLoopAudio.currentTime = 0; } catch (_) { /* ignore */ }
   const playPromise = onDemandSilentLoopAudio.play();
   if (playPromise) playPromise.catch(() => { /* autoplay blocked until a gesture */ });
