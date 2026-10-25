@@ -44,6 +44,7 @@ autoplayPreloadAudio.preload = 'auto';
 let autoplayPreloadedTrackId = '';
 let autoplayPreloadedStreamUrl = '';
 let handoffOutgoingAudio = null;
+let handoffFadeIncomingAudio = null;
 let handoffVolume = 1;
 // A continuously looping, inaudible stream. Mobile browsers (notably Android
 // Chrome) suspend a page's timers/JS when no audio is playing - including when
@@ -60,17 +61,9 @@ onDemandSilentLoopAudio.preload = 'auto';
 onDemandSilentLoopAudio.volume = 1;
 onDemandSilentLoopAudio.setAttribute('playsinline', '');
 onDemandSilentLoopAudio.setAttribute('webkit-playsinline', '');
-// Avoid downloading an entire song a second time just to inspect its waveform.
-// The media element streams the track directly and playback should start as
-// soon as the CDN has supplied enough data.
-const ON_DEMAND_HANDOFF_LEAD_SECONDS = 3.0;
-function getOnDemandTrailingSilence(streamUrl) {
-  return 0.2;
-}
-
-function getOnDemandLeadingSilence(streamUrl) {
-  return 0;
-}
+// A fixed crossfade avoids downloading and decoding another full copy of each
+// song just to inspect its waveform.
+const ON_DEMAND_CROSSFADE_SECONDS = 5;
 
 function clearAutoplayPreload() {
   autoplayPreloadAudio.pause();
@@ -83,13 +76,13 @@ function clearAutoplayPreload() {
 function promotePreloadedTrack(track) {
   if (!track?.id || autoplayPreloadedTrackId !== track.id ||
       autoplayPreloadedStreamUrl !== track.streamUrl ||
-      autoplayPreloadAudio.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
+      !autoplayPreloadAudio.getAttribute('src') ||
       autoplayPreloadAudio.error) {
     logOnDemand('next-track preload not ready for handoff', {
       trackId: track?.id || '',
       preloadedTrackId: autoplayPreloadedTrackId,
       readyState: autoplayPreloadAudio.readyState,
-      requiredReadyState: HTMLMediaElement.HAVE_CURRENT_DATA
+      requiredReadyState: 'matching source loaded'
     });
     return false;
   }
@@ -97,15 +90,13 @@ function promotePreloadedTrack(track) {
   const previousAudio = onDemandAudio;
   onDemandAudio = autoplayPreloadAudio;
   autoplayPreloadAudio = previousAudio;
-  // Keep the outgoing stream alive during the short overlap. The next stream
-  // has already buffered on the standby element, so it can start before the
-  // current source reaches its end (important for mobile lock-screen audio).
+  // Keep the outgoing stream alive while the incoming source buffers.
   handoffOutgoingAudio = previousAudio;
+  handoffFadeIncomingAudio = null;
   handoffVolume = getOnDemandVolumeLevel();
   previousAudio.volume = handoffVolume;
-  // Start the incoming stream at the listener's full selected level. The
-  // outgoing source stays at full level until the incoming source is playing.
-  onDemandAudio.volume = handoffVolume;
+  onDemandAudio.volume = 0;
+  onDemandAudio.muted = previousAudio.muted;
   autoplayPreloadAudio.preload = 'auto';
   autoplayPreloadedTrackId = '';
   autoplayPreloadedStreamUrl = '';
@@ -132,19 +123,44 @@ function finishOnDemandHandoff() {
     handoffOutgoingAudio.load();
   }
   handoffOutgoingAudio = null;
+  handoffFadeIncomingAudio = null;
   if (onDemandAudio) onDemandAudio.volume = handoffVolume;
 }
 
 let handoffFinishTimer = 0;
 function finishOnDemandHandoffWhenPlaying() {
-  if (!handoffOutgoingAudio) return;
-  // Keep the outgoing source alive briefly as a buffer so the incoming track's
-  // startup cannot expose a gap. It is inaudible during this window because it
-  // is already in its trailing silence.
+  if (!handoffOutgoingAudio || handoffFadeIncomingAudio === onDemandAudio) return;
+  const incomingAudio = onDemandAudio;
+  const outgoingAudio = handoffOutgoingAudio;
+  handoffFadeIncomingAudio = incomingAudio;
+  const fadeStartedAt = performance.now();
+  const fadeDurationMs = ON_DEMAND_CROSSFADE_SECONDS * 1000;
+  handoffVolume = getOnDemandVolumeLevel();
   window.clearTimeout(handoffFinishTimer);
-  handoffFinishTimer = window.setTimeout(() => {
+  if (fadeDurationMs <= 30 || outgoingAudio.ended) {
+    incomingAudio.volume = handoffVolume;
     finishOnDemandHandoff();
-  }, 1000);
+    if (window.onDemandPlaybackActive) {
+      if (onDemandQueueSource === 'favourites') preloadNextLikedQueueTrack();
+      else preloadNextAutoplayTrack();
+    }
+    return;
+  }
+  const fade = () => {
+    if (incomingAudio !== onDemandAudio || outgoingAudio !== handoffOutgoingAudio) return;
+    const progress = Math.min(1, (performance.now() - fadeStartedAt) / fadeDurationMs);
+    incomingAudio.volume = handoffVolume * progress;
+    outgoingAudio.volume = handoffVolume * (1 - progress);
+    if (progress >= 1) {
+      finishOnDemandHandoff();
+      if (!window.onDemandPlaybackActive) return;
+      if (onDemandQueueSource === 'favourites') preloadNextLikedQueueTrack();
+      else preloadNextAutoplayTrack();
+      return;
+    }
+    handoffFinishTimer = window.setTimeout(fade, 30);
+  };
+  fade();
 }
 
 let requestedTrackId = '';
@@ -767,12 +783,30 @@ function updatePlaybackProgress() {
         : duration;
     }
 
-    const hasUpcomingTrack =
-      (onDemandQueueIndex >= 0 && onDemandQueueIndex < onDemandQueue.length - 1) ||
-      Boolean(relatedTrackCache[relatedTrackCursor]);
-    const handoffLeadSeconds = getOnDemandTrailingSilence(requestedStreamUrl || onDemandAudio?.src || '');
-    if (!autoplayTrackTransition && hasUpcomingTrack && duration > 0 &&
-        elapsed >= duration - handoffLeadSeconds) {
+    const queuedNextSong = onDemandQueueIndex >= 0
+      ? onDemandQueue[onDemandQueueIndex + 1]
+      : null;
+    const relatedNextTrack = relatedTrackCache[relatedTrackCursor];
+    const upcomingTrackId = queuedNextSong?.providerTrackId || relatedNextTrack?.id || '';
+    const hasUpcomingTrack = Boolean(queuedNextSong || relatedNextTrack);
+    if (!handoffOutgoingAudio && hasUpcomingTrack &&
+        autoplayPreloadedTrackId !== upcomingTrackId) {
+      if (queuedNextSong?.providerTrackId && queuedNextSong?.streamUrl) {
+        preloadTrackAudio({ id: queuedNextSong.providerTrackId, streamUrl: queuedNextSong.streamUrl });
+      } else if (relatedNextTrack?.id && relatedNextTrack?.streamUrl) {
+        preloadTrackAudio(relatedNextTrack);
+      } else if (queuedNextSong && onDemandQueueSource === 'favourites') {
+        preloadNextLikedQueueTrack();
+      }
+    }
+    const nextTrackIsAvailable = Boolean(upcomingTrackId) &&
+      autoplayPreloadedTrackId === upcomingTrackId &&
+      autoplayPreloadedStreamUrl && !autoplayPreloadAudio.error;
+    const handoffLeadSeconds = ON_DEMAND_CROSSFADE_SECONDS;
+    if (!autoplayTrackTransition && hasUpcomingTrack && nextTrackIsAvailable &&
+        duration > 0 && elapsed >= duration - handoffLeadSeconds) {
+      // Start early enough to buffer and crossfade, keeping the outgoing audio
+      // audible until the next track actually starts.
       autoplayTrackTransition = true;
       advanceToSimilarSong();
     }
@@ -1099,8 +1133,7 @@ function syncOnDemandVolumeToStored() {
   // Keep the incoming side audible throughout a handoff, including while a
   // mobile browser is suspending background JavaScript timers.
   if (handoffOutgoingAudio) {
-    onDemandAudio.volume = getOnDemandVolumeLevel();
-    handoffVolume = onDemandAudio.volume;
+    handoffVolume = getOnDemandVolumeLevel();
     return;
   }
   try {
@@ -1724,11 +1757,13 @@ function prefetchRelatedTracks(trackId, isRetry = false) {
       });
       relatedTrackCursor = 0;
       prefetchUpcomingTrackArtwork();
-      if (onDemandQueueSource === 'favourites' &&
-          onDemandQueueIndex < onDemandFavouriteQueueLength - 1) {
-        preloadNextLikedQueueTrack();
-      } else {
-        preloadNextAutoplayTrack();
+      if (!handoffOutgoingAudio) {
+        if (onDemandQueueSource === 'favourites' &&
+            onDemandQueueIndex < onDemandFavouriteQueueLength - 1) {
+          preloadNextLikedQueueTrack();
+        } else {
+          preloadNextAutoplayTrack();
+        }
       }
       updateTransportButtonState();
     })
@@ -1768,7 +1803,7 @@ function preloadNextLikedQueueTrack(queueIndex = onDemandQueueIndex) {
   Promise.resolve(preparation).then((track) => {
     if (onDemandQueueSource !== 'favourites' ||
         onDemandQueue[onDemandQueueIndex + 1] !== nextSong ||
-        !track?.id || !track.streamUrl) return;
+        !track?.id || !track.streamUrl || handoffOutgoingAudio) return;
     preloadTrackAudio(track);
   }).catch(() => {});
 }
@@ -1828,7 +1863,6 @@ function advanceToSimilarSong() {
   if (nextTrack) {
     relatedTrackCursor += 1;
     playRelatedTrack(nextTrack);
-    preloadNextAutoplayTrack();
     return;
   }
 
@@ -1847,7 +1881,6 @@ function advanceToSimilarSong() {
       window.clearInterval(autoplayRetryTimer);
       relatedTrackCursor += 1;
       playRelatedTrack(retryTrack);
-      preloadNextAutoplayTrack();
       return;
     }
 
@@ -2059,7 +2092,6 @@ async function startOnDemandSong(song, {
     setCurrentOnDemandTrack(song, track.id);
     persistCurrentOnDemandSession();
     updateOnDemandMetadata(song, track);
-    preloadNextLikedQueueTrack(onDemandQueueIndex);
     if (gapless) {
       promotePreloadedTrack(track);
     } else {
