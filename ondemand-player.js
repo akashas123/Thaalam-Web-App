@@ -1063,6 +1063,7 @@ function setOnDemandPlaying(isPlaying) {
   // Mirror of the live flag, so a restored session can reapply the pause state
   // the listener had chosen instead of always resuming with sound.
   window.onDemandPlaying = isPlaying;
+  document.body.classList.toggle('on-demand-paused', !isPlaying);
   // Keep the stored session in step with the transport, otherwise a reload
   // would replay a song the listener had already paused.
   if (window.onDemandPlaybackActive) persistCurrentOnDemandSession();
@@ -1771,6 +1772,11 @@ function prefetchRelatedTracks(trackId, isRetry = false) {
         return true;
       });
       relatedTrackCursor = 0;
+      // Give the next few songs time to fetch lyrics while the current track
+      // is still playing, even if audio preloading starts later.
+      relatedTrackCache.slice(0, 2).forEach((track) => {
+        window.prefetchOnDemandLyrics?.(track);
+      });
       prefetchUpcomingTrackArtwork();
       if (!handoffOutgoingAudio) {
         if (onDemandQueueSource === 'favourites' &&
@@ -1796,6 +1802,9 @@ function preloadNextAutoplayTrack() {
 
 function preloadTrackAudio(track) {
   if (!track?.id || !track.streamUrl || track.id === autoplayPreloadedTrackId) return;
+  // Also cover cases where audio is preloaded before a recommendation queue
+  // is available.
+  window.prefetchOnDemandLyrics?.(track);
   autoplayPreloadedTrackId = track.id;
   autoplayPreloadedStreamUrl = track.streamUrl;
   autoplayPreloadAudio.src = track.streamUrl;
@@ -2043,6 +2052,7 @@ async function startOnDemandSong(song, {
   updateTransportButtonState();
   resetScrub();
   window.onDemandPlaybackActive = true;
+  document.body.classList.toggle('on-demand-paused', window.onDemandPlaying !== true);
   startOnDemandSilentLoop();
 
   updateTransportButtonState();
@@ -2255,6 +2265,7 @@ async function restoreOnDemandSession() {
   // Enter the same on-demand state a fresh selection would, before any live
   // radio UI can repaint itself over the restored track.
   window.onDemandPlaybackActive = true;
+  document.body.classList.add('on-demand-paused');
   startOnDemandSilentLoop();
 
   updateNowPlayingSubtitle(true);
@@ -2360,6 +2371,7 @@ function returnToLive() {
   stopOnDemandSilentLoop();
 
   window.onDemandPlaybackActive = false;
+  document.body.classList.remove('on-demand-paused');
   updateTransportButtonState();
   updateNowPlayingSubtitle(false);
   window.setOnDemandAudioQuality?.(false);

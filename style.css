@@ -87,6 +87,11 @@
     animation-play-state: paused !important;
   }
 
+  body.view-now-playing.on-demand-active.on-demand-paused .tagline.title-marquee #nowPlaying::before,
+  body.view-now-playing.on-demand-active.on-demand-paused .tagline.artist-marquee #nowPlaying::after {
+    animation-play-state: paused !important;
+  }
+
   /* Mobile can have the legacy duplicated-text marquee on #nowPlaying at the
      same time as the on-demand pseudo-element marquee. Pause both layers. */
   body.view-now-playing.on-demand-active .tagline.paused > #nowPlaying,
@@ -5497,6 +5502,11 @@ body.has-lyrics .lyrics-panel {
   body.view-now-playing .tagline.paused.title-marquee #nowPlaying::before,
   body.view-now-playing .tagline.paused.artist-marquee #nowPlaying::after {
     animation-play-state: paused;
+  }
+
+  body.view-now-playing.on-demand-active.on-demand-paused .tagline.title-marquee #nowPlaying::before,
+  body.view-now-playing.on-demand-active.on-demand-paused .tagline.artist-marquee #nowPlaying::after {
+    animation-play-state: paused !important;
   }
 
   body.view-now-playing .tagline.marquee #nowPlaying {

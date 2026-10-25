@@ -26,6 +26,9 @@ let mobileTouchStartedInLyrics = false;
 let lyricsLookupSongId = '';
 let lyricsLookupResult = '';
 let lyricsLookupRequestId = 0;
+let lyricsRetryTimer = 0;
+let lyricsRetrySongId = '';
+let lyricsRetryCount = 0;
 let lyricScrollFrame = 0;
 
 let trackDurationSeconds = 0;
@@ -35,6 +38,64 @@ let trackClockSongId = '';
 let trackClockPlaybackSessionId = 0;
 
 const lrclibCache = new Map();
+const lrclibRequests = new Map();
+const LRCLIB_STORAGE_KEY = 'thaalam-lrclib-cache-v1';
+const LRCLIB_CACHE_LIMIT = 100;
+const LRCLIB_BACKOFF_KEY = 'thaalam-lrclib-backoff-until-v1';
+const LRCLIB_MIN_REQUEST_GAP_MS = 1500;
+let lrclibLastRequestAt = 0;
+let lrclibQueue = Promise.resolve();
+let lrclibBlockedUntil = 0;
+try {
+  lrclibBlockedUntil = Number(localStorage.getItem(LRCLIB_BACKOFF_KEY)) || 0;
+} catch { /* The rate-limit cooldown still works for this page session. */ }
+
+function pauseLrclibRequestsFor(milliseconds) {
+  lrclibBlockedUntil = Math.max(lrclibBlockedUntil, Date.now() + milliseconds);
+  try { localStorage.setItem(LRCLIB_BACKOFF_KEY, String(lrclibBlockedUntil)); }
+  catch { /* Keep the cooldown in memory when storage is unavailable. */ }
+}
+
+function waitForLrclibRequestSlot() {
+  const slot = lrclibQueue.then(async () => {
+    if (lrclibBlockedUntil > Date.now()) return false;
+    const waitMs = Math.max(lrclibLastRequestAt + LRCLIB_MIN_REQUEST_GAP_MS - Date.now(), 0);
+    if (waitMs) await new Promise((resolve) => window.setTimeout(resolve, waitMs));
+    if (lrclibBlockedUntil > Date.now()) return false;
+    lrclibLastRequestAt = Date.now();
+    return true;
+  });
+  lrclibQueue = slot.catch(() => false);
+  return slot;
+}
+
+function readStoredLyricsCache() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(LRCLIB_STORAGE_KEY) || '[]');
+    if (!Array.isArray(stored)) return;
+    for (const entry of stored) {
+      if (Array.isArray(entry) && typeof entry[0] === 'string' && typeof entry[1] === 'string' && entry[1].trim()) {
+        lrclibCache.set(entry[0], entry[1]);
+      }
+    }
+  } catch { /* Persistent caching is optional; the in-memory cache still works. */ }
+}
+
+function storeLyricsCacheEntry(cacheKey, lyrics) {
+  // Empty responses are often temporary lookup failures. Never persist them as
+  // a hit, or that song would stay lyric-less until the cache was cleared.
+  if (!lyrics?.trim()) return;
+  lrclibCache.delete(cacheKey);
+  lrclibCache.set(cacheKey, lyrics);
+  while (lrclibCache.size > LRCLIB_CACHE_LIMIT) {
+    lrclibCache.delete(lrclibCache.keys().next().value);
+  }
+  try {
+    localStorage.setItem(LRCLIB_STORAGE_KEY, JSON.stringify([...lrclibCache]));
+  } catch { /* Keep the in-memory result when storage is unavailable or full. */ }
+}
+
+readStoredLyricsCache();
 
 function parseTrackDurationSeconds(value) {
   const numeric = Number(value);
@@ -70,10 +131,17 @@ async function fetchLrclibLyrics(song) {
     `${song.artist.toLowerCase()}|${song.title.toLowerCase()}`;
 
   if (lrclibCache.has(cacheKey)) {
-    return lrclibCache.get(cacheKey);
+    const cached = lrclibCache.get(cacheKey);
+    // Refresh insertion order so frequently used songs stay in the small cache.
+    storeLyricsCacheEntry(cacheKey, cached);
+    return cached;
   }
 
+  if (lrclibRequests.has(cacheKey)) return lrclibRequests.get(cacheKey);
+
+  const request = (async () => {
   try {
+    if (!await waitForLrclibRequestSlot()) return '';
     const search = new URLSearchParams({
       q: song.title
     });
@@ -86,6 +154,14 @@ async function fetchLrclibLyrics(song) {
     );
 
     if (!response.ok) {
+      if (response.status === 429) {
+        const retryAfter = Number(response.headers.get('Retry-After'));
+        pauseLrclibRequestsFor(Number.isFinite(retryAfter) && retryAfter > 0
+          ? retryAfter * 1000
+          : 60_000);
+      } else if (response.status >= 500) {
+        pauseLrclibRequestsFor(30_000);
+      }
       return '';
     }
 
@@ -107,19 +183,29 @@ async function fetchLrclibLyrics(song) {
       result?.plainLyrics ||
       '';
 
-    lrclibCache.set(cacheKey, lyrics);
+    storeLyricsCacheEntry(cacheKey, lyrics);
 
     return lyrics;
 
   } catch (error) {
-    console.log(
-      'LRCLIB lyrics lookup failed:',
-      error
-    );
-
     return '';
   }
+  })();
+  lrclibRequests.set(cacheKey, request);
+  try {
+    return await request;
+  } finally {
+    if (lrclibRequests.get(cacheKey) === request) lrclibRequests.delete(cacheKey);
+  }
 }
+
+window.prefetchOnDemandLyrics = (track) => {
+  const title = String(track?.title || track?.trackName || '').trim();
+  const artist = String(track?.artist || track?.artistName || '')
+    .replace(/\s-\sTopic$/i, '')
+    .trim();
+  if (title && artist) void fetchLrclibLyrics({ title, artist });
+};
 
 function getAzuraCastLyrics(song) {
   const lyrics = song?.lyrics;
@@ -634,7 +720,7 @@ function updateLyrics(
   expandLyricsAfterPlaybackStarts();
 }
 
-async function fetchLyrics(nowPlayingData = null) {
+async function fetchLyrics(nowPlayingData = null, forceLyricsLookup = false) {
   if (
     (!streamIsActive ||
       lyricsRadio.paused) &&
@@ -675,10 +761,17 @@ async function fetchLyrics(nowPlayingData = null) {
 
     if (
       songId &&
-      songId !== lyricsLookupSongId
+      (songId !== lyricsLookupSongId || forceLyricsLookup)
     ) {
       lyricsLookupSongId =
         songId;
+
+      if (songId !== lyricsRetrySongId) {
+        window.clearTimeout(lyricsRetryTimer);
+        lyricsRetryTimer = 0;
+        lyricsRetrySongId = songId;
+        lyricsRetryCount = 0;
+      }
 
       const requestId =
         ++lyricsLookupRequestId;
@@ -698,6 +791,20 @@ async function fetchLyrics(nowPlayingData = null) {
 
       lyricsLookupResult = lrclibLyrics;
       updateLyrics(data, true);
+
+      window.clearTimeout(lyricsRetryTimer);
+      lyricsRetryTimer = 0;
+      if (!lrclibLyrics && lyricsRetryCount < 2) {
+        lyricsRetryCount += 1;
+        lyricsRetryTimer = window.setTimeout(() => {
+          lyricsRetryTimer = 0;
+          const latestSong = window.latestNowPlayingData?.now_playing?.song;
+          const latestSongId = latestSong?.id || [latestSong?.artist, latestSong?.title].filter(Boolean).join(' - ');
+          if (window.onDemandPlaybackActive && latestSongId === songId) {
+            void fetchLyrics(window.latestNowPlayingData, true);
+          }
+        }, 2500);
+      }
 
       return;
     }
