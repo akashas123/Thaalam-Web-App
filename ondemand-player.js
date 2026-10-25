@@ -44,6 +44,7 @@ autoplayPreloadAudio.preload = 'auto';
 let autoplayPreloadedTrackId = '';
 let autoplayPreloadedStreamUrl = '';
 let handoffOutgoingAudio = null;
+let handoffFadeIncomingAudio = null;
 let handoffVolume = 1;
 // A continuously looping, inaudible stream. Mobile browsers (notably Android
 // Chrome) suspend a page's timers/JS when no audio is playing - including when
@@ -60,100 +61,18 @@ onDemandSilentLoopAudio.preload = 'auto';
 onDemandSilentLoopAudio.volume = 1;
 onDemandSilentLoopAudio.setAttribute('playsinline', '');
 onDemandSilentLoopAudio.setAttribute('webkit-playsinline', '');
-// Silence analysis (decoded waveform) lets on-demand playback skip the real
-// trailing/leading silence of each track instead of a fixed 2.5 s guess.
-const ON_DEMAND_HANDOFF_LEAD_SECONDS = 3.0;
-const ON_DEMAND_SILENCE_THRESHOLD = 0.01;
-const ON_DEMAND_SILENCE_CACHE = new Map();
-let onDemandSilenceAudioContext = null;
-function getOnDemandSilenceContext() {
-  if (onDemandSilenceAudioContext) return onDemandSilenceAudioContext;
-  const Ctor = window.AudioContext || window.webkitAudioContext;
-  if (!Ctor) return null;
-  try {
-    onDemandSilenceAudioContext = new Ctor();
-  } catch {
-    onDemandSilenceAudioContext = null;
-  }
-  return onDemandSilenceAudioContext;
-}
+// A fixed crossfade avoids downloading and decoding another full copy of each
+// song just to inspect its waveform.
+const ON_DEMAND_CROSSFADE_MIN_SECONDS = 3;
+const ON_DEMAND_CROSSFADE_MAX_SECONDS = 8;
 
-async function analyzeOnDemandTrackSilence(streamUrl) {
-  if (!streamUrl) return null;
-  const cached = ON_DEMAND_SILENCE_CACHE.get(streamUrl);
-  if (cached && typeof cached.then !== 'function') return cached;
-  if (cached && typeof cached.then === 'function') return cached;
-
-  const pending = (async () => {
-    try {
-      const proxyUrl = '/api/music-stream?src=' + encodeURIComponent(streamUrl);
-      const response = await fetch(proxyUrl);
-      if (!response.ok) return null;
-      const arrayBuffer = await response.arrayBuffer();
-      const context = getOnDemandSilenceContext();
-      if (!context) return null;
-      let audioBuffer;
-      try {
-        audioBuffer = await context.decodeAudioData(arrayBuffer.slice(0));
-      } catch {
-        // Some browsers detach the buffer; retry on a fresh copy.
-        audioBuffer = await context.decodeAudioData(arrayBuffer.slice(0));
-      }
-      const channel = audioBuffer.getChannelData(0);
-      const sampleRate = audioBuffer.sampleRate || 44100;
-      const length = channel.length;
-      let firstNonSilent = 0;
-      while (firstNonSilent < length &&
-             Math.abs(channel[firstNonSilent]) <= ON_DEMAND_SILENCE_THRESHOLD) {
-        firstNonSilent += 1;
-      }
-      let lastNonSilent = length - 1;
-      while (lastNonSilent >= 0 &&
-             Math.abs(channel[lastNonSilent]) <= ON_DEMAND_SILENCE_THRESHOLD) {
-        lastNonSilent -= 1;
-      }
-      const leading = firstNonSilent / sampleRate;
-      const trailing = lastNonSilent >= 0
-        ? Math.max(0, (length - 1 - lastNonSilent) / sampleRate)
-        : audioBuffer.duration;
-      const result = {
-        leading: Math.max(0, leading),
-        trailing: Math.max(0, trailing),
-        duration: audioBuffer.duration
-      };
-      return result;
-    } catch (error) {
-      logOnDemand('silence analysis failed:', error?.name || error);
-      return null;
-    }
-  })();
-
-  ON_DEMAND_SILENCE_CACHE.set(streamUrl, pending);
-  const result = await pending;
-  ON_DEMAND_SILENCE_CACHE.set(streamUrl, result);
-  return result;
-}
-
-function getOnDemandTrailingSilence(streamUrl) {
-  const info = ON_DEMAND_SILENCE_CACHE.get(streamUrl);
-  if (!info || typeof info.then === 'function') return 0.2;
-  if (!Number.isFinite(info.trailing) || info.trailing < 0.3) {
-    return 0;
-  }
-  // Only trust the measurement when it matches the playing track's duration;
-  // otherwise the proxy/decoder saw a different file and trimming would be wrong.
-  if (selectedDuration > 0 && Number.isFinite(info.duration) &&
-      Math.abs(info.duration - selectedDuration) > 2) {
-    return 0;
-  }
-  return Math.min(10, info.trailing + 0.5);
-}
-
-function getOnDemandLeadingSilence(streamUrl) {
-  const info = ON_DEMAND_SILENCE_CACHE.get(streamUrl);
-  if (!info || typeof info.then === 'function') return 0;
-  if (!Number.isFinite(info.leading) || info.leading < 0.3) return 0;
-  return Math.min(10, info.leading);
+function getAdaptiveCrossfadeSeconds(trackDuration) {
+  const duration = Number(trackDuration);
+  if (!Number.isFinite(duration) || duration <= 0) return 5;
+  return Math.min(
+    ON_DEMAND_CROSSFADE_MAX_SECONDS,
+    Math.max(ON_DEMAND_CROSSFADE_MIN_SECONDS, duration * 0.04)
+  );
 }
 
 function clearAutoplayPreload() {
@@ -167,13 +86,13 @@ function clearAutoplayPreload() {
 function promotePreloadedTrack(track) {
   if (!track?.id || autoplayPreloadedTrackId !== track.id ||
       autoplayPreloadedStreamUrl !== track.streamUrl ||
-      autoplayPreloadAudio.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
+      !autoplayPreloadAudio.getAttribute('src') ||
       autoplayPreloadAudio.error) {
     logOnDemand('next-track preload not ready for handoff', {
       trackId: track?.id || '',
       preloadedTrackId: autoplayPreloadedTrackId,
       readyState: autoplayPreloadAudio.readyState,
-      requiredReadyState: HTMLMediaElement.HAVE_CURRENT_DATA
+      requiredReadyState: 'matching source loaded'
     });
     return false;
   }
@@ -181,15 +100,13 @@ function promotePreloadedTrack(track) {
   const previousAudio = onDemandAudio;
   onDemandAudio = autoplayPreloadAudio;
   autoplayPreloadAudio = previousAudio;
-  // Keep the outgoing stream alive during the short overlap. The next stream
-  // has already buffered on the standby element, so it can start before the
-  // current source reaches its end (important for mobile lock-screen audio).
+  // Keep the outgoing stream alive while the incoming source buffers.
   handoffOutgoingAudio = previousAudio;
+  handoffFadeIncomingAudio = null;
   handoffVolume = getOnDemandVolumeLevel();
   previousAudio.volume = handoffVolume;
-  // Start the incoming stream at the listener's full selected level. The
-  // outgoing source stays at full level until the incoming source is playing.
-  onDemandAudio.volume = handoffVolume;
+  onDemandAudio.volume = 0;
+  onDemandAudio.muted = previousAudio.muted;
   autoplayPreloadAudio.preload = 'auto';
   autoplayPreloadedTrackId = '';
   autoplayPreloadedStreamUrl = '';
@@ -216,19 +133,49 @@ function finishOnDemandHandoff() {
     handoffOutgoingAudio.load();
   }
   handoffOutgoingAudio = null;
+  handoffFadeIncomingAudio = null;
   if (onDemandAudio) onDemandAudio.volume = handoffVolume;
 }
 
 let handoffFinishTimer = 0;
 function finishOnDemandHandoffWhenPlaying() {
-  if (!handoffOutgoingAudio) return;
-  // Keep the outgoing source alive briefly as a buffer so the incoming track's
-  // startup cannot expose a gap. It is inaudible during this window because it
-  // is already in its trailing silence.
+  if (!handoffOutgoingAudio || handoffFadeIncomingAudio === onDemandAudio) return;
+  const incomingAudio = onDemandAudio;
+  const outgoingAudio = handoffOutgoingAudio;
+  handoffFadeIncomingAudio = incomingAudio;
+  const fadeStartedAt = performance.now();
+  const plannedFadeMs = getAdaptiveCrossfadeSeconds(outgoingAudio.duration) * 1000;
+  const outgoingDuration = Number(outgoingAudio.duration);
+  const outgoingRemainingMs = Number.isFinite(outgoingDuration) && outgoingDuration > 0
+    ? Math.max(0, (outgoingDuration - outgoingAudio.currentTime) * 1000)
+    : plannedFadeMs;
+  const fadeDurationMs = Math.min(plannedFadeMs, outgoingRemainingMs);
+  handoffVolume = getOnDemandVolumeLevel();
   window.clearTimeout(handoffFinishTimer);
-  handoffFinishTimer = window.setTimeout(() => {
+  if (fadeDurationMs <= 30 || outgoingAudio.ended) {
+    incomingAudio.volume = handoffVolume;
     finishOnDemandHandoff();
-  }, 1000);
+    if (window.onDemandPlaybackActive) {
+      if (onDemandQueueSource === 'favourites') preloadNextLikedQueueTrack();
+      else preloadNextAutoplayTrack();
+    }
+    return;
+  }
+  const fade = () => {
+    if (incomingAudio !== onDemandAudio || outgoingAudio !== handoffOutgoingAudio) return;
+    const progress = Math.min(1, (performance.now() - fadeStartedAt) / fadeDurationMs);
+    incomingAudio.volume = handoffVolume * progress;
+    outgoingAudio.volume = handoffVolume * (1 - progress);
+    if (progress >= 1) {
+      finishOnDemandHandoff();
+      if (!window.onDemandPlaybackActive) return;
+      if (onDemandQueueSource === 'favourites') preloadNextLikedQueueTrack();
+      else preloadNextAutoplayTrack();
+      return;
+    }
+    handoffFinishTimer = window.setTimeout(fade, 30);
+  };
+  fade();
 }
 
 let requestedTrackId = '';
@@ -851,12 +798,30 @@ function updatePlaybackProgress() {
         : duration;
     }
 
-    const hasUpcomingTrack =
-      (onDemandQueueIndex >= 0 && onDemandQueueIndex < onDemandQueue.length - 1) ||
-      Boolean(relatedTrackCache[relatedTrackCursor]);
-    const handoffLeadSeconds = getOnDemandTrailingSilence(requestedStreamUrl || onDemandAudio?.src || '');
-    if (!autoplayTrackTransition && hasUpcomingTrack && duration > 0 &&
-        elapsed >= duration - handoffLeadSeconds) {
+    const queuedNextSong = onDemandQueueIndex >= 0
+      ? onDemandQueue[onDemandQueueIndex + 1]
+      : null;
+    const relatedNextTrack = relatedTrackCache[relatedTrackCursor];
+    const upcomingTrackId = queuedNextSong?.providerTrackId || relatedNextTrack?.id || '';
+    const hasUpcomingTrack = Boolean(queuedNextSong || relatedNextTrack);
+    if (!handoffOutgoingAudio && hasUpcomingTrack &&
+        autoplayPreloadedTrackId !== upcomingTrackId) {
+      if (queuedNextSong?.providerTrackId && queuedNextSong?.streamUrl) {
+        preloadTrackAudio({ id: queuedNextSong.providerTrackId, streamUrl: queuedNextSong.streamUrl });
+      } else if (relatedNextTrack?.id && relatedNextTrack?.streamUrl) {
+        preloadTrackAudio(relatedNextTrack);
+      } else if (queuedNextSong && onDemandQueueSource === 'favourites') {
+        preloadNextLikedQueueTrack();
+      }
+    }
+    const nextTrackIsAvailable = Boolean(upcomingTrackId) &&
+      autoplayPreloadedTrackId === upcomingTrackId &&
+      autoplayPreloadedStreamUrl && !autoplayPreloadAudio.error;
+    const handoffLeadSeconds = getAdaptiveCrossfadeSeconds(duration);
+    if (!autoplayTrackTransition && hasUpcomingTrack && nextTrackIsAvailable &&
+        duration > 0 && elapsed >= duration - handoffLeadSeconds) {
+      // Start early enough to buffer and crossfade, keeping the outgoing audio
+      // audible until the next track actually starts.
       autoplayTrackTransition = true;
       advanceToSimilarSong();
     }
@@ -1183,8 +1148,7 @@ function syncOnDemandVolumeToStored() {
   // Keep the incoming side audible throughout a handoff, including while a
   // mobile browser is suspending background JavaScript timers.
   if (handoffOutgoingAudio) {
-    onDemandAudio.volume = getOnDemandVolumeLevel();
-    handoffVolume = onDemandAudio.volume;
+    handoffVolume = getOnDemandVolumeLevel();
     return;
   }
   try {
@@ -1404,19 +1368,8 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
   if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
   requestedTrackId = candidate.id || '';
   requestedStreamUrl = candidate.streamUrl || '';
-  // Measure (and cache) this track's real silence in the background so the
-  // handoff point and leading-silence skip use the actual waveform.
-  if (requestedStreamUrl) void analyzeOnDemandTrackSilence(requestedStreamUrl);
-  // Skip a leading silent intro when the listener starts from the top, unless
-  // an explicit resume position was requested.
+  // Start from the beginning unless this is a saved-position resume.
   let effectiveStartSeconds = Math.max(0, Number(startSeconds) || 0);
-  if (effectiveStartSeconds <= 0 && requestedStreamUrl) {
-    const cachedSilence = ON_DEMAND_SILENCE_CACHE.get(requestedStreamUrl);
-    if (cachedSilence && typeof cachedSilence.then !== 'function' &&
-        Number.isFinite(cachedSilence.leading) && cachedSilence.leading > 0.05) {
-      effectiveStartSeconds = cachedSilence.leading;
-    }
-  }
   pendingStartSeconds = effectiveStartSeconds;
   pendingShouldPlay = shouldPlay;
   syncOnDemandVolumeToStored();
@@ -1476,17 +1429,6 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
   }
 
   await metadataPromise;
-  // If silence analysis lands after playback has started, still skip a leading
-  // silent intro without disturbing a track the listener has already moved into.
-  if (requestedStreamUrl) {
-    void analyzeOnDemandTrackSilence(requestedStreamUrl).then((info) => {
-      if (!info || !window.onDemandPlaybackActive) return;
-      if (onDemandAudio.src !== requestedStreamUrl && onDemandAudio.getAttribute('src') !== requestedStreamUrl) return;
-      if (onDemandAudio.currentTime <= 0.15 && Number.isFinite(info.leading) && info.leading > 0.05) {
-        try { onDemandAudio.currentTime = info.leading; } catch { /* ignore */ }
-      }
-    });
-  }
 }
 
 function updateOnDemandMetadata(song, track) {
@@ -1830,11 +1772,13 @@ function prefetchRelatedTracks(trackId, isRetry = false) {
       });
       relatedTrackCursor = 0;
       prefetchUpcomingTrackArtwork();
-      if (onDemandQueueSource === 'favourites' &&
-          onDemandQueueIndex < onDemandFavouriteQueueLength - 1) {
-        preloadNextLikedQueueTrack();
-      } else {
-        preloadNextAutoplayTrack();
+      if (!handoffOutgoingAudio) {
+        if (onDemandQueueSource === 'favourites' &&
+            onDemandQueueIndex < onDemandFavouriteQueueLength - 1) {
+          preloadNextLikedQueueTrack();
+        } else {
+          preloadNextAutoplayTrack();
+        }
       }
       updateTransportButtonState();
     })
@@ -1854,9 +1798,6 @@ function preloadTrackAudio(track) {
   if (!track?.id || !track.streamUrl || track.id === autoplayPreloadedTrackId) return;
   autoplayPreloadedTrackId = track.id;
   autoplayPreloadedStreamUrl = track.streamUrl;
-  // Warm silence analysis for the upcoming track so its leading intro can be
-  // skipped and the current track's handoff uses measured data when available.
-  void analyzeOnDemandTrackSilence(track.streamUrl);
   autoplayPreloadAudio.src = track.streamUrl;
   // Explicit load() asks the browser to start buffering this media now while
   // the active audio element continues playing the current song.
@@ -1877,7 +1818,7 @@ function preloadNextLikedQueueTrack(queueIndex = onDemandQueueIndex) {
   Promise.resolve(preparation).then((track) => {
     if (onDemandQueueSource !== 'favourites' ||
         onDemandQueue[onDemandQueueIndex + 1] !== nextSong ||
-        !track?.id || !track.streamUrl) return;
+        !track?.id || !track.streamUrl || handoffOutgoingAudio) return;
     preloadTrackAudio(track);
   }).catch(() => {});
 }
@@ -1937,7 +1878,6 @@ function advanceToSimilarSong() {
   if (nextTrack) {
     relatedTrackCursor += 1;
     playRelatedTrack(nextTrack);
-    preloadNextAutoplayTrack();
     return;
   }
 
@@ -1956,7 +1896,6 @@ function advanceToSimilarSong() {
       window.clearInterval(autoplayRetryTimer);
       relatedTrackCursor += 1;
       playRelatedTrack(retryTrack);
-      preloadNextAutoplayTrack();
       return;
     }
 
@@ -2168,7 +2107,6 @@ async function startOnDemandSong(song, {
     setCurrentOnDemandTrack(song, track.id);
     persistCurrentOnDemandSession();
     updateOnDemandMetadata(song, track);
-    preloadNextLikedQueueTrack(onDemandQueueIndex);
     if (gapless) {
       promotePreloadedTrack(track);
     } else {
