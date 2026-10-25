@@ -34,6 +34,7 @@ const onDemandFallbackArtwork = new URL('thaalam-icon-512.png?v=1', window.locat
    just-ended element. */
 let onDemandAudio = new Audio();
 onDemandAudio.preload = 'auto';
+onDemandAudio.crossOrigin = 'anonymous';
 onDemandAudio.setAttribute('playsinline', '');
 onDemandAudio.setAttribute('webkit-playsinline', '');
 // Warm the next queue stream while the current track is still playing.
@@ -41,6 +42,7 @@ onDemandAudio.setAttribute('webkit-playsinline', '');
 // making the next track's first media request at that boundary.
 let autoplayPreloadAudio = new Audio();
 autoplayPreloadAudio.preload = 'auto';
+autoplayPreloadAudio.crossOrigin = 'anonymous';
 let autoplayPreloadedTrackId = '';
 let autoplayPreloadedStreamUrl = '';
 let handoffOutgoingAudio = null;
@@ -75,6 +77,74 @@ function getAdaptiveCrossfadeSeconds(trackDuration) {
   );
 }
 
+// Use scheduled Web Audio gain ramps for the crossfade. Unlike a chain of
+// setTimeout calls, AudioParam automation is processed by the audio renderer
+// and can continue while Android suspends page JavaScript on screen lock.
+let onDemandFadeAudioContext = null;
+const onDemandGainNodes = new WeakMap();
+function getOnDemandFadeAudioContext() {
+  if (onDemandFadeAudioContext) return onDemandFadeAudioContext;
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextCtor) return null;
+  try {
+    onDemandFadeAudioContext = new AudioContextCtor();
+  } catch (error) {
+    logOnDemand('Web Audio crossfade unavailable:', error?.name || error);
+  }
+  return onDemandFadeAudioContext;
+}
+function getOnDemandGainNode(audio) {
+  if (!audio) return null;
+  const existing = onDemandGainNodes.get(audio);
+  if (existing) return existing;
+  const context = getOnDemandFadeAudioContext();
+  if (!context || context.state !== 'running') return null;
+  try {
+    const source = context.createMediaElementSource(audio);
+    const gain = context.createGain();
+    source.connect(gain);
+    gain.connect(context.destination);
+    onDemandGainNodes.set(audio, gain);
+    return gain;
+  } catch (error) {
+    logOnDemand('Web Audio gain setup failed:', error?.name || error);
+    return null;
+  }
+}
+function resumeOnDemandFadeAudioContext() {
+  const context = getOnDemandFadeAudioContext();
+  if (!context || context.state === 'running') return;
+  context.resume().catch((error) => {
+    logOnDemand('Web Audio context resume rejected:', error?.name || error);
+  });
+}
+function getOnDemandPlaybackUrl(streamUrl) {
+  const proxyUrl = new URL('/api/music-stream', window.location.href);
+  proxyUrl.searchParams.set('src', streamUrl);
+  return proxyUrl.href;
+}
+function setOnDemandGain(audio, value) {
+  const gain = getOnDemandGainNode(audio);
+  const context = getOnDemandFadeAudioContext();
+  if (!gain || !context) return false;
+  const now = context.currentTime;
+  gain.gain.cancelScheduledValues(now);
+  gain.gain.setValueAtTime(value, now);
+  return true;
+}
+function prepareOnDemandFadeAudio() {
+  const context = getOnDemandFadeAudioContext();
+  if (!context) return Promise.resolve(false);
+  return context.resume().then(() => {
+    if (context.state !== 'running') return false;
+    return Boolean(getOnDemandGainNode(onDemandAudio) &&
+      getOnDemandGainNode(autoplayPreloadAudio));
+  }).catch((error) => {
+    logOnDemand('Web Audio context resume rejected:', error?.name || error);
+    return false;
+  });
+}
+
 function clearAutoplayPreload() {
   autoplayPreloadAudio.pause();
   autoplayPreloadAudio.removeAttribute('src');
@@ -105,14 +175,18 @@ function promotePreloadedTrack(track) {
   handoffFadeIncomingAudio = null;
   handoffVolume = getOnDemandVolumeLevel();
   previousAudio.volume = handoffVolume;
-  onDemandAudio.volume = 0;
+  onDemandAudio.volume = handoffVolume;
   onDemandAudio.muted = previousAudio.muted;
+  const audioGraphAvailable = setOnDemandGain(previousAudio, 1) &&
+    setOnDemandGain(onDemandAudio, 0);
+  if (!audioGraphAvailable) onDemandAudio.volume = 0;
   autoplayPreloadAudio.preload = 'auto';
   autoplayPreloadedTrackId = '';
   autoplayPreloadedStreamUrl = '';
   syncOnDemandVolumeToStored();
   // Keep the loop running across the source swap and volume handoff.
   startOnDemandSilentLoop();
+  void prepareOnDemandFadeAudio();
   logOnDemand('promoted buffered next track', track.id);
   return true;
 }
@@ -133,10 +207,12 @@ function finishOnDemandHandoff() {
     handoffOutgoingAudio.pause();
     handoffOutgoingAudio.removeAttribute('src');
     handoffOutgoingAudio.load();
+    setOnDemandGain(handoffOutgoingAudio, 1);
   }
   handoffOutgoingAudio = null;
   handoffFadeIncomingAudio = null;
   if (onDemandAudio) onDemandAudio.volume = handoffVolume;
+  if (onDemandAudio) setOnDemandGain(onDemandAudio, 1);
   if (window.onDemandPlaying !== true) {
     stopOnDemandSilentLoop();
     if (navigator.mediaSession) navigator.mediaSession.playbackState = 'paused';
@@ -166,6 +242,28 @@ function finishOnDemandHandoffWhenPlaying() {
       else preloadNextAutoplayTrack();
     }
     return;
+  }
+  const context = getOnDemandFadeAudioContext();
+  const incomingGain = getOnDemandGainNode(incomingAudio);
+  const outgoingGain = getOnDemandGainNode(outgoingAudio);
+  if (context && incomingGain && outgoingGain) {
+    resumeOnDemandFadeAudioContext();
+    const fadeStart = context.currentTime;
+    const fadeEnd = fadeStart + fadeDurationMs / 1000;
+    try {
+      incomingGain.gain.cancelScheduledValues(fadeStart);
+      outgoingGain.gain.cancelScheduledValues(fadeStart);
+      incomingGain.gain.setValueAtTime(0, fadeStart);
+      outgoingGain.gain.setValueAtTime(1, fadeStart);
+      incomingGain.gain.linearRampToValueAtTime(1, fadeEnd);
+      outgoingGain.gain.linearRampToValueAtTime(0, fadeEnd);
+      handoffFinishTimer = window.setTimeout(
+        () => finishOnDemandHandoff(), fadeDurationMs + 250
+      );
+      return;
+    } catch (error) {
+      logOnDemand('scheduled crossfade failed; using timer fallback:', error?.name || error);
+    }
   }
   const fade = () => {
     if (incomingAudio !== onDemandAudio || outgoingAudio !== handoffOutgoingAudio) return;
@@ -1158,10 +1256,10 @@ function updateOnDemandMediaSessionPositionState(elapsed, duration) {
    element. Called after every load and again on 'playing' so a track change
    can never come up at a level the slider does not show. */
 function syncOnDemandVolumeToStored() {
-  // Keep the incoming side audible throughout a handoff, including while a
-  // mobile browser is suspending background JavaScript timers.
   if (handoffOutgoingAudio) {
     handoffVolume = getOnDemandVolumeLevel();
+    onDemandAudio.volume = handoffVolume;
+    handoffOutgoingAudio.volume = handoffVolume;
     return;
   }
   try {
@@ -1221,6 +1319,7 @@ function bindOnDemandAudioEvents(audio) {
   audio.addEventListener('playing', () => {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
     autoplayTrackTransition = false;
+    resumeOnDemandFadeAudioContext();
     logOnDemand('playing', audio.currentTime.toFixed(1), 's');
     refreshOnDemandMediaSessionMetadata();
     updateOnDemandMediaSessionPositionState();
@@ -1297,6 +1396,7 @@ function resumeMobilePlaybackAfterBackground() {
   if (!mobilePlaybackWasActiveBeforeHide) return;
   mobilePlaybackWasActiveBeforeHide = false;
   if (!window.onDemandPlaybackActive) return;
+  void prepareOnDemandFadeAudio();
 
   const duration = Number(onDemandAudio.duration);
   const reachedTrackEnd = onDemandAudio.ended ||
@@ -1381,6 +1481,7 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
   if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
   requestedTrackId = candidate.id || '';
   requestedStreamUrl = candidate.streamUrl || '';
+  const playbackUrl = requestedStreamUrl ? getOnDemandPlaybackUrl(requestedStreamUrl) : '';
   // Start from the beginning unless this is a saved-position resume.
   let effectiveStartSeconds = Math.max(0, Number(startSeconds) || 0);
   pendingStartSeconds = effectiveStartSeconds;
@@ -1388,7 +1489,7 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
   syncOnDemandVolumeToStored();
 
   const sameSource = requestedStreamUrl
-    && onDemandAudio.getAttribute('src') === requestedStreamUrl;
+    && onDemandAudio.getAttribute('src') === playbackUrl;
   const alreadyLoaded = sameSource
     && onDemandAudio.readyState >= 1 /* HAVE_METADATA */
     && !onDemandAudio.error;
@@ -1418,7 +1519,7 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
     onDemandAudio.addEventListener('error', finish, { once: true });
   });
 
-  if (!sameSource) onDemandAudio.src = requestedStreamUrl;
+  if (!sameSource) onDemandAudio.src = playbackUrl;
   onDemandAudio.load();
 
   // Request playback as soon as the next source is installed. Waiting until
@@ -1819,7 +1920,7 @@ function preloadTrackAudio(track) {
   window.prefetchOnDemandLyrics?.(track);
   autoplayPreloadedTrackId = track.id;
   autoplayPreloadedStreamUrl = track.streamUrl;
-  autoplayPreloadAudio.src = track.streamUrl;
+  autoplayPreloadAudio.src = getOnDemandPlaybackUrl(track.streamUrl);
   // Explicit load() asks the browser to start buffering this media now while
   // the active audio element continues playing the current song.
   autoplayPreloadAudio.load();
@@ -2002,6 +2103,7 @@ async function startOnDemandSong(song, {
   gapless = true
 } = {}) {
   if (!song?.trackName) return;
+  void prepareOnDemandFadeAudio();
   if (!gapless) {
     finishOnDemandHandoff();
     clearAutoplayPreload();
@@ -2213,6 +2315,7 @@ function toggleOnDemandPlayback(shouldPlay) {
     pendingShouldPlay = false;
     onDemandAudio.pause();
   } else {
+    void prepareOnDemandFadeAudio();
     const playPromise = onDemandAudio.play();
     if (playPromise) {
       playPromise.catch((error) => {
@@ -2227,6 +2330,7 @@ function toggleOnDemandPlayback(shouldPlay) {
    refresh or reopen. */
 async function restoreOnDemandSession() {
   logOnDemand('restoreOnDemandSession() called');
+  void prepareOnDemandFadeAudio();
   const stored = readOnDemandSession();
   if (!stored) {
     logOnDemand('ABORT: nothing to restore');
@@ -2433,6 +2537,7 @@ window.recordOnDemandLikedRecent = (song) => {
 window.setOnDemandMuted = (muted) => {
   try {
     onDemandAudio.muted = Boolean(muted);
+    if (handoffOutgoingAudio) handoffOutgoingAudio.muted = Boolean(muted);
   } catch (_) { /* element not controllable yet */ }
 };
 
@@ -2440,6 +2545,10 @@ window.setOnDemandMuted = (muted) => {
 window.setOnDemandVolume = (level) => {
   try {
     onDemandAudio.volume = Math.max(0, Math.min(100, Math.round(Number(level) || 0))) / 100;
+    if (handoffOutgoingAudio) {
+      handoffOutgoingAudio.volume = onDemandAudio.volume;
+      handoffVolume = onDemandAudio.volume;
+    }
   } catch (_) { /* element not controllable yet */ }
 };
 
