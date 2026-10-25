@@ -87,7 +87,9 @@ function getOnDemandFadeAudioContext() {
   const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextCtor) return null;
   try {
-    onDemandFadeAudioContext = new AudioContextCtor();
+    // Music playback favors a larger, lower-power output buffer over the
+    // browser's default interactive latency, which can underrun on mobile.
+    onDemandFadeAudioContext = new AudioContextCtor({ latencyHint: 'playback' });
   } catch (error) {
     logOnDemand('Web Audio crossfade unavailable:', error?.name || error);
   }
@@ -117,11 +119,6 @@ function resumeOnDemandFadeAudioContext() {
   context.resume().catch((error) => {
     logOnDemand('Web Audio context resume rejected:', error?.name || error);
   });
-}
-function getOnDemandPlaybackUrl(streamUrl) {
-  const proxyUrl = new URL('/api/music-stream', window.location.href);
-  proxyUrl.searchParams.set('src', streamUrl);
-  return proxyUrl.href;
 }
 function setOnDemandGain(audio, value) {
   const gain = getOnDemandGainNode(audio);
@@ -1481,7 +1478,7 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
   if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
   requestedTrackId = candidate.id || '';
   requestedStreamUrl = candidate.streamUrl || '';
-  const playbackUrl = requestedStreamUrl ? getOnDemandPlaybackUrl(requestedStreamUrl) : '';
+  const playbackUrl = requestedStreamUrl;
   // Start from the beginning unless this is a saved-position resume.
   let effectiveStartSeconds = Math.max(0, Number(startSeconds) || 0);
   pendingStartSeconds = effectiveStartSeconds;
@@ -1920,7 +1917,7 @@ function preloadTrackAudio(track) {
   window.prefetchOnDemandLyrics?.(track);
   autoplayPreloadedTrackId = track.id;
   autoplayPreloadedStreamUrl = track.streamUrl;
-  autoplayPreloadAudio.src = getOnDemandPlaybackUrl(track.streamUrl);
+  autoplayPreloadAudio.src = track.streamUrl;
   // Explicit load() asks the browser to start buffering this media now while
   // the active audio element continues playing the current song.
   autoplayPreloadAudio.load();
