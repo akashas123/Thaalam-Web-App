@@ -4275,6 +4275,7 @@ body.has-lyrics .lyrics-panel {
   body.view-now-playing.on-demand-active .now-playing-track {
     display: block;
     min-height: 2.8rem;
+    margin-bottom: clamp(1.35rem, 3dvh, 1.9rem);
     padding-right: 4rem;
     overflow: visible;
     white-space: normal;
@@ -4331,9 +4332,11 @@ body.has-lyrics .lyrics-panel {
   }
 
   body.view-now-playing.on-demand-active .on-demand-like-button {
-    top: -1.4rem;
+    top: 50%;
     right: 0;
-    transform: none;
+    width: 2.5rem;
+    height: 2.5rem;
+    transform: translateY(-50%);
   }
 
   body.view-now-playing .mobile-player-minimize {
