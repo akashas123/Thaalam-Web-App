@@ -60,100 +60,16 @@ onDemandSilentLoopAudio.preload = 'auto';
 onDemandSilentLoopAudio.volume = 1;
 onDemandSilentLoopAudio.setAttribute('playsinline', '');
 onDemandSilentLoopAudio.setAttribute('webkit-playsinline', '');
-// Silence analysis (decoded waveform) lets on-demand playback skip the real
-// trailing/leading silence of each track instead of a fixed 2.5 s guess.
+// Avoid downloading an entire song a second time just to inspect its waveform.
+// The media element streams the track directly and playback should start as
+// soon as the CDN has supplied enough data.
 const ON_DEMAND_HANDOFF_LEAD_SECONDS = 3.0;
-const ON_DEMAND_SILENCE_THRESHOLD = 0.01;
-const ON_DEMAND_SILENCE_CACHE = new Map();
-let onDemandSilenceAudioContext = null;
-function getOnDemandSilenceContext() {
-  if (onDemandSilenceAudioContext) return onDemandSilenceAudioContext;
-  const Ctor = window.AudioContext || window.webkitAudioContext;
-  if (!Ctor) return null;
-  try {
-    onDemandSilenceAudioContext = new Ctor();
-  } catch {
-    onDemandSilenceAudioContext = null;
-  }
-  return onDemandSilenceAudioContext;
-}
-
-async function analyzeOnDemandTrackSilence(streamUrl) {
-  if (!streamUrl) return null;
-  const cached = ON_DEMAND_SILENCE_CACHE.get(streamUrl);
-  if (cached && typeof cached.then !== 'function') return cached;
-  if (cached && typeof cached.then === 'function') return cached;
-
-  const pending = (async () => {
-    try {
-      const proxyUrl = '/api/music-stream?src=' + encodeURIComponent(streamUrl);
-      const response = await fetch(proxyUrl);
-      if (!response.ok) return null;
-      const arrayBuffer = await response.arrayBuffer();
-      const context = getOnDemandSilenceContext();
-      if (!context) return null;
-      let audioBuffer;
-      try {
-        audioBuffer = await context.decodeAudioData(arrayBuffer.slice(0));
-      } catch {
-        // Some browsers detach the buffer; retry on a fresh copy.
-        audioBuffer = await context.decodeAudioData(arrayBuffer.slice(0));
-      }
-      const channel = audioBuffer.getChannelData(0);
-      const sampleRate = audioBuffer.sampleRate || 44100;
-      const length = channel.length;
-      let firstNonSilent = 0;
-      while (firstNonSilent < length &&
-             Math.abs(channel[firstNonSilent]) <= ON_DEMAND_SILENCE_THRESHOLD) {
-        firstNonSilent += 1;
-      }
-      let lastNonSilent = length - 1;
-      while (lastNonSilent >= 0 &&
-             Math.abs(channel[lastNonSilent]) <= ON_DEMAND_SILENCE_THRESHOLD) {
-        lastNonSilent -= 1;
-      }
-      const leading = firstNonSilent / sampleRate;
-      const trailing = lastNonSilent >= 0
-        ? Math.max(0, (length - 1 - lastNonSilent) / sampleRate)
-        : audioBuffer.duration;
-      const result = {
-        leading: Math.max(0, leading),
-        trailing: Math.max(0, trailing),
-        duration: audioBuffer.duration
-      };
-      return result;
-    } catch (error) {
-      logOnDemand('silence analysis failed:', error?.name || error);
-      return null;
-    }
-  })();
-
-  ON_DEMAND_SILENCE_CACHE.set(streamUrl, pending);
-  const result = await pending;
-  ON_DEMAND_SILENCE_CACHE.set(streamUrl, result);
-  return result;
-}
-
 function getOnDemandTrailingSilence(streamUrl) {
-  const info = ON_DEMAND_SILENCE_CACHE.get(streamUrl);
-  if (!info || typeof info.then === 'function') return 0.2;
-  if (!Number.isFinite(info.trailing) || info.trailing < 0.3) {
-    return 0;
-  }
-  // Only trust the measurement when it matches the playing track's duration;
-  // otherwise the proxy/decoder saw a different file and trimming would be wrong.
-  if (selectedDuration > 0 && Number.isFinite(info.duration) &&
-      Math.abs(info.duration - selectedDuration) > 2) {
-    return 0;
-  }
-  return Math.min(10, info.trailing + 0.5);
+  return 0.2;
 }
 
 function getOnDemandLeadingSilence(streamUrl) {
-  const info = ON_DEMAND_SILENCE_CACHE.get(streamUrl);
-  if (!info || typeof info.then === 'function') return 0;
-  if (!Number.isFinite(info.leading) || info.leading < 0.3) return 0;
-  return Math.min(10, info.leading);
+  return 0;
 }
 
 function clearAutoplayPreload() {
@@ -1404,19 +1320,8 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
   if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
   requestedTrackId = candidate.id || '';
   requestedStreamUrl = candidate.streamUrl || '';
-  // Measure (and cache) this track's real silence in the background so the
-  // handoff point and leading-silence skip use the actual waveform.
-  if (requestedStreamUrl) void analyzeOnDemandTrackSilence(requestedStreamUrl);
-  // Skip a leading silent intro when the listener starts from the top, unless
-  // an explicit resume position was requested.
+  // Start from the beginning unless this is a saved-position resume.
   let effectiveStartSeconds = Math.max(0, Number(startSeconds) || 0);
-  if (effectiveStartSeconds <= 0 && requestedStreamUrl) {
-    const cachedSilence = ON_DEMAND_SILENCE_CACHE.get(requestedStreamUrl);
-    if (cachedSilence && typeof cachedSilence.then !== 'function' &&
-        Number.isFinite(cachedSilence.leading) && cachedSilence.leading > 0.05) {
-      effectiveStartSeconds = cachedSilence.leading;
-    }
-  }
   pendingStartSeconds = effectiveStartSeconds;
   pendingShouldPlay = shouldPlay;
   syncOnDemandVolumeToStored();
@@ -1476,17 +1381,6 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
   }
 
   await metadataPromise;
-  // If silence analysis lands after playback has started, still skip a leading
-  // silent intro without disturbing a track the listener has already moved into.
-  if (requestedStreamUrl) {
-    void analyzeOnDemandTrackSilence(requestedStreamUrl).then((info) => {
-      if (!info || !window.onDemandPlaybackActive) return;
-      if (onDemandAudio.src !== requestedStreamUrl && onDemandAudio.getAttribute('src') !== requestedStreamUrl) return;
-      if (onDemandAudio.currentTime <= 0.15 && Number.isFinite(info.leading) && info.leading > 0.05) {
-        try { onDemandAudio.currentTime = info.leading; } catch { /* ignore */ }
-      }
-    });
-  }
 }
 
 function updateOnDemandMetadata(song, track) {
@@ -1854,9 +1748,6 @@ function preloadTrackAudio(track) {
   if (!track?.id || !track.streamUrl || track.id === autoplayPreloadedTrackId) return;
   autoplayPreloadedTrackId = track.id;
   autoplayPreloadedStreamUrl = track.streamUrl;
-  // Warm silence analysis for the upcoming track so its leading intro can be
-  // skipped and the current track's handoff uses measured data when available.
-  void analyzeOnDemandTrackSilence(track.streamUrl);
   autoplayPreloadAudio.src = track.streamUrl;
   // Explicit load() asks the browser to start buffering this media now while
   // the active audio element continues playing the current song.
