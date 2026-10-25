@@ -3045,6 +3045,16 @@ body.on-demand-active .live-row .live-text {
   text-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.3);
 }
 
+body.on-demand-active .stream-quality:not(.is-offline)::before {
+  content: "";
+  display: inline-block;
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: 0 0 1.1rem;
+  margin-right: 0.3rem;
+  background: center / contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Ccircle cx='12' cy='12' r='2.5'/%3E%3Ccircle cx='12' cy='12' r='.8' fill='%23fff' stroke='none'/%3E%3Cpath d='M6.8 9.4Q7.7 7.7 9.4 6.8M14.6 17.2Q16.3 16.3 17.2 14.6'/%3E%3C/svg%3E");
+}
+
 .track-time .stream-quality.is-offline,
 .now-playing-track .stream-quality.is-offline {
   border-color: rgba(255, 255, 255, 0.3);
