@@ -2797,7 +2797,7 @@ body.on-demand-active .station-row {
 }
 
 .on-demand-like-button.rating-selected {
-  color: var(--liked-folder-color);
+  color: var(--liked-folder-color, #ff1744) !important;
   opacity: 1;
 }
 
