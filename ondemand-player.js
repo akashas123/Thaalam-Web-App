@@ -917,6 +917,15 @@ function updatePlaybackProgress() {
     const queuedNextSong = onDemandQueueIndex >= 0
       ? onDemandQueue[onDemandQueueIndex + 1]
       : null;
+    // When repeat-all reaches the last queued track, the next song wraps to the
+    // first queue entry. Treat that as the upcoming track so it can be preloaded
+    // and crossfaded into, just like repeat-one does for the current song.
+    const repeatAllWrapSong = onDemandRepeatMode === 'all' &&
+      onDemandQueue.length > 1 &&
+      onDemandQueueIndex >= 0 &&
+      onDemandQueueIndex === onDemandQueue.length - 1
+      ? onDemandQueue[0]
+      : null;
     shuffleUpcomingRelatedTrack();
     const relatedNextTrack = relatedTrackCache[relatedTrackCursor];
     const repeatTrack = onDemandRepeatMode === 'one'
@@ -925,7 +934,7 @@ function updatePlaybackProgress() {
     const shuffledRecommendation = onDemandShuffle && onDemandQueueSource !== 'favourites'
       ? relatedNextTrack
       : null;
-    const upcomingTrack = repeatTrack || shuffledRecommendation || queuedNextSong || relatedNextTrack;
+    const upcomingTrack = repeatTrack || shuffledRecommendation || queuedNextSong || repeatAllWrapSong || relatedNextTrack;
     const upcomingTrackId = upcomingTrack?.id || upcomingTrack?.providerTrackId || '';
     const hasUpcomingTrack = Boolean(upcomingTrack);
     if (!handoffOutgoingAudio && hasUpcomingTrack &&
@@ -934,8 +943,12 @@ function updatePlaybackProgress() {
         preloadTrackAudio(repeatTrack);
       } else if (queuedNextSong?.providerTrackId && queuedNextSong?.streamUrl) {
         preloadTrackAudio({ id: queuedNextSong.providerTrackId, streamUrl: queuedNextSong.streamUrl });
+      } else if (repeatAllWrapSong?.providerTrackId && repeatAllWrapSong?.streamUrl) {
+        preloadTrackAudio({ id: repeatAllWrapSong.providerTrackId, streamUrl: repeatAllWrapSong.streamUrl });
       } else if (relatedNextTrack?.id && relatedNextTrack?.streamUrl) {
         preloadTrackAudio(relatedNextTrack);
+      } else if (repeatAllWrapSong && onDemandQueueSource === 'favourites') {
+        preloadRepeatAllWrapTrack();
       } else if (queuedNextSong && onDemandQueueSource === 'favourites') {
         preloadNextLikedQueueTrack();
       }
@@ -1956,6 +1969,25 @@ function preloadTrackAudio(track) {
   autoplayPreloadAudio.load();
 }
 
+function preloadRepeatAllWrapTrack() {
+  if (onDemandRepeatMode !== 'all' || onDemandQueueSource !== 'favourites') return;
+  if (!(onDemandQueue.length > 1 && onDemandQueueIndex === onDemandQueue.length - 1)) return;
+  const firstSong = onDemandQueue[0];
+  if (!firstSong) return;
+  const key = likedQueuePreparationKey(firstSong);
+  let preparation = likedQueuePreparations.get(key);
+  if (!preparation) {
+    preparation = resolveLikedQueueTrack(firstSong);
+    likedQueuePreparations.set(key, preparation);
+  }
+  Promise.resolve(preparation).then((track) => {
+    if (onDemandRepeatMode !== 'all' || onDemandQueue[0] !== firstSong) return;
+    if (!track?.id || !track.streamUrl || handoffOutgoingAudio) return;
+    if (autoplayPreloadedTrackId === track.id) return;
+    preloadTrackAudio(track);
+  }).catch(() => {});
+}
+
 function preloadNextLikedQueueTrack(queueIndex = onDemandQueueIndex) {
   if (onDemandQueueSource !== 'favourites' || queueIndex < 0 ||
       queueIndex >= onDemandFavouriteQueueLength - 1) return;
@@ -2057,7 +2089,7 @@ function advanceToSimilarSong() {
       preserveQueue: true,
       openNowPlaying: false,
       recordRecent: false,
-      gapless: false
+      gapless: true
     });
     return;
   }
@@ -2174,10 +2206,24 @@ function setOnDemandShuffle(enabled) {
     onDemandShuffle = false;
 
     if (shuffleNormalQueueFuture) {
-      // Continue with the queue exactly as it stands now: whatever remains after
-      // the current song, in its current order. Do not restore the pre-shuffle
-      // snapshot (shuffleNormalQueueFuture) and do not resurrect tracks that were
-      // removed while shuffle was on.
+      const historyThroughCurrent = onDemandQueue.slice(0, onDemandQueueIndex + 1);
+      const currentSong = onDemandQueue[onDemandQueueIndex];
+      // Find where the current song sits in the pre-shuffle (original) queue so
+      // we continue with the remaining songs in their original order, instead of
+      // restoring the full old queue or keeping the shuffled order.
+      const currentIndexInNormal = shuffleNormalQueueFuture.findIndex((song) => {
+        const id = song?.providerTrackId ? String(song.providerTrackId) : '';
+        const key = song?.trackKey || `${song?.trackName || ''}|${song?.artistName || ''}`.toLowerCase();
+        const curId = currentSong?.providerTrackId ? String(currentSong.providerTrackId) : '';
+        const curKey = currentSong?.trackKey || `${currentSong?.trackName || ''}|${currentSong?.artistName || ''}`.toLowerCase();
+        return (id && id === curId) || (key && key === curKey);
+      });
+      const normalFuture = (currentIndexInNormal >= 0
+        ? shuffleNormalQueueFuture.slice(currentIndexInNormal + 1)
+        : shuffleNormalQueueFuture
+      );
+      onDemandQueue = [...historyThroughCurrent, ...normalFuture];
+      onDemandQueueIndex = historyThroughCurrent.length - 1;
       window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
     }
 
