@@ -809,6 +809,9 @@ function saveOnDemandSession(song, trackId, position = 0) {
       queueSessionId: onDemandQueueSessionId,
       queueSource: onDemandQueueSource,
       favouriteQueueLength: onDemandFavouriteQueueLength,
+       shuffle: onDemandShuffle,
+       repeatMode: onDemandRepeatMode,
+
       autoplayAnchorTrackId
     });
     localStorage.setItem(ON_DEMAND_STORAGE_KEY, payload);
@@ -2595,6 +2598,9 @@ async function restoreOnDemandSession() {
     : [];
   const savedIndex = Number.isInteger(stored.queueIndex) ? stored.queueIndex : -1;
   autoplayAnchorTrackId = String(stored.autoplayAnchorTrackId || '');
+   onDemandShuffle = stored.shuffle === true;
+   onDemandRepeatMode = (stored.repeatMode === 'one' || stored.repeatMode === 'all') ? stored.repeatMode : 'off';
+
   if (savedQueue.length && savedIndex >= 0 && savedIndex < savedQueue.length) {
     onDemandQueue = savedQueue;
     onDemandQueueIndex = savedIndex;
@@ -2613,6 +2619,16 @@ async function restoreOnDemandSession() {
     savedQueue.forEach((entry) => {
       if (entry?.providerTrackId) playedTrackIds.add(entry.providerTrackId);
     });
+     if (onDemandShuffle) {
+       shuffleSessionPlayedIds = new Set();
+       shuffleSessionPlayedKeys = new Set();
+       savedQueue.slice(0, savedIndex + 1).forEach((entry) => {
+         if (entry?.providerTrackId) shuffleSessionPlayedIds.add(String(entry.providerTrackId));
+         const key = entry?.trackKey || `${entry?.trackName || ''}|${entry?.artistName || ''}`.toLowerCase();
+         if (key) shuffleSessionPlayedKeys.add(key);
+       });
+     }
+
     // The session song/track are authoritative for the currently loaded item.
     onDemandQueue[onDemandQueueIndex] = { ...song, providerTrackId: stored.trackId };
   } else {
@@ -2641,9 +2657,12 @@ async function restoreOnDemandSession() {
   onDemandMiniToggle?.classList.add('is-loading');
   selectedDuration = Number(song.trackTimeMillis) / 1000 || 0;
   updateTransportButtonState();
+   updateOnDemandModeControls();
+
   const requestId = ++songRequestId;
   setCurrentOnDemandTrack(song, stored.trackId, stored.position || 0);
   syncDesktopNowPlayingTab();
+  window.updateStoredRatingForCurrentSong?.(window.currentNowPlayingSong);
 
   try {
     // Resolve a stream URL: the session may hold one, but it can be stale, so
