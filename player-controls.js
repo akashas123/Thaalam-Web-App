@@ -1104,7 +1104,20 @@ function updateSongInfo() {
     ''
   );
 
-  const song = window.currentNowPlayingSong;
+  const onDemandActive = Boolean(window.onDemandPlaybackActive) ||
+    Boolean(document.body?.classList?.contains('on-demand-active'));
+  const onDemandSong = onDemandActive
+    ? window.getCurrentOnDemandSong?.()
+    : null;
+  const song = onDemandSong?.trackName
+    ? {
+      title: onDemandSong.trackName,
+      artist: onDemandSong.artistName,
+      album: onDemandSong.collectionName,
+      art: onDemandSong.artworkUrl100,
+      youtubeVideoId: onDemandSong.youtubeVideoId
+    }
+    : window.currentNowPlayingSong;
   if (!song?.title || !song?.artist) {
     showSongInfo('', '', 'Track details are unavailable.');
     return;
@@ -1125,6 +1138,11 @@ function updateSongInfo() {
     cached?.details || fallbackDetails
   );
 }
+
+window.openCurrentSongInfo = () => {
+  updateSongInfo();
+  openDialog(songInfoDialog);
+};
 
 async function prefetchSongInfo(song) {
   if (!song?.title || !song?.artist) return;
@@ -1604,10 +1622,7 @@ songInfoButton?.addEventListener(
         youtubeVideoId: onDemandSong.youtubeVideoId
       }
       : liveSong;
-    if (
-      songInfoButton.disabled ||
-      !hasUsableSongDetails(activeSong)
-    ) {
+    if ((!onDemandActive && songInfoButton.disabled) || !hasUsableSongDetails(activeSong)) {
       return;
     }
 
