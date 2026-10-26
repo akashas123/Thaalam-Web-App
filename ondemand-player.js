@@ -26,6 +26,9 @@ const playbackProgressThumb = document.getElementById('progressThumb');
 const miniPlayerForProgress = document.getElementById('miniPlayer');
 const onDemandPrevButton = document.getElementById('onDemandPrevButton');
 const onDemandNextButton = document.getElementById('onDemandNextButton');
+const onDemandShuffleButton = document.getElementById('onDemandShuffleButton');
+const onDemandRepeatButton = document.getElementById('onDemandRepeatButton');
+const onDemandRepeatOneBadge = onDemandRepeatButton?.querySelector('.repeat-one-badge');
 const onDemandFallbackArtwork = new URL('thaalam-icon-512.png?v=1', window.location.href).href;
 
 /* Two audio elements alternate roles. The standby warms the next track; at a
@@ -311,6 +314,13 @@ function createOnDemandQueueSessionId() {
 }
 let onDemandQueueSessionId = createOnDemandQueueSessionId();
 let onDemandQueueSource = 'autoplay';
+let onDemandShuffle = false;
+let shufflePreparedCursor = -1;
+let shuffleNormalQueueFuture = null;
+let shuffleNormalRelatedFuture = null;
+let shuffleSessionPlayedIds = new Set();
+let shuffleSessionPlayedKeys = new Set();
+let onDemandRepeatMode = 'off';
 let onDemandFavouriteQueueLength = 0;
 let isScrubbing = false;
 let scrubTargetSeconds = 0;
@@ -864,6 +874,11 @@ let currentOnDemandPosition = 0;
 function setCurrentOnDemandTrack(song, trackId, position = 0) {
   currentOnDemandSong = song;
   currentOnDemandTrackId = trackId || '';
+  if (onDemandShuffle) {
+    if (trackId) shuffleSessionPlayedIds.add(String(trackId));
+    const songKey = song?.trackKey || `${song?.trackName || ''}|${song?.artistName || ''}`.toLowerCase();
+    if (songKey) shuffleSessionPlayedKeys.add(songKey);
+  }
   currentOnDemandPosition = Math.max(0, Number(position) || 0);
   syncDesktopNowPlayingTab();
 }
@@ -902,12 +917,22 @@ function updatePlaybackProgress() {
     const queuedNextSong = onDemandQueueIndex >= 0
       ? onDemandQueue[onDemandQueueIndex + 1]
       : null;
+    shuffleUpcomingRelatedTrack();
     const relatedNextTrack = relatedTrackCache[relatedTrackCursor];
-    const upcomingTrackId = queuedNextSong?.providerTrackId || relatedNextTrack?.id || '';
-    const hasUpcomingTrack = Boolean(queuedNextSong || relatedNextTrack);
+    const repeatTrack = onDemandRepeatMode === 'one'
+      ? getCurrentOnDemandRepeatTrack()
+      : null;
+    const shuffledRecommendation = onDemandShuffle && onDemandQueueSource !== 'favourites'
+      ? relatedNextTrack
+      : null;
+    const upcomingTrack = repeatTrack || shuffledRecommendation || queuedNextSong || relatedNextTrack;
+    const upcomingTrackId = upcomingTrack?.id || upcomingTrack?.providerTrackId || '';
+    const hasUpcomingTrack = Boolean(upcomingTrack);
     if (!handoffOutgoingAudio && hasUpcomingTrack &&
         autoplayPreloadedTrackId !== upcomingTrackId) {
-      if (queuedNextSong?.providerTrackId && queuedNextSong?.streamUrl) {
+      if (repeatTrack?.id && repeatTrack?.streamUrl) {
+        preloadTrackAudio(repeatTrack);
+      } else if (queuedNextSong?.providerTrackId && queuedNextSong?.streamUrl) {
         preloadTrackAudio({ id: queuedNextSong.providerTrackId, streamUrl: queuedNextSong.streamUrl });
       } else if (relatedNextTrack?.id && relatedNextTrack?.streamUrl) {
         preloadTrackAudio(relatedNextTrack);
@@ -1766,6 +1791,13 @@ function updateTransportButtonState() {
 
 function skipOnDemandSong(offset, manual = true) {
   if (manual) autoplayTrackTransition = false;
+  if (offset > 0 && manual) {
+    const shuffledTrack = takeShuffledAutoplayTrack();
+    if (shuffledTrack) {
+      playRelatedTrack(shuffledTrack, false);
+      return;
+    }
+  }
   // At the end of the played queue, move into the related list we already
   // fetched rather than trying to walk past the last entry.
   if (offset > 0 && onDemandQueueIndex >= onDemandQueue.length - 1) {
@@ -1882,6 +1914,7 @@ function prefetchRelatedTracks(trackId, isRetry = false) {
         return true;
       });
       relatedTrackCursor = 0;
+      shufflePreparedCursor = -1;
       // Give the next few songs time to fetch lyrics while the current track
       // is still playing, even if audio preloading starts later.
       relatedTrackCache.slice(0, 2).forEach((track) => {
@@ -1988,11 +2021,48 @@ function prefetchUpcomingTrackArtwork() {
 function advanceToSimilarSong() {
   if (!window.onDemandPlaybackActive) return;
 
+  if (onDemandRepeatMode === 'one' && onDemandAudio?.getAttribute('src')) {
+    const repeatTrack = getCurrentOnDemandRepeatTrack();
+    const promoted = repeatTrack && promotePreloadedTrack(repeatTrack);
+    if (promoted) {
+      // The same song is already buffered on the standby element. Promoting it
+      // lets the normal handoff path crossfade into the next repeat.
+      onDemandAudio.currentTime = 0;
+      onDemandAudio.play().catch(() => {});
+    } else {
+      // Keep repeat-one working if the standby copy was not ready in time.
+      onDemandAudio.currentTime = 0;
+      onDemandAudio.play().catch(() => {});
+    }
+    autoplayTrackTransition = false;
+    setOnDemandPlaying(true);
+    return;
+  }
+
+  const shuffledTrack = takeShuffledAutoplayTrack();
+  if (shuffledTrack) {
+    playRelatedTrack(shuffledTrack);
+    return;
+  }
+
   if (onDemandQueueIndex >= 0 && onDemandQueueIndex < onDemandQueue.length - 1) {
     skipOnDemandSong(1, false);
     return;
   }
 
+  if (onDemandRepeatMode === 'all' && onDemandQueue.length > 1) {
+    onDemandQueueIndex = 0;
+    window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
+    startOnDemandSong(onDemandQueue[0], {
+      preserveQueue: true,
+      openNowPlaying: false,
+      recordRecent: false,
+      gapless: false
+    });
+    return;
+  }
+
+  shuffleUpcomingRelatedTrack();
   const nextTrack = relatedTrackCache[relatedTrackCursor];
   if (nextTrack) {
     relatedTrackCursor += 1;
@@ -2036,6 +2106,139 @@ function advanceToSimilarSong() {
     }
   }, 250);
 }
+
+function shuffleUpcomingRelatedTrack(forceDifferentNext = false) {
+  const remainingCount = relatedTrackCache.length - relatedTrackCursor;
+  if (!onDemandShuffle || remainingCount <= 0 ||
+      (!forceDifferentNext && shufflePreparedCursor === relatedTrackCursor)) return;
+  let randomOffset = Math.floor(Math.random() * remainingCount);
+  if (forceDifferentNext && remainingCount > 1 && randomOffset === 0) {
+    randomOffset = 1 + Math.floor(Math.random() * (remainingCount - 1));
+  }
+  const randomIndex = relatedTrackCursor + randomOffset;
+  [relatedTrackCache[relatedTrackCursor], relatedTrackCache[randomIndex]] =
+    [relatedTrackCache[randomIndex], relatedTrackCache[relatedTrackCursor]];
+  shufflePreparedCursor = relatedTrackCursor;
+}
+
+function getCurrentOnDemandRepeatTrack() {
+  const candidate = trackCandidates[trackCandidateIndex] || trackCandidates[0];
+  const id = currentOnDemandTrackId || candidate?.id || '';
+  const streamUrl = candidate?.streamUrl || '';
+  return id && streamUrl ? { id, streamUrl } : null;
+}
+
+function takeShuffledAutoplayTrack() {
+  if (!onDemandShuffle || onDemandQueueSource === 'favourites') return null;
+  shuffleUpcomingRelatedTrack();
+  const track = relatedTrackCache[relatedTrackCursor];
+  if (!track) return null;
+  relatedTrackCursor += 1;
+  // Discard stale forward history so Previous follows the shuffled playback.
+  onDemandQueue = onDemandQueue.slice(0, onDemandQueueIndex + 1);
+  onDemandQueueIndex = onDemandQueue.length - 1;
+  window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
+  return track;
+}
+
+function shuffleOnDemandQueueAfterCurrent() {
+  if (!onDemandShuffle) return;
+  const futureTracks = onDemandQueue.slice(onDemandQueueIndex + 1);
+  for (let index = onDemandQueue.length - 1; index > onDemandQueueIndex + 1; index -= 1) {
+    const randomIndex = onDemandQueueIndex + 1 + Math.floor(Math.random() * (index - onDemandQueueIndex));
+    [onDemandQueue[index], onDemandQueue[randomIndex]] =
+      [onDemandQueue[randomIndex], onDemandQueue[index]];
+  }
+  const shuffledFutureTracks = onDemandQueue.slice(onDemandQueueIndex + 1);
+  if (futureTracks.length > 1 && futureTracks.every((song, index) => song === shuffledFutureTracks[index])) {
+    [onDemandQueue[onDemandQueueIndex + 1], onDemandQueue[onDemandQueueIndex + 2]] =
+      [onDemandQueue[onDemandQueueIndex + 2], onDemandQueue[onDemandQueueIndex + 1]];
+  }
+  window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
+  shufflePreparedCursor = -1;
+  shuffleUpcomingRelatedTrack(true);
+}
+
+function setOnDemandShuffle(enabled) {
+  const shouldShuffle = Boolean(enabled);
+  if (shouldShuffle === onDemandShuffle) return;
+
+  if (shouldShuffle) {
+    shuffleNormalQueueFuture = onDemandQueue.slice(onDemandQueueIndex + 1);
+    shuffleNormalRelatedFuture = relatedTrackCache.slice(relatedTrackCursor);
+    shuffleSessionPlayedIds = new Set();
+    shuffleSessionPlayedKeys = new Set();
+    onDemandShuffle = true;
+    shuffleOnDemandQueueAfterCurrent();
+  } else {
+    onDemandShuffle = false;
+
+    if (shuffleNormalQueueFuture) {
+      // Continue with the queue exactly as it stands now: whatever remains after
+      // the current song, in its current order. Do not restore the pre-shuffle
+      // snapshot (shuffleNormalQueueFuture) and do not resurrect tracks that were
+      // removed while shuffle was on.
+      window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
+    }
+
+    if (shuffleNormalRelatedFuture) {
+      const currentPending = relatedTrackCache.slice(relatedTrackCursor);
+      const restored = shuffleNormalRelatedFuture.filter((track) =>
+        !shuffleSessionPlayedIds.has(String(track?.id || ''))
+      );
+      const seenIds = new Set(restored.map((track) => String(track?.id || '')));
+      relatedTrackCache = [
+        ...restored,
+        ...currentPending.filter((track) => {
+          const id = String(track?.id || '');
+          if (!id || shuffleSessionPlayedIds.has(id) || seenIds.has(id)) return false;
+          seenIds.add(id);
+          return true;
+        })
+      ];
+      relatedTrackCursor = 0;
+      shufflePreparedCursor = -1;
+    }
+
+    shuffleNormalQueueFuture = null;
+    shuffleNormalRelatedFuture = null;
+    shuffleSessionPlayedIds.clear();
+    shuffleSessionPlayedKeys.clear();
+  }
+
+  updateTransportButtonState();
+  updateOnDemandModeControls();
+  updatePlaybackProgress();
+}
+
+function updateOnDemandModeControls() {
+  if (onDemandShuffleButton) {
+    onDemandShuffleButton.setAttribute('aria-pressed', String(onDemandShuffle));
+    onDemandShuffleButton.setAttribute('aria-label', `Shuffle ${onDemandShuffle ? 'on' : 'off'}`);
+    onDemandShuffleButton.classList.toggle('is-active', onDemandShuffle);
+  }
+  if (onDemandRepeatButton) {
+    onDemandRepeatButton.setAttribute('aria-pressed', String(onDemandRepeatMode !== 'off'));
+    onDemandRepeatButton.setAttribute('aria-label', `Repeat ${onDemandRepeatMode}`);
+    onDemandRepeatButton.dataset.repeatMode = onDemandRepeatMode;
+    onDemandRepeatButton.classList.toggle('is-active', onDemandRepeatMode !== 'off');
+    if (onDemandRepeatOneBadge) {
+      onDemandRepeatOneBadge.hidden = onDemandRepeatMode !== 'one';
+    }
+  }
+}
+onDemandShuffleButton?.addEventListener('click', () => {
+  setOnDemandShuffle(!onDemandShuffle);
+});
+onDemandRepeatButton?.addEventListener('click', () => {
+  onDemandRepeatMode = onDemandRepeatMode === 'off'
+    ? 'one'
+    : onDemandRepeatMode === 'one'
+      ? 'all'
+      : 'off';
+  updateOnDemandModeControls();
+});
+updateOnDemandModeControls();
 
 /* Starts a track that came from the queue list. It already has a resolved
    stream, so it skips the search round-trip that startOnDemandSong performs. */
