@@ -1232,7 +1232,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (tagline && nowPlayingEl) {
     window.updateMarquee = () => {
       if (!window.__THAALAM_FORCE_MOBILE_LAYOUT__ &&
-          window.matchMedia('(min-width: 56.25rem) and (pointer: fine)').matches) {
+          window.matchMedia('(min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine)').matches) {
         const likeButton = tagline.querySelector('.on-demand-like-button');
         const likeSpace = likeButton
           ? likeButton.offsetWidth + parseFloat(getComputedStyle(likeButton).marginLeft || '0')
