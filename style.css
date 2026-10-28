@@ -102,9 +102,43 @@
   }
 }
 
+/* Keep desktop genre-card controls visually attached to their artwork while
+   the results pane scrolls. Blur and hover scaling can composite the overlay
+   on a separate layer and make it appear to drift over the moving grid. */
+@media (min-width: 56.25rem) {
+  body.view-home .genre-results .genre-card-media {
+    isolation: isolate;
+  }
+
+  body.view-home .genre-results .genre-card-media > .genre-play-button,
+  body.view-home .genre-results .genre-card-media > .genre-info-button {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    transition: background-color 0.18s ease, border-color 0.18s ease;
+  }
+
+  body.view-home .genre-results .genre-card-media > .genre-play-button:hover {
+    transform: translate(-50%, -50%);
+  }
+
+  body.view-home .genre-results .genre-card-media > .genre-info-button:hover {
+    filter: none;
+    transform: none;
+  }
+}
+
 @keyframes onDemandMetadataMarquee {
   0%, 12% { transform: translateX(0); }
   88%, 100% { transform: translateX(-50%); }
+}
+
+/* The now-playing title and artist use different marquee layers on desktop
+   and mobile. Drive every layer directly from the transport's paused state. */
+body.on-demand-paused .tagline #nowPlaying,
+body.on-demand-paused .tagline #nowPlaying > span,
+body.on-demand-paused .tagline #nowPlaying::before,
+body.on-demand-paused .tagline #nowPlaying::after {
+  animation-play-state: paused !important;
 }
 
 /* The liked-folder header and back row belong to the mobile Library flow.
@@ -251,6 +285,11 @@ body.view-now-playing [class~="album-background"] {
   transition:
     opacity 0.3s ease,
     background-color 800ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Keep bright album colors from competing with the Now Playing controls. */
+body.view-now-playing [class~="album-background"]::after {
+  background: rgba(0, 0, 0, 0.38);
 }
 
 body::after {
@@ -2116,6 +2155,31 @@ body.view-rises-from-mini.view-now-playing .player-view {
     }
   }
 
+  @media (min-width: 56.25rem) {
+    .genre-results.is-shuffling .genre-card {
+      animation-name: genreTileShuffleDesktop;
+      animation-duration: 0.56s;
+      animation-delay: calc(min(var(--genre-tile-index, 0), 20) * 16ms);
+    }
+
+    @keyframes genreTileShuffleDesktop {
+      from {
+        opacity: 0.45;
+        transform: translateY(0.55rem) scale(0.97);
+        animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      72% {
+        opacity: 1;
+        transform: translateY(0) scale(1.005);
+        animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+  }
+
   .genre-card,
   .genre-card-link {
     min-width: 0;
@@ -2837,8 +2901,8 @@ body.on-demand-active .tagline.now-playing-track {
 }
 
 .tagline.marquee > #nowPlaying {
-  -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 0.8rem), transparent 100%);
-  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 0.8rem), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 0.35rem), transparent 100%);
+  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 0.35rem), transparent 100%);
 }
 
 [class~="live-row"] {
@@ -3066,6 +3130,19 @@ body.on-demand-active .stream-quality:not(.is-offline) {
   flex: 0 0 auto;
   gap: 0.28rem;
   justify-content: center;
+}
+
+body.on-demand-active:not(.on-demand-audio-ready) .stream-quality {
+  display: none !important;
+}
+
+body.on-demand-active:not(.on-demand-paused) .stream-quality::before {
+  animation: adaptiveDiscSpin 2.4s linear infinite;
+  transform-origin: center;
+}
+
+@keyframes adaptiveDiscSpin {
+  to { transform: rotate(360deg); }
 }
 
 .track-time .stream-quality.is-offline,
@@ -3417,7 +3494,11 @@ body.on-demand-active #onDemandNextButton { order: 4; }
 body.on-demand-active #onDemandRepeatButton { order: 5; }
 body.on-demand-active #onDemandRepeatButton { position: relative; }
 body.on-demand-active #onDemandPrevButton,
-body.on-demand-active #onDemandNextButton { flex: 0 0 3rem; }
+body.on-demand-active #onDemandNextButton {
+  width: 3.6rem;
+  height: 3.6rem;
+  flex: 0 0 3.6rem;
+}
 
 @media (min-width: 56.25rem) {
   body.on-demand-active .player-controls {
@@ -3445,6 +3526,12 @@ body.on-demand-active .transport-btn:disabled {
   fill: #fff;
 
   color: #fff;
+}
+
+body.on-demand-active #onDemandPrevButton svg,
+body.on-demand-active #onDemandNextButton svg {
+  width: 1.65rem;
+  height: 1.65rem;
 }
 
 .transport-btn:hover:not(:disabled) {
@@ -4120,14 +4207,13 @@ body.on-demand-active .transport-btn:disabled {
 
 .lyrics-heading {
   margin-bottom: 0.75rem;
-
-  font-size: 0.75rem;
-
-  letter-spacing: 0.14em;
-
-  text-transform: uppercase;
-
-  opacity: 0.84;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.3;
+  text-transform: none;
+  opacity: 1;
 }
 
 .lyrics-notice {
@@ -4831,6 +4917,23 @@ body.has-lyrics .lyrics-panel {
     font-size: 0.75rem;
   }
 
+  .favourite-sort-control label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  .favourite-sort-icon {
+    width: 1.2rem;
+    height: 1.2rem;
+    flex: 0 0 auto;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.55;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
   .favourite-sort-control select { min-height: 2rem; padding: 0.25rem 1.8rem 0.25rem 0.65rem; border: 1px solid rgba(255,255,255,.2); border-radius: 999px; background: #17191e; color: #fff; font: inherit; }
   .favourite-layout-toggle { display: none; }
 
@@ -5231,15 +5334,23 @@ body.has-lyrics .lyrics-panel {
 
   body.has-lyrics
   .lyrics-toggle-icon {
-    font-size: 1rem;
-
-    opacity: 0.7;
+    display: none;
 
     transform:
       rotate(180deg);
 
     transition:
       transform 0.25s ease;
+  }
+
+  body.has-lyrics .lyrics-toggle-icon::before {
+    width: 0.4rem;
+    height: 0.4rem;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    color: rgba(255, 255, 255, 0.86);
+    content: "";
+    transform: translateY(-0.1rem) rotate(45deg);
   }
 
   body.has-lyrics
@@ -5565,8 +5676,8 @@ body.has-lyrics .lyrics-panel {
 
   body.view-now-playing .tagline.title-marquee #nowPlaying,
   body.view-now-playing .tagline.artist-marquee #nowPlaying {
-    -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 1.35rem), transparent 100%);
-    mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 1.35rem), transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 1.15rem), transparent 100%);
+    mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 1.15rem), transparent 100%);
   }
 
   body.view-now-playing .tagline.paused.title-marquee #nowPlaying::before,
@@ -5944,12 +6055,17 @@ img {
     pointer-events: none !important;
   }
 
-  /* On mobile, unsynced lyrics stay in a capped scroll area (max-height: 68vh).
-     Add bottom padding so the last line isn't flush against the panel edge and
-     cut off when the user scrolls to the end. */
-  body.has-lyrics .lyrics-content {
-    padding-bottom: 2rem;
-    scroll-padding-bottom: 2rem;
+  /* Keep extra end-of-song breathing room inside the plain-lyrics scroller. */
+  body.has-lyrics:not(.synced-lyrics) .lyrics-content {
+    height: calc(55vh - 6rem);
+    max-height: none;
+    scroll-padding-bottom: 4.5rem;
+  }
+
+  body.view-now-playing.has-lyrics:not(.synced-lyrics) .lyrics-content::after {
+    display: block;
+    height: 4.5rem;
+    content: "";
   }
 }
 
@@ -6040,9 +6156,12 @@ img {
     display: flex;
     width: 100%;
     min-width: 0;
-    align-items: center;
-    gap: 0.45rem;
-    margin: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.65rem;
+    margin: 0 0 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   }
 
   body.view-home.library-playlist-open #genreResults.favourites-list-layout .genre-play-button {
@@ -6055,13 +6174,16 @@ img {
 
   body.view-home.library-playlist-open .liked-folder-toolbar .favourite-sort-control {
     display: flex !important;
+    order: 2;
+    width: 100%;
     flex: 0 0 auto;
-    gap: 0.3rem;
+    justify-content: space-between;
+    gap: 0.75rem;
     white-space: nowrap;
   }
 
   body.view-home.library-playlist-open .liked-folder-toolbar .favourite-sort-control select {
-    width: min(7.4rem, 34vw);
+    width: min(9rem, 52%);
     min-width: 0;
     border-color: rgba(255,255,255,.2);
     background: rgba(255,255,255,.1) !important;
@@ -6076,9 +6198,13 @@ img {
 
   body.view-home.library-playlist-open .liked-folder-toolbar .catalog-search {
     display: flex !important;
-    width: auto;
+    order: 1;
+    width: 100%;
     min-width: 0;
-    flex: 1 1 auto;
+    min-height: 2.8rem;
+    flex: 0 0 auto;
+    margin: 0;
+    border-radius: 1rem;
   }
 
   body.mobile-search-active.view-home .favourite-sort-control {
@@ -6581,6 +6707,15 @@ body.on-demand-active #onDemandRepeatButton { grid-column: 5; grid-row: 1; posit
 body.on-demand-active #onDemandShuffleButton,
 body.on-demand-active #onDemandRepeatButton { justify-self: center; }
 
+body.view-now-playing .player-controls .play-btn,
+body.view-now-playing .player-controls .play-btn:hover {
+  box-shadow: none;
+}
+
+body.view-now-playing .player-controls .play-btn svg {
+  filter: none;
+}
+
 @media (max-width: 56.1875rem) {
   body.on-demand-active .player-controls {
     width: min(100%, 27rem);
@@ -6731,13 +6866,19 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
   }
   body.on-demand-active .player-controls #onDemandPrevButton,
   body.on-demand-active .player-controls #onDemandNextButton {
-    width: 3.25rem;
-    height: 3.25rem;
+    width: 3.6rem;
+    height: 3.6rem;
+    flex-basis: 3.6rem;
   }
   body.on-demand-active .player-controls .side-control svg,
   body.on-demand-active .player-controls .transport-btn svg {
     width: 1.4rem;
     height: 1.4rem;
+  }
+  body.on-demand-active .player-controls #onDemandPrevButton svg,
+  body.on-demand-active .player-controls #onDemandNextButton svg {
+    width: 1.65rem;
+    height: 1.65rem;
   }
   body.on-demand-active .player-controls .play-btn {
     width: 3.75rem;

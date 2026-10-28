@@ -45,6 +45,24 @@ if (marqueeText && marqueeContainer) {
 
   const marqueeObserver = new MutationObserver(renderMarquee);
 
+  const syncOnDemandMarqueePlaybackState = () => {
+    const isPaused = Boolean(
+      window.onDemandPlaybackActive && window.onDemandPlaying !== true
+    );
+    marqueeContainer.classList.toggle('paused', isPaused);
+
+    // CSS pseudo-element animations can outrank animation-play-state rules
+    // when their animation shorthand is marked !important. Pause the actual
+    // title/artist animations as well, so transport pause always takes effect.
+    document.getAnimations().forEach((animation) => {
+      const target = animation.effect?.target;
+      if (target !== marqueeText && target?.element !== marqueeText) return;
+      if (isPaused) animation.pause();
+      else if (animation.playState === 'paused') animation.play();
+    });
+  };
+  const playbackModeObserver = new MutationObserver(syncOnDemandMarqueePlaybackState);
+
   function createMarqueeItem(text) {
     const item = document.createElement('span');
     item.className = 'marquee-item';
@@ -59,6 +77,9 @@ if (marqueeText && marqueeContainer) {
   });
 
   renderMarquee();
+  syncOnDemandMarqueePlaybackState();
+  playbackModeObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  window.addEventListener('thaalam:on-demand-playback-state', syncOnDemandMarqueePlaybackState);
   window.addEventListener('pageshow', restartMarquee);
   window.addEventListener('resize', updateMarqueeVisibility);
   window.addEventListener('DOMContentLoaded', updateMarqueeVisibility);

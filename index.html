@@ -22,7 +22,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=523">
+  <link rel="stylesheet" href="style.css?v=541">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -310,7 +310,13 @@
         <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="you-like">Favourites</button>
       </div>
       <div class="favourite-sort-control" id="favouriteSortControl" hidden>
-        <label for="favouriteSort">Sort by</label>
+        <label for="favouriteSort">
+          <svg class="favourite-sort-icon" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M2.5 3.5h8M2.5 7.5h5.5M2.5 11.5h3" />
+            <path d="m11 8.5 2 2 2-2M13 10.5v-6" />
+          </svg>
+          <span>Sort by</span>
+        </label>
         <select id="favouriteSort">
           <option value="recent">Recents</option>
           <option value="title">Title</option>
@@ -832,7 +838,7 @@
     >
 
       <span class="lyrics-heading">
-        Lyrics (Beta)
+        Lyrics
       </span>
 
       <span
@@ -866,12 +872,12 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=83"></script>
-  <script src="ondemand-player.js?v=115"></script>
+  <script src="ondemand-player.js?v=119"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=12"></script>
   <script src="player-controls.js?v=51"></script>
-  <script src="lyrics.js?v=45"></script>
+  <script src="lyrics.js?v=48"></script>
   <script src="/google-auth-config.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script>
@@ -1000,7 +1006,7 @@
       const shouldMove = Boolean(open && mobileFolderToolbarQuery.matches && likedFolderToolbar);
       if (shouldMove) {
         likedFolderToolbar.hidden = false;
-        likedFolderToolbar.append(favouriteSortControl, catalogSearchForm);
+        likedFolderToolbar.append(catalogSearchForm, favouriteSortControl);
         return;
       }
       if (catalogSearchForm?.parentElement === likedFolderToolbar && catalogSearchOriginalParent) {
@@ -1020,16 +1026,38 @@
     mobileFolderToolbarQuery.addEventListener('change', () => {
       moveLikedFolderControls(document.body.classList.contains('library-playlist-open'));
     });
-    // Genre tabs query the JioSaavn search proxy with the language/region term
-    // on the right. The value doubles as the chart's cache key check and the
-    // search string sent to /api/music-search.
+    // Genre charts rotate through relevant artists each day, then combine
+    // three searches into one varied daily set for both mobile and desktop.
     const genreFeedIds = {
-      international: ['ed sheeran', 'taylor swift', 'the weeknd'],
-      hindi: ['hindi'],
-      malayalam: ['malayalam'],
-      tamil: ['tamil']
+      international: [
+        'ed sheeran', 'taylor swift', 'the weeknd', 'dua lipa', 'bruno mars',
+        'coldplay', 'ariana grande', 'billie eilish', 'justin bieber', 'adele',
+        'imagine dragons', 'olivia rodrigo', 'harry styles', 'rihanna', 'lady gaga',
+        'maroon 5', 'katy perry', 'shawn mendes'
+      ],
+      hindi: [
+        'arijit singh', 'shreya ghoshal', 'pritam', 'a r rahman', 'sonu nigam',
+        'atif aslam', 'vishal shekhar', 'kk', 'neha kakkar', 'badshah',
+        'jubin nautiyal', 'lata mangeshkar', 'kishore kumar', 'armaan malik',
+        'udit narayan', 'mohit chauhan', 'amit trivedi', 'sunidhi chauhan'
+      ],
+      malayalam: [
+        'sushin shyam', 'vidyasagar malayalam', 'gopi sundar', 'shaan rahman',
+        'm jayachandran', 'k j yesudas', 'vineeth sreenivasan', 'm g sreekumar',
+        'bijibal', 'rex vijayan', 'sithara krishnakumar', 'sujatha mohan',
+        'hesham abdul wahab', 'deepak dev', 'jassie gift', 'raveendran master'
+      ],
+      tamil: [
+        'anirudh ravichander', 'a r rahman tamil', 'yuvan shankar raja',
+        'harris jayaraj', 'ilaiyaraaja', 'd imman', 'g v prakash kumar',
+        'santhosh narayanan', 'vidyasagar tamil', 's p balasubrahmanyam tamil',
+        'deva tamil', 'hiphop tamizha', 'vijay antony', 'tippu tamil',
+        'shankar mahadevan tamil', 'srinivas tamil'
+      ]
     };
     const genreResultCache = new Map();
+    const genreResultCacheDay = new Map();
+    const genreChartRequests = new Map();
     // Recently fetched suggestions keyed by normalized term. Repeat searches
     // and prefix refinements ("taylor" → "taylor swift") resolve instantly
     // from memory instead of re-paying the iTunes round trip.
@@ -1045,7 +1073,7 @@
     // Genre tabs use Apple's genre charts. Versioned separately from the old
     // text-search and filtered result caches.
     // v9 keeps only the first 21 chart tracks (7 columns x 3 rows).
-    const GENRE_CACHE_KEY = 'thaalam-jiosaavn-genre-cache-v1';
+    const GENRE_CACHE_KEY = 'thaalam-jiosaavn-genre-cache-v4';
     const GENRE_CHART_LIMIT = 21;
     // One small ranked search request feeds both the suggestion dropdown and
     // the results grid: fetch 20, rank by relevance, show the top 20.
@@ -1120,6 +1148,8 @@
     // Keep in sync with genreTileShuffle in style.css: 20 capped 36ms steps
     // + 720ms duration + buffer.
     const GENRE_SHUFFLE_MS = 1600;
+    // Desktop uses 20 capped 16ms steps + 560ms duration + a short buffer.
+    const GENRE_DESKTOP_SHUFFLE_MS = 1000;
 
     function getGenreCache() {
       try {
@@ -1130,6 +1160,70 @@
       } catch {
         return {};
       }
+    }
+
+    function localCalendarDayKey(timestamp = Date.now()) {
+      const date = new Date(timestamp);
+      return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+    }
+
+    function getCachedDailyGenreChart(key) {
+      const today = localCalendarDayKey();
+      const memorySongs = genreResultCache.get(key);
+      if (memorySongs && genreResultCacheDay.get(key) === today) return memorySongs;
+
+      const storedEntry = getGenreCache()[key];
+      const entryDay = storedEntry?.dayKey ||
+        (storedEntry?.savedAt ? localCalendarDayKey(storedEntry.savedAt) : '');
+      if (entryDay !== today || !Array.isArray(storedEntry?.songs)) return null;
+
+      const songs = storedEntry.songs.slice(0, GENRE_CHART_LIMIT);
+      genreResultCache.set(key, songs);
+      genreResultCacheDay.set(key, today);
+      return songs;
+    }
+
+    function getAnyCachedGenreChart(key) {
+      const memorySongs = genreResultCache.get(key);
+      if (Array.isArray(memorySongs) && memorySongs.length) return memorySongs;
+      const storedSongs = getGenreCache()[key]?.songs;
+      return Array.isArray(storedSongs) ? storedSongs.slice(0, GENRE_CHART_LIMIT) : [];
+    }
+
+    function getDailyGenreFeedQueries(key) {
+      const pool = genreFeedIds[key] || [];
+      if (pool.length <= 3) return pool;
+      const [year, month, day] = localCalendarDayKey().split('-').map(Number);
+      const dayNumber = Math.floor(Date.UTC(year, month - 1, day) / 86400000);
+      const start = dayNumber % pool.length;
+      return [0, 1, 2].map((slot) =>
+        pool[(start + Math.floor(slot * pool.length / 3)) % pool.length]
+      );
+    }
+
+    function loadDailyGenreChart(key) {
+      const cachedSongs = getCachedDailyGenreChart(key);
+      if (cachedSongs) return Promise.resolve(cachedSongs);
+      if (genreChartRequests.has(key)) return genreChartRequests.get(key);
+
+      const request = searchGenreChart(getDailyGenreFeedQueries(key), 0, GENRE_CHART_LIMIT + 4, key)
+        .then((results) => {
+          if (!results.length) throw new Error(`No ${key} songs matched the language filter.`);
+          const songs = shuffleMobileItems(results).slice(0, GENRE_CHART_LIMIT);
+          const today = localCalendarDayKey();
+          genreResultCache.set(key, songs);
+          genreResultCacheDay.set(key, today);
+          const cache = getGenreCache();
+          cache[key] = { savedAt: Date.now(), dayKey: today, songs };
+          try { localStorage.setItem(GENRE_CACHE_KEY, JSON.stringify(cache)); }
+          catch { /* Keep today's chart in memory if storage is unavailable. */ }
+          return songs;
+        })
+        .finally(() => {
+          if (genreChartRequests.get(key) === request) genreChartRequests.delete(key);
+        });
+      genreChartRequests.set(key, request);
+      return request;
     }
 
     function getStoredArtistInfo(key) {
@@ -1905,9 +1999,12 @@
         return;
       }
 
+      const isGenreChart = Object.prototype.hasOwnProperty.call(genreFeedIds, activeGenre);
       const orderedSongs = activeGenre === 'you-like'
         ? sortFavouriteSongs(songs)
-        : recentHistoryLayout ? orderRecentPlaybackHistory(songs) : diversifyGenreSongs(songs);
+        : recentHistoryLayout
+          ? orderRecentPlaybackHistory(songs)
+          : isGenreChart ? shuffleMobileItems(songs) : diversifyGenreSongs(songs);
       // Identity of everything the cards actually show, in display order.
       // The liked-songs rescue passes patch titles/artwork on the same
       // objects, so those fields must bust the key and force a rebuild.
@@ -2218,7 +2315,7 @@
         genreShuffleTimer = window.setTimeout(() => {
           genreShuffleTimer = 0;
           genreResults.classList.remove('is-shuffling');
-        }, GENRE_SHUFFLE_MS);
+        }, desktopNavigation.matches ? GENRE_DESKTOP_SHUFFLE_MS : GENRE_SHUFFLE_MS);
       }
       if (!desktopNavigation.matches && !document.body.classList.contains('mobile-search-active')) {
         updateMobileHomeTint();
@@ -2292,12 +2389,19 @@
             trackViewUrl: song.permalink,
             streamUrl: song.streamUrl,
             trackTimeMillis: song.durationSeconds ? song.durationSeconds * 1000 : 0,
+            language: song.language || '',
             providerTrackId: song.id
           }));
         });
     }
 
-    function searchGenreChart(genreId, requestId, limit = GENRE_CHART_LIMIT) {
+    function matchesGenreLanguage(song, genreKey) {
+      const language = String(song?.language || '').trim().toLowerCase();
+      const expectedLanguage = genreKey === 'international' ? 'english' : genreKey;
+      return Boolean(language && language.includes(expectedLanguage));
+    }
+
+    function searchGenreChart(genreId, requestId, limit = GENRE_CHART_LIMIT, genreKey = '') {
       // A feed may combine several queries (the International tab mixes a few
       // big English artists). Fan the queries out, then merge by rank so the
       // grid mixes artists instead of showing one query's block first.
@@ -2333,6 +2437,7 @@
               const song = page[rank];
               if (!song) continue;
               advanced = true;
+              if (genreKey && !matchesGenreLanguage(song, genreKey)) continue;
               const mapped = {
                 trackId: song.id,
                 trackName: song.title,
@@ -2342,6 +2447,7 @@
                 trackViewUrl: song.permalink,
                 streamUrl: song.streamUrl,
                 trackTimeMillis: song.durationSeconds ? song.durationSeconds * 1000 : 0,
+                language: song.language || '',
                 primaryGenreName: label
               };
               // Collapse re-uploads of one recording (same title + artist) so the
@@ -2368,6 +2474,7 @@
       { title: 'Tamil', key: 'tamil' }
     ];
     let mobileHomeGenresLoaded = false;
+    let mobileHomeGenresDay = '';
     let mobileHomeGenresRequest = 0;
 
     function shuffleMobileItems(items) {
@@ -2379,7 +2486,29 @@
       return shuffled;
     }
 
+    function renderMobileGenrePlaceholders(category) {
+      const section = document.createElement('section');
+      section.className = 'mobile-genre-row';
+      section.setAttribute('aria-label', `${category.title} songs`);
+      const heading = document.createElement('h2');
+      heading.textContent = category.title;
+      const trackRow = document.createElement('div');
+      trackRow.className = 'mobile-genre-track-row';
+      for (let index = 0; index < 4; index += 1) {
+        const card = document.createElement('article');
+        card.className = 'mobile-genre-track mobile-genre-loading-card';
+        const artwork = document.createElement('div');
+        artwork.className = 'mobile-genre-loading-art';
+        artwork.setAttribute('aria-hidden', 'true');
+        card.appendChild(artwork);
+        trackRow.appendChild(card);
+      }
+      section.append(heading, trackRow);
+      return section;
+    }
+
     function renderMobileHomeGenreRow(category, songs, { shuffle = true, all = false } = {}) {
+      if (!songs.length) return renderMobileGenrePlaceholders(category);
       const section = document.createElement('section');
       section.className = 'mobile-genre-row';
       section.setAttribute('aria-label', `${category.title} songs`);
@@ -2441,12 +2570,6 @@
         card.append(play, title, artist);
         trackRow.appendChild(card);
       });
-      if (!songs.length) {
-        const empty = document.createElement('p');
-        empty.className = 'mobile-genre-row-message';
-        empty.textContent = 'Could not load songs. Try again later.';
-        trackRow.appendChild(empty);
-      }
       section.append(heading, trackRow);
       return section;
     }
@@ -2530,27 +2653,35 @@
 
     async function loadMobileHomeGenres() {
       const shelves = document.getElementById('mobileGenreShelves');
-      if (!shelves || mobileHomeGenresLoaded) return;
+      const today = localCalendarDayKey();
+      if (!shelves || (mobileHomeGenresLoaded && mobileHomeGenresDay === today)) return;
       mobileHomeGenresLoaded = true;
+      mobileHomeGenresDay = today;
       const requestId = ++mobileHomeGenresRequest;
       const categories = shuffleMobileItems(mobileHomeGenreRows);
       shelves.replaceChildren();
       updateMobileRecents();
       const placeholders = categories.map((category) => {
-        const section = document.createElement('section');
-        section.className = 'mobile-genre-row';
-        const loadingArt = '<article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art" aria-hidden="true"></div></article>'.repeat(4);
-        section.innerHTML = `<h2>${category.title}</h2><div class="mobile-genre-track-row">${loadingArt}</div>`;
+        const cachedSongs = getAnyCachedGenreChart(category.key);
+        const section = cachedSongs.length
+          ? renderMobileHomeGenreRow(category, cachedSongs)
+          : renderMobileGenrePlaceholders(category);
         shelves.appendChild(section);
         return section;
       });
-      const results = await Promise.all(categories.map((category) =>
-        searchGenreChart(genreFeedIds[category.key], requestId, 10).catch(() => [])
+      const results = await Promise.allSettled(categories.map((category) =>
+        loadDailyGenreChart(category.key)
       ));
       if (requestId !== mobileHomeGenresRequest) return;
-      results.forEach((songs, index) => {
-        placeholders[index].replaceWith(renderMobileHomeGenreRow(categories[index], songs));
+      let everyCategoryLoaded = true;
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled' && result.value.length) {
+          placeholders[index].replaceWith(renderMobileHomeGenreRow(categories[index], result.value));
+        } else {
+          everyCategoryLoaded = false;
+        }
       });
+      mobileHomeGenresLoaded = everyCategoryLoaded;
       updateMobileRecents();
     }
 
@@ -2597,7 +2728,9 @@
       activeGenre = cacheKey;
       favouriteSortControl.hidden = true;
       const requestId = ++genreRequestId;
-      const cached = genreResultCache.get(cacheKey);
+      const cached = genreId
+        ? getCachedDailyGenreChart(cacheKey)
+        : genreResultCache.get(cacheKey);
       if (cached) {
         const cachedSongs = genreId
           ? cached.slice(0, GENRE_CHART_LIMIT)
@@ -2613,6 +2746,7 @@
       const storedCache = getGenreCache();
       const storedEntry = storedCache[cacheKey];
       if (
+        !genreId &&
         storedEntry?.savedAt &&
         Date.now() - storedEntry.savedAt < GENRE_CACHE_TTL &&
         Array.isArray(storedEntry.songs)
@@ -2637,17 +2771,19 @@
         // (fetchCatalogSuggestions dedupes by term), so Enter never triggers a
         // second, redundant round trip. Chart tabs keep their own search query.
         const songs = genreId
-          ? await searchGenreChart(genreId, requestId)
+          ? await loadDailyGenreChart(cacheKey)
           : await fetchCatalogSuggestions(term);
         const trimmedSongs = genreId
           ? songs.slice(0, GENRE_CHART_LIMIT)
           : rankSearchResults(songs, term, SEARCH_RESULT_LIMIT);
         genreResultCache.set(cacheKey, trimmedSongs);
-        storedCache[cacheKey] = { savedAt: Date.now(), songs: trimmedSongs };
-        try {
-          localStorage.setItem(GENRE_CACHE_KEY, JSON.stringify(storedCache));
-        } catch {
-          // Keep the in-memory results if storage is full or unavailable.
+        if (!genreId) {
+          storedCache[cacheKey] = { savedAt: Date.now(), songs: trimmedSongs };
+          try {
+            localStorage.setItem(GENRE_CACHE_KEY, JSON.stringify(storedCache));
+          } catch {
+            // Keep the in-memory results if storage is full or unavailable.
+          }
         }
         if (requestId === genreRequestId && activeGenre === cacheKey) {
           void prefetchCatalogArtistInfo(trimmedSongs);

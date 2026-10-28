@@ -276,6 +276,7 @@ function mapProviderSong(raw) {
     (separator !== -1 ? subtitle.slice(0, separator) : subtitle);
 
   const durationSeconds = Math.max(0, Math.floor(Number(info.duration) || 0));
+  const language = sanitizeText(raw.language || info.language);
   const thumbnail = String(raw.image || '')
     .replace(/^http:/, 'https:')
     .replace(/150x150|50x50/, '500x500');
@@ -288,6 +289,7 @@ function mapProviderSong(raw) {
     artistIds,
     album,
     albumId: String(info.album_id || ''),
+    language,
     duration: formatDuration(durationSeconds),
     durationSeconds,
     thumbnail,
