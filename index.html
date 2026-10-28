@@ -33,7 +33,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=564">
+  <link rel="stylesheet" href="style.css?v=566">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -1157,11 +1157,13 @@
       button.classList.toggle('is-selected', selected);
       button.setAttribute('aria-pressed', String(selected));
     });
-    // Armed only by an intentional genre-tab switch (click or arrow keys) and
-    // spent by the next grid rebuild, so the tile-shuffle cascade in
-    // renderGenreResults() runs for tab switches alone — never on first load,
-    // background refreshes, or searches.
+    // Mobile arms its shuffle on intentional tab switches; desktop gets one
+    // shuffle on its first non-empty genre grid after each page load.
+    // The next rebuild spends whichever one-shot applies to the current view.
+    // renderGenreResults() applies the desktop one-shot to the first genre grid.
     let genreTabShuffle = false;
+    let desktopGenreShufflePending = desktopNavigation.matches;
+    const desktopGenreOrderCache = new Map();
     let genreShuffleTimer = 0;
     // Songs from the most recent renderGenreResults() call, kept so crossing
     // the mobile/desktop media query can rebuild search cards in the other
@@ -1998,9 +2000,9 @@
       // so a cleared search that falls back to the International grid drops
       // the row styling along with the row DOM.
       genreResults.classList.toggle('search-list-layout', searchListLayout);
-      // One-shot: armed by an intentional tab switch, spent by this rebuild —
-      // the identical-grid skip and the empty state disarm it as well.
-      const shuffle = genreTabShuffle;
+      // Mobile spends its tab-switch one-shot here; desktop spends its initial
+      // one-shot on the first non-empty genre grid.
+      const mobileShuffle = genreTabShuffle;
       genreTabShuffle = false;
 
       if (!songs.length) {
@@ -2022,11 +2024,19 @@
       }
 
       const isGenreChart = Object.prototype.hasOwnProperty.call(genreFeedIds, activeGenre);
+      const shuffle = desktopNavigation.matches
+        ? desktopGenreShufflePending && isGenreChart
+        : mobileShuffle;
+      if (shuffle && desktopNavigation.matches) desktopGenreShufflePending = false;
       const orderedSongs = activeGenre === 'you-like'
         ? sortFavouriteSongs(songs)
         : recentHistoryLayout
           ? orderRecentPlaybackHistory(songs)
-          : isGenreChart ? shuffleMobileItems(songs) : diversifyGenreSongs(songs);
+          : isGenreChart
+            ? desktopNavigation.matches
+              ? getDesktopGenreOrder(activeGenre, songs)
+              : shuffleMobileItems(songs)
+            : diversifyGenreSongs(songs);
       // Identity of everything the cards actually show, in display order.
       // The liked-songs rescue passes patch titles/artwork on the same
       // objects, so those fields must bust the key and force a rebuild.
@@ -2506,6 +2516,29 @@
         [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
       }
       return shuffled;
+    }
+
+    function getDesktopGenreOrder(genre, songs) {
+      const identity = (song) => String(
+        song.trackId ?? song.trackKey ?? song.trackViewUrl ??
+        `${song.trackName || ''}|${song.artistName || ''}|${song.collectionName || song.albumName || ''}`
+      );
+      const songsByKey = new Map(songs.map((song) => [identity(song), song]));
+      const previousOrder = desktopGenreOrderCache.get(genre);
+      if (!previousOrder) {
+        const shuffled = shuffleMobileItems(songs);
+        desktopGenreOrderCache.set(genre, shuffled.map(identity));
+        return shuffled;
+      }
+
+      const previousKeys = new Set(previousOrder);
+      const retainedKeys = previousOrder.filter((key) => songsByKey.has(key));
+      const newlyAdded = shuffleMobileItems(
+        songs.filter((song) => !previousKeys.has(identity(song)))
+      ).map(identity);
+      const nextOrder = [...retainedKeys, ...newlyAdded];
+      desktopGenreOrderCache.set(genre, nextOrder);
+      return nextOrder.map((key) => songsByKey.get(key)).filter(Boolean);
     }
 
     function renderMobileGenrePlaceholders(category) {
@@ -3551,11 +3584,20 @@
       if (!catalogSearchForm.contains(event.target)) hideCatalogSuggestions();
     });
 
+    function prepareGenreTabChangeShuffle() {
+      const isDesktop = desktopNavigation.matches;
+      genreTabShuffle = !isDesktop;
+      if (!isDesktop) return;
+      window.clearTimeout(genreShuffleTimer);
+      genreShuffleTimer = 0;
+      genreResults.classList.remove('is-shuffling');
+    }
+
     genreTabs.forEach((tab) => {
       // Arm the tile shuffle only here — deliberate tab switches. Page loads,
       // view refreshes, and search resets call loadGenre() without it.
       tab.addEventListener('click', () => {
-        genreTabShuffle = true;
+        prepareGenreTabChangeShuffle();
         try { localStorage.setItem(ACTIVE_GENRE_KEY, tab.dataset.genre); } catch { /* Tab selection still works for this visit. */ }
         loadGenre(tab.dataset.genre);
       });
@@ -3567,7 +3609,7 @@
         const currentIndex = tabs.indexOf(tab);
         const nextTab = tabs[(currentIndex + direction + tabs.length) % tabs.length];
         nextTab.focus();
-        genreTabShuffle = true;
+        prepareGenreTabChangeShuffle();
         try { localStorage.setItem(ACTIVE_GENRE_KEY, nextTab.dataset.genre); } catch { /* Tab selection still works for this visit. */ }
         loadGenre(nextTab.dataset.genre);
       });

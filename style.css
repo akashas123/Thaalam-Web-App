@@ -4383,13 +4383,13 @@ body.has-lyrics.synced-lyrics
   max-width: 100%;
   overflow-wrap: anywhere;
   color:
-    rgba(255, 255, 255, 0.88);
+    rgba(255, 255, 255, 0.7);
 
   font-weight: 500;
 
   margin-bottom: 1.8rem;
 
-  opacity: 0.96;
+  opacity: 0.88;
 
   transition:
     color 0.25s ease,
@@ -5435,8 +5435,8 @@ body.has-lyrics .lyrics-panel {
   .lyrics-line {
     font-size: 0.88em;
     font-weight: 500;
-    color: rgba(255, 255, 255, 0.62);
-    opacity: 0.9;
+    color: rgba(255, 255, 255, 0.7);
+    opacity: 0.88;
     transition:
       color 0.4s ease,
       opacity 0.4s ease,
@@ -6923,6 +6923,12 @@ body.view-now-playing.on-demand-active .track-time .stream-quality {
 }
 body.view-now-playing.on-demand-active .live-row .progress-bar {
   background-color: rgba(255, 255, 255, 0.48);
+}
+
+body.view-now-playing.has-lyrics.synced-lyrics .lyrics-line:not(.is-active) {
+  color: rgba(255, 255, 255, 0.76);
+  opacity: 0.74;
+  text-shadow: none;
 }
 body.view-now-playing.on-demand-active .live-row .progress-fill {
   background: #fff;
