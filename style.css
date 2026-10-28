@@ -107,6 +107,15 @@
   88%, 100% { transform: translateX(-50%); }
 }
 
+/* The now-playing title and artist use different marquee layers on desktop
+   and mobile. Drive every layer directly from the transport's paused state. */
+body.on-demand-paused .tagline #nowPlaying,
+body.on-demand-paused .tagline #nowPlaying > span,
+body.on-demand-paused .tagline #nowPlaying::before,
+body.on-demand-paused .tagline #nowPlaying::after {
+  animation-play-state: paused !important;
+}
+
 /* The liked-folder header and back row belong to the mobile Library flow.
    Hide them on wide layouts even if a mobile folder state survives resizing. */
 @media (min-width: 56.25rem) {

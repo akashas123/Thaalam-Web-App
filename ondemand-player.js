@@ -1807,6 +1807,18 @@ function updateTransportButtonState() {
 
 function skipOnDemandSong(offset, manual = true) {
   if (manual) autoplayTrackTransition = false;
+  if (offset > 0 && onDemandRepeatMode === 'all' &&
+      onDemandQueue.length > 1 && onDemandQueueIndex === onDemandQueue.length - 1) {
+    onDemandQueueIndex = 0;
+    window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
+    startOnDemandSong(onDemandQueue[0], {
+      preserveQueue: true,
+      openNowPlaying: false,
+      recordRecent: false,
+      gapless: !manual
+    });
+    return;
+  }
   if (offset > 0 && manual) {
     const shuffledTrack = takeShuffledAutoplayTrack();
     if (shuffledTrack) {
@@ -2074,12 +2086,6 @@ function advanceToSimilarSong() {
     return;
   }
 
-  const shuffledTrack = takeShuffledAutoplayTrack();
-  if (shuffledTrack) {
-    playRelatedTrack(shuffledTrack);
-    return;
-  }
-
   if (onDemandQueueIndex >= 0 && onDemandQueueIndex < onDemandQueue.length - 1) {
     skipOnDemandSong(1, false);
     return;
@@ -2094,6 +2100,15 @@ function advanceToSimilarSong() {
       recordRecent: false,
       gapless: true
     });
+    return;
+  }
+
+  // Repeat All applies to the visible session queue. Do not let autoplay
+  // recommendations extend the queue after its last track; wrap to the first
+  // queued song before considering any recommendation.
+  const shuffledTrack = takeShuffledAutoplayTrack();
+  if (shuffledTrack) {
+    playRelatedTrack(shuffledTrack);
     return;
   }
 
