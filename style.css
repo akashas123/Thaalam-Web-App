@@ -6723,11 +6723,10 @@ body.view-now-playing .player-controls .play-btn svg {
 
 @media (min-width: 56.25rem) {
   body.view-now-playing .desktop-nav {
-    background: linear-gradient(
-      135deg,
-      rgba(0, 0, 0, 0.48),
-      rgba(0, 0, 0, 0.34)
-    );
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }
 

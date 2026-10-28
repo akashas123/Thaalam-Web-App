@@ -41,8 +41,13 @@ function syncBrowserThemeColor(duration = 800) {
   };
   const from = parseHexColor(themeColor.content);
   const nowPlayingOpen = document.body.classList.contains('view-now-playing');
+  const albumColor = getComputedStyle(root)
+    .getPropertyValue('--album-dominant-color')
+    .trim();
+  // Keep the browser/PWA toolbar in sync with the artwork background overlay
+  // used on Now Playing (black at 38% opacity in style.css).
   const target = nowPlayingOpen
-    ? getComputedStyle(root).getPropertyValue('--album-dominant-color').trim()
+    ? rgbToHex(...parseHexColor(albumColor).map((channel) => channel * 0.62))
     : '#05070d';
   const to = parseHexColor(target);
   if (duration <= 0) {
