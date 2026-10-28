@@ -1989,7 +1989,7 @@ function prefetchRelatedTracks(trackId, isRetry = false) {
       shufflePreparedCursor = -1;
       // Give the next few songs time to fetch lyrics while the current track
       // is still playing, even if audio preloading starts later.
-      relatedTrackCache.slice(0, 2).forEach((track) => {
+      relatedTrackCache.slice(0, 4).forEach((track) => {
         window.prefetchOnDemandLyrics?.(track);
       });
       prefetchUpcomingTrackArtwork();
@@ -2503,6 +2503,7 @@ async function startOnDemandSong(song, {
   const requestId = ++songRequestId;
   selectedDuration = Number(song.trackTimeMillis) / 1000 || 0;
   enqueueOnDemandSong(song);
+  window.prefetchOnDemandLyricsQueue?.(onDemandQueue, onDemandQueueIndex, 4);
   if (recordRecent) {
     const fromLikedFolder = song.recentDisplayType === 'liked-folder' ||
       (preserveQueue && onDemandQueueSource === 'favourites');
