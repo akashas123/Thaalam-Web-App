@@ -10,19 +10,20 @@
   >
   <script>
     (() => {
-      const desktopUserAgent = !/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
       const touchDevice = navigator.maxTouchPoints > 0;
-      if (!desktopUserAgent || !touchDevice || window.innerWidth >= 900) return;
+      const hasFinePointer = window.matchMedia('(pointer: fine)').matches;
+      const screenWidth = Math.min(window.screen.width || window.innerWidth, window.screen.height || window.innerHeight);
+      if (!touchDevice || hasFinePointer || screenWidth >= 900) return;
       document.querySelector('meta[name="viewport"]')?.setAttribute(
         'content',
-        'width=1024, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'
+        'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'
       );
     })();
   </script>
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=554">
+  <link rel="stylesheet" href="style.css?v=557">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -64,7 +65,7 @@
 
     }
 
-    @media (min-width: 56.25rem) {
+    @media (min-width: 56.25rem) and (pointer: fine) {
 
       .desktop-nav-links {
         position: relative;
@@ -107,7 +108,7 @@
       }
     }
   
-    @media (min-width: 56.25rem) {
+    @media (min-width: 56.25rem) and (pointer: fine) {
       body.view-now-playing #nowPlayingHeading {
         display: block !important;
         position: absolute !important;
@@ -174,7 +175,7 @@
     // Hide the desktop cursor after a short pause on the non-player views.
     // Moving the mouse, using the keyboard, or switching views restores it.
     (() => {
-      const desktop = window.matchMedia('(min-width: 56.25rem)');
+      const desktop = window.matchMedia('(min-width: 56.25rem) and (pointer: fine)');
       const idleDelay = 2500;
       let idleTimer = 0;
       let lastNowPlayingState = document.body.classList.contains('view-now-playing');
@@ -211,7 +212,7 @@
     // reset to Home on refresh so playback does not take over the screen.
     (function () {
       try {
-        const desktop = window.matchMedia('(min-width: 56.25rem)').matches;
+        const desktop = window.matchMedia('(min-width: 56.25rem) and (pointer: fine)').matches;
         if (!desktop) {
           window.localStorage.setItem('thaalam-active-view-v1', 'home');
           document.body.classList.remove('view-now-playing');
@@ -871,7 +872,7 @@
   </aside>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
-  <script src="script.js?v=84"></script>
+  <script src="script.js?v=85"></script>
   <script src="ondemand-player.js?v=133"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
@@ -882,7 +883,7 @@
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script>
     const desktopNavigation =
-      window.matchMedia('(min-width: 56.25rem)');
+      window.matchMedia('(min-width: 56.25rem) and (pointer: fine)');
     const playerView = document.getElementById('playerView');
     const nowPlayingHeading = document.getElementById('nowPlayingHeading');
     const stationName = document.getElementById('stationName');
