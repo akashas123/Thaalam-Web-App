@@ -51,6 +51,7 @@ let autoplayPreloadedStreamUrl = '';
 let handoffOutgoingAudio = null;
 let handoffFadeIncomingAudio = null;
 let handoffVolume = 1;
+let handoffFadeProgress = 1;
 // A continuously looping, inaudible stream. Mobile browsers (notably Android
 // Chrome) suspend a page's timers/JS when no audio is playing - including when
 // the screen locks - which stops on-demand track transitions. Keeping this
@@ -154,8 +155,10 @@ function clearAutoplayPreload() {
 }
 
 function promotePreloadedTrack(track) {
-  if (!track?.id || autoplayPreloadedTrackId !== track.id ||
-      autoplayPreloadedStreamUrl !== track.streamUrl ||
+  // The resolved stream URL identifies the actual audio. Track ids can differ
+  // between a liked-list row and its provider result, so don't reject an
+  // otherwise exact buffered source because those ids use different schemes.
+  if (!track?.streamUrl || autoplayPreloadedStreamUrl !== track.streamUrl ||
       !autoplayPreloadAudio.getAttribute('src') ||
       autoplayPreloadAudio.error) {
     logOnDemand('next-track preload not ready for handoff', {
@@ -177,13 +180,16 @@ function promotePreloadedTrack(track) {
   previousAudio.volume = handoffVolume;
   onDemandAudio.volume = handoffVolume;
   onDemandAudio.muted = previousAudio.muted;
-  const audioGraphAvailable = setOnDemandGain(previousAudio, 1) &&
-    setOnDemandGain(onDemandAudio, 0);
-  if (!audioGraphAvailable) onDemandAudio.volume = 0;
+  // Keep Web Audio gains neutral during handoff. The timed element-volume
+  // ramp below is the single source of truth for the audible crossfade.
+  setOnDemandGain(previousAudio, 1);
+  setOnDemandGain(onDemandAudio, 1);
+  handoffFadeProgress = 0;
   autoplayPreloadAudio.preload = 'auto';
   autoplayPreloadedTrackId = '';
   autoplayPreloadedStreamUrl = '';
   syncOnDemandVolumeToStored();
+  onDemandAudio.volume = 0;
   // Keep the loop running across the source swap and volume handoff.
   startOnDemandSilentLoop();
   void prepareOnDemandFadeAudio();
@@ -211,6 +217,7 @@ function finishOnDemandHandoff() {
   }
   handoffOutgoingAudio = null;
   handoffFadeIncomingAudio = null;
+  handoffFadeProgress = 1;
   if (onDemandAudio) onDemandAudio.volume = handoffVolume;
   if (onDemandAudio) setOnDemandGain(onDemandAudio, 1);
   if (window.onDemandPlaying !== true) {
@@ -235,6 +242,7 @@ function finishOnDemandHandoffWhenPlaying() {
   handoffVolume = getOnDemandVolumeLevel();
   window.clearTimeout(handoffFinishTimer);
   if (fadeDurationMs <= 30 || outgoingAudio.ended) {
+    handoffFadeProgress = 1;
     incomingAudio.volume = handoffVolume;
     finishOnDemandHandoff();
     if (window.onDemandPlaybackActive) {
@@ -243,31 +251,13 @@ function finishOnDemandHandoffWhenPlaying() {
     }
     return;
   }
-  const context = getOnDemandFadeAudioContext();
-  const incomingGain = getOnDemandGainNode(incomingAudio);
-  const outgoingGain = getOnDemandGainNode(outgoingAudio);
-  if (context && incomingGain && outgoingGain) {
-    resumeOnDemandFadeAudioContext();
-    const fadeStart = context.currentTime;
-    const fadeEnd = fadeStart + fadeDurationMs / 1000;
-    try {
-      incomingGain.gain.cancelScheduledValues(fadeStart);
-      outgoingGain.gain.cancelScheduledValues(fadeStart);
-      incomingGain.gain.setValueAtTime(0, fadeStart);
-      outgoingGain.gain.setValueAtTime(1, fadeStart);
-      incomingGain.gain.linearRampToValueAtTime(1, fadeEnd);
-      outgoingGain.gain.linearRampToValueAtTime(0, fadeEnd);
-      handoffFinishTimer = window.setTimeout(
-        () => finishOnDemandHandoff(), fadeDurationMs + 250
-      );
-      return;
-    } catch (error) {
-      logOnDemand('scheduled crossfade failed; using timer fallback:', error?.name || error);
-    }
-  }
+  handoffFadeProgress = 0;
+  incomingAudio.volume = 0;
+  outgoingAudio.volume = handoffVolume;
   const fade = () => {
     if (incomingAudio !== onDemandAudio || outgoingAudio !== handoffOutgoingAudio) return;
     const progress = Math.min(1, (performance.now() - fadeStartedAt) / fadeDurationMs);
+    handoffFadeProgress = progress;
     incomingAudio.volume = handoffVolume * progress;
     outgoingAudio.volume = handoffVolume * (1 - progress);
     if (progress >= 1) {
@@ -938,10 +928,15 @@ function updatePlaybackProgress() {
       ? relatedNextTrack
       : null;
     const upcomingTrack = repeatTrack || shuffledRecommendation || queuedNextSong || repeatAllWrapSong || relatedNextTrack;
-    const upcomingTrackId = upcomingTrack?.id || upcomingTrack?.providerTrackId || '';
+    // Queue song `id` can be the local liked-song identity, while the preload
+    // slot is keyed by its resolved provider id. Prefer that provider id so
+    // normal queue entries match the audio that was actually preloaded.
+    const upcomingTrackId = upcomingTrack?.providerTrackId || upcomingTrack?.id || '';
+    const upcomingTrackStreamUrl = upcomingTrack?.streamUrl || '';
     const hasUpcomingTrack = Boolean(upcomingTrack);
     if (!handoffOutgoingAudio && hasUpcomingTrack &&
-        autoplayPreloadedTrackId !== upcomingTrackId) {
+        (autoplayPreloadedTrackId !== upcomingTrackId ||
+         (upcomingTrackStreamUrl && autoplayPreloadedStreamUrl !== upcomingTrackStreamUrl))) {
       if (repeatTrack?.id && repeatTrack?.streamUrl) {
         preloadTrackAudio(repeatTrack);
       } else if (queuedNextSong?.providerTrackId && queuedNextSong?.streamUrl) {
@@ -956,9 +951,10 @@ function updatePlaybackProgress() {
         preloadNextLikedQueueTrack();
       }
     }
-    const nextTrackIsAvailable = Boolean(upcomingTrackId) &&
-      autoplayPreloadedTrackId === upcomingTrackId &&
-      autoplayPreloadedStreamUrl && !autoplayPreloadAudio.error;
+    const nextTrackIsAvailable = isPreloadedTrackReady(
+      upcomingTrackId,
+      upcomingTrackStreamUrl
+    );
     const handoffLeadSeconds = getAdaptiveCrossfadeSeconds(duration);
     if (!autoplayTrackTransition && hasUpcomingTrack && nextTrackIsAvailable &&
         duration > 0 && elapsed >= duration - handoffLeadSeconds) {
@@ -1303,8 +1299,8 @@ function updateOnDemandMediaSessionPositionState(elapsed, duration) {
 function syncOnDemandVolumeToStored() {
   if (handoffOutgoingAudio) {
     handoffVolume = getOnDemandVolumeLevel();
-    onDemandAudio.volume = handoffVolume;
-    handoffOutgoingAudio.volume = handoffVolume;
+    onDemandAudio.volume = handoffVolume * handoffFadeProgress;
+    handoffOutgoingAudio.volume = handoffVolume * (1 - handoffFadeProgress);
     return;
   }
   try {
@@ -1379,6 +1375,10 @@ function bindOnDemandAudioEvents(audio) {
       finishOnDemandHandoffWhenPlaying();
     } else {
       syncOnDemandVolumeToStored();
+      // Start buffering the next liked track as soon as this one begins. If we
+      // wait for recommendation fetching or the last few seconds, the normal
+      // queue transitions can reach the handoff without buffered audio.
+      if (onDemandQueueSource === 'favourites') preloadNextLikedQueueTrack();
     }
     setOnDemandPlaying(true);
     void acquireOnDemandWakeLock();
@@ -1409,6 +1409,24 @@ function bindOnDemandAudioEvents(audio) {
   audio.addEventListener('ended', () => {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
     if (autoplayTrackTransition) return;
+    if (onDemandRepeatMode === 'all' && onDemandQueueSource === 'favourites' &&
+        onDemandQueue.length > 1) {
+      const isAtQueueEnd = onDemandQueueIndex === onDemandQueue.length - 1;
+      const nextSong = isAtQueueEnd
+        ? onDemandQueue[0]
+        : onDemandQueue[onDemandQueueIndex + 1];
+      if (nextSong) {
+        // This event means the timed fade window was missed. Don't advance
+        // here: keep this queue index active and replay the current track so
+        // the progress timer can hand off while both tracks are still live.
+        if (isAtQueueEnd) preloadRepeatAllWrapTrack();
+        else preloadNextLikedQueueTrack();
+        autoplayTrackTransition = false;
+        try { audio.currentTime = 0; } catch { /* ended audio may reject the seek */ }
+        audio.play().catch(() => {});
+        return;
+      }
+    }
     autoplayTrackTransition = true;
     onDemandModeLabel.textContent = 'ON DEMAND';
     advanceToSimilarSong();
@@ -2029,7 +2047,9 @@ function preloadNextAutoplayTrack() {
 }
 
 function preloadTrackAudio(track) {
-  if (!track?.id || !track.streamUrl || track.id === autoplayPreloadedTrackId) return;
+  if (!track?.id || !track.streamUrl ||
+      (track.id === autoplayPreloadedTrackId &&
+       track.streamUrl === autoplayPreloadedStreamUrl)) return;
   // Also cover cases where audio is preloaded before a recommendation queue
   // is available.
   window.prefetchOnDemandLyrics?.(track);
@@ -2039,6 +2059,61 @@ function preloadTrackAudio(track) {
   // Explicit load() asks the browser to start buffering this media now while
   // the active audio element continues playing the current song.
   autoplayPreloadAudio.load();
+}
+
+function isPreloadedTrackReady(trackId, streamUrl = '') {
+  const sourceMatches = streamUrl
+    ? autoplayPreloadedStreamUrl === streamUrl
+    : autoplayPreloadedTrackId === trackId;
+  if (!trackId || !sourceMatches || !autoplayPreloadedStreamUrl ||
+      autoplayPreloadAudio.error || autoplayPreloadAudio.readyState < 2) return false;
+  if (autoplayPreloadAudio.readyState >= 3) return true;
+  const currentTime = Number(autoplayPreloadAudio.currentTime) || 0;
+  for (let index = 0; index < autoplayPreloadAudio.buffered.length; index += 1) {
+    const start = autoplayPreloadAudio.buffered.start(index);
+    const end = autoplayPreloadAudio.buffered.end(index);
+    // If the browser has not raised HAVE_FUTURE_DATA yet, don't promote on a
+    // single decoded frame. A few seconds of actual buffered audio keeps the
+    // incoming track from stalling after the outgoing track starts fading.
+    if (end >= currentTime && end - Math.max(start, currentTime) >= 3) return true;
+  }
+  return false;
+}
+
+function waitForPreloadedTrack(track, timeoutMs = 10000) {
+  if (!track?.id || !track.streamUrl) return Promise.resolve(false);
+  preloadTrackAudio(track);
+  if (isPreloadedTrackReady(track.id, track.streamUrl)) return Promise.resolve(true);
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (ready) => {
+      if (settled) return;
+      settled = true;
+      window.clearInterval(pollTimer);
+      window.clearTimeout(timeoutTimer);
+      ['loadeddata', 'canplay', 'progress', 'error'].forEach((eventName) =>
+        autoplayPreloadAudio.removeEventListener(eventName, check)
+      );
+      resolve(ready);
+    };
+    const check = () => {
+      if (isPreloadedTrackReady(track.id, track.streamUrl)) finish(true);
+      else if (autoplayPreloadAudio.error) finish(false);
+    };
+    const pollTimer = window.setInterval(check, 100);
+    const timeoutTimer = window.setTimeout(() => finish(false), timeoutMs);
+    ['loadeddata', 'canplay', 'progress', 'error'].forEach((eventName) =>
+      autoplayPreloadAudio.addEventListener(eventName, check)
+    );
+    check();
+  });
+}
+
+async function promoteTrackForHandoff(track, waitForReady) {
+  if (promotePreloadedTrack(track)) return true;
+  if (!waitForReady || !await waitForPreloadedTrack(track)) return false;
+  return promotePreloadedTrack(track);
 }
 
 function preloadRepeatAllWrapTrack() {
@@ -2383,7 +2458,23 @@ onDemandRepeatButton?.addEventListener('click', () => {
     : onDemandRepeatMode === 'one'
       ? 'all'
       : 'off';
-  if (onDemandRepeatMode === 'all') removeDuplicateOnDemandQueueEntries();
+  if (onDemandRepeatMode === 'all') {
+    removeDuplicateOnDemandQueueEntries();
+    // Repeat One may have the current song sitting in the standby audio
+    // element. Repeat All needs the next queue song there instead, or the
+    // upcoming handoff can miss its crossfade window.
+    clearAutoplayPreload();
+    autoplayTrackTransition = false;
+    if (onDemandQueueSource === 'favourites') {
+      if (onDemandQueueIndex === onDemandQueue.length - 1) {
+        preloadRepeatAllWrapTrack();
+      } else {
+        preloadNextLikedQueueTrack();
+      }
+    } else {
+      preloadNextAutoplayTrack();
+    }
+  }
   updateOnDemandModeControls();
 });
 updateOnDemandModeControls();
@@ -2391,6 +2482,13 @@ updateOnDemandModeControls();
 /* Starts a track that came from the queue list. It already has a resolved
    stream, so it skips the search round-trip that startOnDemandSong performs. */
 async function playRelatedTrack(track, gapless = true) {
+  const scheduledHandoff = Boolean(gapless && autoplayTrackTransition && currentOnDemandSong);
+  const previousSong = currentOnDemandSong;
+  const previousQueueIndex = previousSong
+    ? onDemandQueue.findIndex((queuedSong) => isSameOnDemandSong(queuedSong, previousSong))
+    : -1;
+  const previousQueueLength = onDemandQueue.length;
+  const previousSelectedDuration = selectedDuration;
   setOnDemandAudioReady(false);
   if (!gapless) {
     finishOnDemandHandoff();
@@ -2400,7 +2498,6 @@ async function playRelatedTrack(track, gapless = true) {
   const song = relatedTrackToSong(track);
   const requestId = ++songRequestId;
 
-  selectedDuration = track.durationSeconds || parseDurationString(track.duration) || 0;
   const existingQueueIndex = onDemandQueue.findIndex((queuedSong) =>
     isSameOnDemandSong(queuedSong, song)
   );
@@ -2426,13 +2523,15 @@ async function playRelatedTrack(track, gapless = true) {
   trackCandidateIndex = 0;
   rerresolvedTrackId = '';
 
-  // Record the track before it loads, so a refresh mid-load still restores.
-  song.providerArtistIds = track.artistIds || [];
-  song.providerAlbumId = track.albumId || '';
-  setCurrentOnDemandTrack(song, track.id);
-  persistCurrentOnDemandSession();
-
-  updateOnDemandMetadata(song, { id: track.id, title: track.title, artist: track.artist, album: track.album, thumbnail: track.thumbnail });
+  // For a scheduled fade, keep current metadata paired with the active audio
+  // until the next source has actually been promoted.
+  if (!scheduledHandoff) {
+    song.providerArtistIds = track.artistIds || [];
+    song.providerAlbumId = track.albumId || '';
+    setCurrentOnDemandTrack(song, track.id);
+    persistCurrentOnDemandSession();
+    updateOnDemandMetadata(song, { id: track.id, title: track.title, artist: track.artist, album: track.album, thumbnail: track.thumbnail });
+  }
   void artworkPromise.then((artworkUrl) => {
     if (!artworkUrl || currentOnDemandTrackId !== track.id) return;
     song.artworkUrl100 = artworkUrl;
@@ -2442,9 +2541,44 @@ async function playRelatedTrack(track, gapless = true) {
   });
   prefetchUpcomingTrackArtwork();
   if (gapless) {
-    promotePreloadedTrack(track);
+    const promoted = await promoteTrackForHandoff(track, autoplayTrackTransition);
+    if (requestId !== songRequestId) return;
+    if (!promoted && (autoplayTrackTransition || scheduledHandoff)) {
+      logOnDemand('scheduled related-track handoff could not promote its preload', track.id);
+      if (scheduledHandoff) {
+        if (existingQueueIndex < 0 && onDemandQueue.length > previousQueueLength) {
+          onDemandQueue.pop();
+        }
+        if (previousQueueIndex >= 0) {
+          onDemandQueueIndex = previousQueueIndex;
+          onDemandQueueSource = onDemandFavouriteQueueLength > 0 &&
+            previousQueueIndex < onDemandFavouriteQueueLength
+            ? 'favourites'
+            : 'autoplay';
+        }
+        selectedDuration = previousSelectedDuration;
+        window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
+        updateTransportButtonState();
+        autoplayTrackTransition = false;
+        onDemandModeLabel.textContent = 'ON DEMAND';
+        setOnDemandAudioReady(true);
+        if (onDemandAudio.ended) {
+          try { onDemandAudio.currentTime = 0; } catch { /* ended audio may reject the seek */ }
+          onDemandAudio.play().catch(() => {});
+        }
+        return;
+      }
+    }
   } else {
     clearAutoplayPreload();
+  }
+  if (scheduledHandoff) {
+    selectedDuration = track.durationSeconds || parseDurationString(track.duration) || 0;
+    song.providerArtistIds = track.artistIds || [];
+    song.providerAlbumId = track.albumId || '';
+    setCurrentOnDemandTrack(song, track.id);
+    persistCurrentOnDemandSession();
+    updateOnDemandMetadata(song, { id: track.id, title: track.title, artist: track.artist, album: track.album, thumbnail: track.thumbnail });
   }
   await loadTrack(trackCandidates[0] || { id: track.id, streamUrl: track.streamUrl }, requestId);
   if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
@@ -2462,6 +2596,11 @@ async function startOnDemandSong(song, {
   gapless = true
 } = {}) {
   if (!song?.trackName) return;
+  const scheduledHandoff = Boolean(gapless && autoplayTrackTransition && currentOnDemandSong);
+  const previousSong = currentOnDemandSong;
+  const previousQueueIndex = previousSong
+    ? onDemandQueue.findIndex((queuedSong) => isSameOnDemandSong(queuedSong, previousSong))
+    : -1;
   setOnDemandAudioReady(false);
   void prepareOnDemandFadeAudio();
   if (!gapless) {
@@ -2516,7 +2655,7 @@ async function startOnDemandSong(song, {
     }
   });
   const requestId = ++songRequestId;
-  selectedDuration = Number(song.trackTimeMillis) / 1000 || 0;
+  if (!scheduledHandoff) selectedDuration = Number(song.trackTimeMillis) / 1000 || 0;
   enqueueOnDemandSong(song);
   window.prefetchOnDemandLyricsQueue?.(onDemandQueue, onDemandQueueIndex, 4);
   if (recordRecent) {
@@ -2544,9 +2683,9 @@ async function startOnDemandSong(song, {
   // so nothing appeared to happen on tap. The audio keeps loading behind the
   // now-visible mini player.
   window.revealMiniPlayer?.();
-  updateOnDemandMetadata(song, {});
+  if (!scheduledHandoff) updateOnDemandMetadata(song, {});
 
-  onDemandModeLabel.textContent = 'Hang on';
+  if (!scheduledHandoff) onDemandModeLabel.textContent = 'Hang on';
   onDemandStation.textContent = 'On-Demand';
   onDemandPlayButton.disabled = false;
   onDemandMiniToggle.disabled = false;
@@ -2575,6 +2714,37 @@ async function startOnDemandSong(song, {
     if (!track?.streamUrl) track = await resolveLikedQueueTrack(song);
     if (requestId !== songRequestId) return;
 
+    let promoted = false;
+    if (gapless) {
+      promoted = await promoteTrackForHandoff(track, autoplayTrackTransition);
+      if (requestId !== songRequestId) return;
+      if (!promoted && (autoplayTrackTransition || scheduledHandoff)) {
+        logOnDemand('scheduled queue-track handoff could not promote its preload', track.id);
+        if (scheduledHandoff) {
+          // Keep the outgoing song and its metadata together. The active audio
+          // source is untouched, so its progress handler can retry the fade.
+          if (previousQueueIndex >= 0) {
+            onDemandQueueIndex = previousQueueIndex;
+            onDemandQueueSource = onDemandFavouriteQueueLength > 0 &&
+              previousQueueIndex < onDemandFavouriteQueueLength
+              ? 'favourites'
+              : 'autoplay';
+          }
+          window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
+          updateTransportButtonState();
+          autoplayTrackTransition = false;
+          onDemandModeLabel.textContent = 'ON DEMAND';
+          setOnDemandAudioReady(true);
+          if (onDemandAudio.ended) {
+            try { onDemandAudio.currentTime = 0; } catch { /* ended audio may reject the seek */ }
+            onDemandAudio.play().catch(() => {});
+          }
+          return;
+        }
+      }
+    } else {
+      clearAutoplayPreload();
+    }
     trackCandidates = [track, ...(track.alternatives || [])]
       .filter((candidate) => candidate?.streamUrl);
     trackCandidateIndex = 0;
@@ -2592,11 +2762,6 @@ async function startOnDemandSong(song, {
     setCurrentOnDemandTrack(song, track.id);
     persistCurrentOnDemandSession();
     updateOnDemandMetadata(song, track);
-    if (gapless) {
-      promotePreloadedTrack(track);
-    } else {
-      clearAutoplayPreload();
-    }
     await loadTrack(trackCandidates[0] || { id: track.id, streamUrl: track.streamUrl }, requestId);
     if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
     updatePlaybackProgress();

@@ -5119,7 +5119,9 @@ body.has-lyrics .lyrics-panel {
   body.mini-player-visible.view-home .mini-player,
   body.mini-player-visible.view-library .mini-player {
     position: fixed;
-    z-index: 11;
+    /* Keep the bottom-nav fade behind the mini-player; the nav's ::before
+       gradient extends upward and otherwise darkens this separate player bar. */
+    z-index: 13;
     right: 0;
     bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
     left: 0;
