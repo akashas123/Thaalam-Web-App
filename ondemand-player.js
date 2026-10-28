@@ -1354,23 +1354,59 @@ function applyPendingMediaIntent() {
   }
 }
 
+let adaptiveDiscRaf = 0;
+let adaptiveDiscClockBase = 0;
+let adaptiveDiscClockAt = 0;
+let adaptiveDiscClockState = 'paused';
+
+function renderAdaptiveDiscFrame(now) {
+  adaptiveDiscRaf = 0;
+  const badge = document.getElementById('streamQuality');
+  if (!badge || !window.onDemandPlaybackActive) return;
+
+  let seconds = adaptiveDiscClockBase;
+  if (adaptiveDiscClockState === 'playing') {
+    const playbackRate = Number(onDemandAudio.playbackRate) || 1;
+    seconds += Math.max(0, now - adaptiveDiscClockAt) / 1000 * playbackRate;
+  } else if (adaptiveDiscClockState === 'seeking') {
+    seconds = isScrubbing ? scrubTargetSeconds : (Number(onDemandAudio.currentTime) || 0);
+  } else {
+    return;
+  }
+
+  badge.style.setProperty('--adaptive-disc-angle', `${seconds * 150}deg`);
+  adaptiveDiscRaf = requestAnimationFrame(renderAdaptiveDiscFrame);
+}
+
 function syncAdaptiveDiscPosition(seconds, state = 'playing') {
   const badge = document.getElementById('streamQuality');
   if (!badge) return;
-  const angle = (Number(seconds) || 0) * 150;
-  badge.style.setProperty('--adaptive-disc-angle', `${angle}deg`);
+  const position = Number(seconds) || 0;
+  adaptiveDiscClockBase = position;
+  adaptiveDiscClockAt = performance.now();
+  adaptiveDiscClockState = state;
+  if (state === 'paused') {
+    if (adaptiveDiscRaf) cancelAnimationFrame(adaptiveDiscRaf);
+    adaptiveDiscRaf = 0;
+    badge.style.setProperty('--adaptive-disc-angle', `${position * 150}deg`);
+  } else if (!adaptiveDiscRaf) {
+    adaptiveDiscRaf = requestAnimationFrame(renderAdaptiveDiscFrame);
+  }
   badge.classList.toggle('is-disc-paused', state !== 'playing');
   badge.classList.toggle('is-disc-seeking', state === 'seeking');
 }
 
 function syncAdaptiveDisc(audio, state = 'playing') {
   if (audio !== onDemandAudio) return;
-  syncAdaptiveDiscPosition(audio.currentTime, state);
+  syncAdaptiveDiscPosition(isScrubbing ? scrubTargetSeconds : audio.currentTime, state);
 }
 
 function pauseAdaptiveDiscAtCurrentAngle() {
   const badge = document.getElementById('streamQuality');
   if (!badge) return;
+  adaptiveDiscClockState = 'paused';
+  if (adaptiveDiscRaf) cancelAnimationFrame(adaptiveDiscRaf);
+  adaptiveDiscRaf = 0;
   badge.classList.toggle('is-disc-paused', !isScrubbing);
   badge.classList.toggle('is-disc-seeking', isScrubbing);
 }

@@ -3163,11 +3163,6 @@ body.on-demand-active .stream-quality:not(.is-offline) {
   justify-content: center;
 }
 
-body.on-demand-active:not(.on-demand-audio-ready) .stream-quality {
-  visibility: hidden;
-  opacity: 0;
-}
-
 body.on-demand-active .stream-quality {
   transition: opacity 0.18s ease, visibility 0s linear;
 }
@@ -3175,15 +3170,10 @@ body.on-demand-active .stream-quality {
 .stream-quality::before {
   transform: rotate(var(--adaptive-disc-angle, 0deg));
   transform-origin: center;
-  transition: transform 0.2s linear;
 }
 
 .stream-quality.is-disc-paused::before {
   transition: none;
-}
-
-.stream-quality.is-disc-seeking::before {
-  transition: transform 0.12s linear;
 }
 
 .track-time .stream-quality.is-offline,
