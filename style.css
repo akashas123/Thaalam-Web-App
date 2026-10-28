@@ -3125,15 +3125,20 @@ body.on-demand-active .stream-quality:not(.is-offline)::before {
 }
 
 body.on-demand-active .stream-quality:not(.is-offline) {
-  width: max-content;
-  min-width: 0;
+  width: 5.6rem;
+  min-width: 5.6rem;
   flex: 0 0 auto;
   gap: 0.28rem;
   justify-content: center;
 }
 
 body.on-demand-active:not(.on-demand-audio-ready) .stream-quality {
-  display: none !important;
+  visibility: hidden;
+  opacity: 0;
+}
+
+body.on-demand-active .stream-quality {
+  transition: opacity 0.18s ease, visibility 0s linear;
 }
 
 body.on-demand-active:not(.on-demand-paused) .stream-quality::before {
@@ -6714,6 +6719,16 @@ body.view-now-playing .player-controls .play-btn:hover {
 
 body.view-now-playing .player-controls .play-btn svg {
   filter: none;
+}
+
+@media (min-width: 56.25rem) {
+  body.view-now-playing .desktop-nav {
+    background: linear-gradient(
+      135deg,
+      rgba(0, 0, 0, 0.48),
+      rgba(0, 0, 0, 0.34)
+    );
+  }
 }
 
 @media (max-width: 56.1875rem) {
