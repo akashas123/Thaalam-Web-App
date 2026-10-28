@@ -4672,15 +4672,30 @@ body.has-lyrics .lyrics-panel {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: center;
     border: 0;
-    background: linear-gradient(
-      to bottom,
-      rgba(0, 0, 0, 0.62) 0%,
-      rgba(0, 0, 0, 0.9) 38%,
-      rgba(0, 0, 0, 1) 100%
-    ) !important;
+    isolation: isolate;
+    overflow: visible !important;
+    background: transparent !important;
     color: rgba(255, 255, 255, 0.68);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
+  }
+
+  .mobile-nav::before {
+    position: absolute;
+    z-index: 0;
+    top: -6rem;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    background: linear-gradient(
+      to bottom,
+      transparent 0%,
+      rgba(0, 0, 0, 0.18) 32%,
+      rgba(0, 0, 0, 0.72) 68%,
+      #000 100%
+    );
+    content: "";
+    pointer-events: none;
   }
 
   body.view-home .mobile-nav,
@@ -4689,6 +4704,8 @@ body.has-lyrics .lyrics-panel {
   }
 
   .mobile-nav button {
+    position: relative;
+    z-index: 1;
     display: flex;
     min-width: 0;
     height: 100%;
@@ -6724,6 +6741,10 @@ body.view-now-playing .player-controls .play-btn:hover {
 
 body.view-now-playing .player-controls .play-btn svg {
   filter: none;
+}
+
+body.view-now-playing.on-demand-active .live-row .progress-thumb {
+  display: none !important;
 }
 
 @media (min-width: 56.25rem) {
