@@ -102,6 +102,31 @@
   }
 }
 
+/* Keep desktop genre-card controls visually attached to their artwork while
+   the results pane scrolls. Blur and hover scaling can composite the overlay
+   on a separate layer and make it appear to drift over the moving grid. */
+@media (min-width: 56.25rem) {
+  body.view-home .genre-results .genre-card-media {
+    isolation: isolate;
+  }
+
+  body.view-home .genre-results .genre-card-media > .genre-play-button,
+  body.view-home .genre-results .genre-card-media > .genre-info-button {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    transition: background-color 0.18s ease, border-color 0.18s ease;
+  }
+
+  body.view-home .genre-results .genre-card-media > .genre-play-button:hover {
+    transform: translate(-50%, -50%);
+  }
+
+  body.view-home .genre-results .genre-card-media > .genre-info-button:hover {
+    filter: none;
+    transform: none;
+  }
+}
+
 @keyframes onDemandMetadataMarquee {
   0%, 12% { transform: translateX(0); }
   88%, 100% { transform: translateX(-50%); }
@@ -2130,6 +2155,31 @@ body.view-rises-from-mini.view-now-playing .player-view {
     }
   }
 
+  @media (min-width: 56.25rem) {
+    .genre-results.is-shuffling .genre-card {
+      animation-name: genreTileShuffleDesktop;
+      animation-duration: 0.56s;
+      animation-delay: calc(min(var(--genre-tile-index, 0), 20) * 16ms);
+    }
+
+    @keyframes genreTileShuffleDesktop {
+      from {
+        opacity: 0.45;
+        transform: translateY(0.55rem) scale(0.97);
+        animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      72% {
+        opacity: 1;
+        transform: translateY(0) scale(1.005);
+        animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+  }
+
   .genre-card,
   .genre-card-link {
     min-width: 0;
@@ -2851,8 +2901,8 @@ body.on-demand-active .tagline.now-playing-track {
 }
 
 .tagline.marquee > #nowPlaying {
-  -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 0.8rem), transparent 100%);
-  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 0.8rem), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 0.35rem), transparent 100%);
+  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 0.35rem), transparent 100%);
 }
 
 [class~="live-row"] {
@@ -5596,8 +5646,8 @@ body.has-lyrics .lyrics-panel {
 
   body.view-now-playing .tagline.title-marquee #nowPlaying,
   body.view-now-playing .tagline.artist-marquee #nowPlaying {
-    -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 1.35rem), transparent 100%);
-    mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 1.35rem), transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 1.15rem), transparent 100%);
+    mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 1.15rem), transparent 100%);
   }
 
   body.view-now-playing .tagline.paused.title-marquee #nowPlaying::before,
