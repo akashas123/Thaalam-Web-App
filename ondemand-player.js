@@ -1063,10 +1063,10 @@ function getScrubSecondsFromPointer(clientX, bar) {
 
 /* Repaints the full-player bar and the mini bar from the scrub target so
    neither keeps ticking to the real position while the pointer is held. */
-function repaintScrub() {
+function repaintScrub(updateDisc = true) {
   updatePlaybackProgress();
   window.updateMiniPlayerTime?.();
-  syncAdaptiveDiscPosition(scrubTargetSeconds, 'seeking');
+  if (updateDisc) syncAdaptiveDiscPosition(scrubTargetSeconds, 'seeking');
 }
 
 /* On-demand only: live radio is not seekable, so pointerdown is ignored there. */
@@ -1088,7 +1088,10 @@ function beginScrub(event, bar) {
   } catch {
     // Some embedded mobile browsers do not support capture on a progressbar.
   }
-  repaintScrub();
+  // Freeze the disc at its current angle on press. It follows pointer movement
+  // during an actual drag, then the committed seek animates to its destination.
+  pauseAdaptiveDiscAtCurrentAngle();
+  repaintScrub(false);
 }
 
 function moveScrub(event) {
@@ -1103,13 +1106,14 @@ function moveScrub(event) {
 
 /* Shared reset when a track change or mode switch interrupts a drag. */
 function resetScrub() {
+  const wasScrubbing = isScrubbing;
   isScrubbing = false;
   scrubTargetSeconds = 0;
   scrubPointerId = null;
   scrubbingBar?.classList.remove('is-scrubbing');
   playbackProgressBar?.classList.remove('is-scrubbing');
   scrubbingBar = null;
-  if (window.onDemandPlaybackActive) {
+  if (wasScrubbing && window.onDemandPlaybackActive) {
     syncAdaptiveDisc(onDemandAudio,
       !onDemandAudio.paused && !onDemandAudio.ended ? 'playing' : 'paused');
   }
@@ -1139,6 +1143,7 @@ function commitScrub(event) {
   if (target > 0 || scrubTargetSeconds <= 0) {
     try {
       onDemandAudio.currentTime = target;
+      syncAdaptiveDiscPosition(target, 'seeking-settle');
     } catch {
       // Metadata not ready yet; the next progress tick picks the position up.
     }
@@ -1358,23 +1363,46 @@ let adaptiveDiscRaf = 0;
 let adaptiveDiscClockBase = 0;
 let adaptiveDiscClockAt = 0;
 let adaptiveDiscClockState = 'paused';
+let adaptiveDiscAngle = 0;
+let adaptiveDiscLastFrameAt = 0;
 
 function renderAdaptiveDiscFrame(now) {
   adaptiveDiscRaf = 0;
   const badge = document.getElementById('streamQuality');
   if (!badge || !window.onDemandPlaybackActive) return;
 
-  let seconds = adaptiveDiscClockBase;
+  let targetAngle;
   if (adaptiveDiscClockState === 'playing') {
     const playbackRate = Number(onDemandAudio.playbackRate) || 1;
-    seconds += Math.max(0, now - adaptiveDiscClockAt) / 1000 * playbackRate;
-  } else if (adaptiveDiscClockState === 'seeking') {
-    seconds = isScrubbing ? scrubTargetSeconds : (Number(onDemandAudio.currentTime) || 0);
+    const seconds = adaptiveDiscClockBase + Math.max(0, now - adaptiveDiscClockAt) / 1000 * playbackRate;
+    targetAngle = seconds * 150;
+    adaptiveDiscAngle = targetAngle;
+  } else if (adaptiveDiscClockState === 'seeking' || adaptiveDiscClockState === 'seeking-settle') {
+    const seconds = isScrubbing ? scrubTargetSeconds : (Number(onDemandAudio.currentTime) || 0);
+    targetAngle = seconds * 150;
+    const delta = targetAngle - adaptiveDiscAngle;
+    const frameSeconds = Math.min(0.05, Math.max(0, now - (adaptiveDiscLastFrameAt || now)) / 1000);
+    const maxStep = 1800 * frameSeconds;
+    adaptiveDiscAngle = adaptiveDiscClockState === 'seeking' && isScrubbing
+      ? targetAngle
+      : (Math.abs(delta) <= maxStep ? targetAngle
+        : adaptiveDiscAngle + Math.sign(delta) * maxStep);
+
+    if (adaptiveDiscClockState === 'seeking-settle' && !isScrubbing && !onDemandAudio.seeking &&
+        adaptiveDiscAngle === targetAngle) {
+      adaptiveDiscClockState = 'paused';
+      const settledBadge = document.getElementById('streamQuality');
+      settledBadge?.classList.remove('is-disc-seeking');
+      adaptiveDiscLastFrameAt = now;
+      settledBadge?.style.setProperty('--adaptive-disc-angle', `${adaptiveDiscAngle}deg`);
+      return;
+    }
   } else {
     return;
   }
 
-  badge.style.setProperty('--adaptive-disc-angle', `${seconds * 150}deg`);
+  adaptiveDiscLastFrameAt = now;
+  badge.style.setProperty('--adaptive-disc-angle', `${adaptiveDiscAngle}deg`);
   adaptiveDiscRaf = requestAnimationFrame(renderAdaptiveDiscFrame);
 }
 
@@ -1388,12 +1416,15 @@ function syncAdaptiveDiscPosition(seconds, state = 'playing') {
   if (state === 'paused') {
     if (adaptiveDiscRaf) cancelAnimationFrame(adaptiveDiscRaf);
     adaptiveDiscRaf = 0;
-    badge.style.setProperty('--adaptive-disc-angle', `${position * 150}deg`);
+    adaptiveDiscAngle = position * 150;
+    adaptiveDiscLastFrameAt = 0;
+    badge.style.setProperty('--adaptive-disc-angle', `${adaptiveDiscAngle}deg`);
   } else if (!adaptiveDiscRaf) {
+    adaptiveDiscLastFrameAt = 0;
     adaptiveDiscRaf = requestAnimationFrame(renderAdaptiveDiscFrame);
   }
   badge.classList.toggle('is-disc-paused', state !== 'playing');
-  badge.classList.toggle('is-disc-seeking', state === 'seeking');
+  badge.classList.toggle('is-disc-seeking', state === 'seeking' || state === 'seeking-settle');
 }
 
 function syncAdaptiveDisc(audio, state = 'playing') {
@@ -1414,7 +1445,7 @@ function pauseAdaptiveDiscAtCurrentAngle() {
 function bindOnDemandAudioEvents(audio) {
   audio.addEventListener('timeupdate', () => {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
-    syncAdaptiveDisc(audio, audio.seeking
+    syncAdaptiveDisc(audio, isScrubbing || audio.seeking
       ? 'seeking'
       : (!audio.paused && !audio.ended ? 'playing' : 'paused'));
     updatePlaybackProgress();
@@ -1433,7 +1464,7 @@ function bindOnDemandAudioEvents(audio) {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
     // Keep the seek transition active through the final seeked position so
     // reverse scrubbing visibly follows the playhead even while audio is paused.
-    syncAdaptiveDisc(audio, !audio.paused && !audio.ended ? 'playing' : 'paused');
+    syncAdaptiveDisc(audio, !audio.paused && !audio.ended ? 'playing' : 'seeking-settle');
   });
   audio.addEventListener('playing', () => {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
