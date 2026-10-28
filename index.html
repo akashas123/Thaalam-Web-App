@@ -10,10 +10,14 @@
   >
   <script>
     (() => {
-      const touchDevice = navigator.maxTouchPoints > 0;
-      const hasFinePointer = window.matchMedia('(pointer: fine)').matches;
-      const screenWidth = Math.min(window.screen.width || window.innerWidth, window.screen.height || window.innerHeight);
-      if (!touchDevice || hasFinePointer || screenWidth >= 900) return;
+      const screenWidth = window.screen.width || window.innerWidth;
+      const screenHeight = window.screen.height || window.innerHeight;
+      const compactDevice = Math.min(screenWidth, screenHeight) < 700;
+      const mobilePlatform = /Android|iPhone|iPad|iPod|Mobile/i.test(
+        `${navigator.userAgent} ${navigator.platform}`
+      ) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      window.__THAALAM_FORCE_MOBILE_LAYOUT__ = mobilePlatform || compactDevice;
+      if (!window.__THAALAM_FORCE_MOBILE_LAYOUT__) return;
       document.querySelector('meta[name="viewport"]')?.setAttribute(
         'content',
         'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'
@@ -176,6 +180,8 @@
     // Moving the mouse, using the keyboard, or switching views restores it.
     (() => {
       const desktop = window.matchMedia('(min-width: 56.25rem) and (pointer: fine)');
+      const isDesktopLayout = () =>
+        !window.__THAALAM_FORCE_MOBILE_LAYOUT__ && desktop.matches;
       const idleDelay = 2500;
       let idleTimer = 0;
       let lastNowPlayingState = document.body.classList.contains('view-now-playing');
@@ -183,9 +189,9 @@
       function updateCursorState() {
         window.clearTimeout(idleTimer);
         document.body.classList.remove('desktop-cursor-hidden');
-        if (!desktop.matches || document.body.classList.contains('view-now-playing')) return;
+        if (!isDesktopLayout() || document.body.classList.contains('view-now-playing')) return;
         idleTimer = window.setTimeout(() => {
-          if (desktop.matches && !document.body.classList.contains('view-now-playing')) {
+          if (isDesktopLayout() && !document.body.classList.contains('view-now-playing')) {
             document.body.classList.add('desktop-cursor-hidden');
           }
         }, idleDelay);
@@ -212,7 +218,8 @@
     // reset to Home on refresh so playback does not take over the screen.
     (function () {
       try {
-        const desktop = window.matchMedia('(min-width: 56.25rem) and (pointer: fine)').matches;
+        const desktop = !window.__THAALAM_FORCE_MOBILE_LAYOUT__ &&
+          window.matchMedia('(min-width: 56.25rem) and (pointer: fine)').matches;
         if (!desktop) {
           window.localStorage.setItem('thaalam-active-view-v1', 'home');
           document.body.classList.remove('view-now-playing');
@@ -872,7 +879,7 @@
   </aside>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
-  <script src="script.js?v=85"></script>
+  <script src="script.js?v=86"></script>
   <script src="ondemand-player.js?v=133"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
@@ -882,8 +889,14 @@
   <script src="/google-auth-config.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script>
-    const desktopNavigation =
+    const desktopNavigationQuery =
       window.matchMedia('(min-width: 56.25rem) and (pointer: fine)');
+    const desktopNavigation = {
+      get matches() {
+        return !window.__THAALAM_FORCE_MOBILE_LAYOUT__ && desktopNavigationQuery.matches;
+      },
+      addEventListener: (...args) => desktopNavigationQuery.addEventListener(...args)
+    };
     const playerView = document.getElementById('playerView');
     const nowPlayingHeading = document.getElementById('nowPlayingHeading');
     const stationName = document.getElementById('stationName');
