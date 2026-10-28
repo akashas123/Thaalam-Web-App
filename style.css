@@ -7,7 +7,7 @@
 
 /* On-demand metadata uses pseudo-elements on narrow layouts. Keep the same
    one-pass marquee and short reset pause used by live metadata and the dock. */
-@media (max-width: 56.1875rem) {
+@media (max-width: 56.1875rem), (pointer: coarse) and (any-pointer: coarse) {
   body.mini-player-visible .mini-player-meta,
   body.mini-player-visible .mini-player-track {
     min-width: 0;
@@ -3542,7 +3542,7 @@ body.on-demand-active #onDemandNextButton {
   }
 }
 
-@media (max-width: 56.1875rem) {
+@media (max-width: 56.1875rem), (pointer: coarse) and (any-pointer: coarse) {
   body.on-demand-active .player-controls {
     gap: clamp(0.8rem, 3vw, 1.35rem);
   }
@@ -4434,7 +4434,7 @@ body.has-lyrics .lyrics-panel {
   }
 }
 
-@media (max-width: 56.1875rem) {
+@media (max-width: 56.1875rem), (pointer: coarse) and (any-pointer: coarse) {
   body.view-now-playing.on-demand-active .live-row .progress-bar {
     /* Make the actual element the touch target; some mobile browsers don't
        reliably dispatch pointer events to an expanded pseudo-element. */
@@ -6044,7 +6044,7 @@ img {
   }
 }
 
-@media (max-width: 56.1875rem) {
+@media (max-width: 56.1875rem), (pointer: coarse) and (any-pointer: coarse) {
   /* Lyrics can arrive after the next track's artwork and metadata have
      already rendered. Reveal the mobile panel directly in document flow so
      its heading never fades in at the player's absolute-positioned fallback. */
@@ -6126,7 +6126,7 @@ img {
 
 /* Narrow-screen-only refinements (width query only — no `pointer: coarse`,
    so touchscreen laptops/desktops never match and desktop stays untouched). */
-@media (max-width: 56.1875rem) {
+@media (max-width: 56.1875rem), (pointer: coarse) and (any-pointer: coarse) {
   @keyframes mobileTabPanelSlideIn {
     from {
       opacity: 0.72;
@@ -6512,7 +6512,7 @@ img {
 
 /* Suppress the browser's blue press flash on the mobile player and Lyrics
    Beta surface while keeping the effect and all desktop styling untouched. */
-@media (max-width: 56.1875rem) {
+@media (max-width: 56.1875rem), (pointer: coarse) and (any-pointer: coarse) {
   body.view-now-playing,
   body.view-now-playing * {
     -webkit-tap-highlight-color: transparent;
@@ -6593,7 +6593,7 @@ img {
   box-shadow: none;
 }
 
-@media (max-width: 56.1875rem) {
+@media (max-width: 56.1875rem), (pointer: coarse) and (any-pointer: coarse) {
   .genre-tab[data-genre="recently-played"] { display: none; }
 }
 
@@ -6789,7 +6789,7 @@ body.view-now-playing.on-demand-active .live-row .progress-thumb {
   }
 }
 
-@media (max-width: 56.1875rem) {
+@media (max-width: 56.1875rem), (pointer: coarse) and (any-pointer: coarse) {
   body.on-demand-active .player-controls {
     width: min(100%, 27rem);
     justify-self: center;
@@ -6947,7 +6947,7 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
   -webkit-text-stroke: 0;
 }
 
-@media (max-width: 56.1875rem) {
+@media (max-width: 56.1875rem), (pointer: coarse) and (any-pointer: coarse) {
   body.on-demand-active .player-controls {
     width: min(calc(100% + 1.5rem), 27rem);
     margin-inline: -0.75rem;
