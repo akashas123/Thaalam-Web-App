@@ -1243,6 +1243,15 @@ function setOnDemandPlaying(isPlaying) {
 }
 
 function setOnDemandAudioReady(isReady) {
+  if (!isReady) {
+    adaptiveDiscHasPlayedPastStart = false;
+    adaptiveDiscAngle = 0;
+    adaptiveDiscClockState = 'paused';
+    if (adaptiveDiscRaf) cancelAnimationFrame(adaptiveDiscRaf);
+    adaptiveDiscRaf = 0;
+    const badge = document.getElementById('streamQuality');
+    badge?.style.setProperty('--adaptive-disc-angle', '0deg');
+  }
   document.body.classList.toggle(
     'on-demand-audio-ready',
     Boolean(isReady) && Boolean(window.onDemandPlaybackActive)
@@ -1365,6 +1374,7 @@ let adaptiveDiscClockAt = 0;
 let adaptiveDiscClockState = 'paused';
 let adaptiveDiscAngle = 0;
 let adaptiveDiscLastFrameAt = 0;
+let adaptiveDiscHasPlayedPastStart = false;
 
 function renderAdaptiveDiscFrame(now) {
   adaptiveDiscRaf = 0;
@@ -1373,13 +1383,27 @@ function renderAdaptiveDiscFrame(now) {
 
   let targetAngle;
   if (adaptiveDiscClockState === 'playing') {
+    if (!adaptiveDiscHasPlayedPastStart && onDemandAudio.currentTime >= 0.05 &&
+        !onDemandAudio.paused && !onDemandAudio.ended) {
+      adaptiveDiscHasPlayedPastStart = true;
+    }
+    if (!adaptiveDiscHasPlayedPastStart) {
+      adaptiveDiscLastFrameAt = now;
+      adaptiveDiscRaf = requestAnimationFrame(renderAdaptiveDiscFrame);
+      return;
+    }
     const playbackRate = Number(onDemandAudio.playbackRate) || 1;
     const seconds = adaptiveDiscClockBase + Math.max(0, now - adaptiveDiscClockAt) / 1000 * playbackRate;
-    targetAngle = seconds * 150;
+    targetAngle = Math.max(0, seconds - 0.05) * 150;
     adaptiveDiscAngle = targetAngle;
   } else if (adaptiveDiscClockState === 'seeking' || adaptiveDiscClockState === 'seeking-settle') {
+    if (!adaptiveDiscHasPlayedPastStart) {
+      adaptiveDiscRaf = 0;
+      if (adaptiveDiscClockState === 'seeking-settle') adaptiveDiscClockState = 'paused';
+      return;
+    }
     const seconds = isScrubbing ? scrubTargetSeconds : (Number(onDemandAudio.currentTime) || 0);
-    targetAngle = seconds * 150;
+    targetAngle = Math.max(0, seconds - 0.05) * 150;
     const delta = targetAngle - adaptiveDiscAngle;
     const frameSeconds = Math.min(0.05, Math.max(0, now - (adaptiveDiscLastFrameAt || now)) / 1000);
     const maxStep = 1800 * frameSeconds;
@@ -1416,7 +1440,7 @@ function syncAdaptiveDiscPosition(seconds, state = 'playing') {
   if (state === 'paused') {
     if (adaptiveDiscRaf) cancelAnimationFrame(adaptiveDiscRaf);
     adaptiveDiscRaf = 0;
-    adaptiveDiscAngle = position * 150;
+    adaptiveDiscAngle = Math.max(0, position - 0.05) * 150;
     adaptiveDiscLastFrameAt = 0;
     badge.style.setProperty('--adaptive-disc-angle', `${adaptiveDiscAngle}deg`);
   } else if (!adaptiveDiscRaf) {
@@ -1445,6 +1469,9 @@ function pauseAdaptiveDiscAtCurrentAngle() {
 function bindOnDemandAudioEvents(audio) {
   audio.addEventListener('timeupdate', () => {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
+    if (!audio.paused && !audio.ended && audio.currentTime >= 0.05) {
+      adaptiveDiscHasPlayedPastStart = true;
+    }
     syncAdaptiveDisc(audio, isScrubbing || audio.seeking
       ? 'seeking'
       : (!audio.paused && !audio.ended ? 'playing' : 'paused'));
@@ -1468,6 +1495,7 @@ function bindOnDemandAudioEvents(audio) {
   });
   audio.addEventListener('playing', () => {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
+    if (audio.currentTime >= 0.05) adaptiveDiscHasPlayedPastStart = true;
     syncAdaptiveDisc(audio, 'playing');
     setOnDemandAudioReady(true);
     autoplayTrackTransition = false;
