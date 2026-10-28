@@ -1834,7 +1834,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
     grid-template-columns: max-content max-content max-content;
     justify-content: end;
     align-items: center;
-    margin-top: 0;
+    margin-top: 0.7rem;
   }
 
   body.view-home .favourite-sort-control label {
