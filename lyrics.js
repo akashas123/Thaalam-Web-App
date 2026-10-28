@@ -125,8 +125,8 @@ function normalizeArtistName(value) {
 
 function cleanLyricsSearchTitle(value) {
   return String(value || '')
-    .replace(/[\[(](?:\d{4}\s*)?(?:official\s*)?(?:audio|video|lyrics|visualizer|remaster(?:ed)?|radio\s*edit|single\s*version|album\s*version|deluxe\s*edition|bonus\s*track)[^)\]]*[\])]/gi, '')
-    .replace(/\s*[\u2012-\u2015-]\s*(?:official\s*)?(?:audio|video|lyrics|visualizer|remaster(?:ed)?|radio\s*edit|single\s*version|album\s*version|deluxe\s*edition|bonus\s*track).*$/i, '')
+    .replace(/[\[(](?:\d{4}\s*)?(?:official\s*)?(?:audio|video|lyrics|visualizer|remaster(?:ed)?|radio\s*edit|single\s*version|album\s*version|(?:us|uk|indian|international)?\s*version|deluxe\s*edition|bonus\s*track)[^)\]]*[\])]/gi, '')
+    .replace(/\s*[\u2012-\u2015-]\s*(?:official\s*)?(?:audio|video|lyrics|visualizer|remaster(?:ed)?|radio\s*edit|single\s*version|album\s*version|(?:us|uk|indian|international)?\s*version|deluxe\s*edition|bonus\s*track).*$/i, '')
     .trim();
 }
 
@@ -135,12 +135,25 @@ function normalizeLyricsTitle(value) {
 }
 
 function lyricsArtistMatches(candidate, requested) {
-  const normalizedCandidate = normalizeArtistName(candidate);
-  const normalizedRequested = normalizeArtistName(requested);
-  if (!normalizedCandidate || !normalizedRequested) return false;
-  return normalizedCandidate === normalizedRequested ||
-    (normalizedRequested.length >= 4 && normalizedCandidate.includes(normalizedRequested)) ||
-    (normalizedCandidate.length >= 4 && normalizedRequested.includes(normalizedCandidate));
+  const normalizeArtists = (value) => String(value || '')
+    .split(/\s*(?:,|;|&|\band\b)\s*/i)
+    .map(normalizeArtistName)
+    .filter(Boolean);
+  const candidates = normalizeArtists(candidate);
+  const requestedArtists = normalizeArtists(requested);
+  if (!candidates.length || !requestedArtists.length) return false;
+  return candidates.some((candidateName) => requestedArtists.some((requestedName) =>
+    candidateName === requestedName ||
+    (requestedName.length >= 4 && candidateName.includes(requestedName)) ||
+    (candidateName.length >= 4 && requestedName.includes(candidateName))
+  ));
+}
+
+function lyricsTitlesMatch(candidate, requested) {
+  const left = normalizeLyricsTitle(candidate);
+  const right = normalizeLyricsTitle(requested);
+  return Boolean(left && right && (left === right ||
+    (Math.min(left.length, right.length) >= 8 && (left.startsWith(right) || right.startsWith(left)))));
 }
 
 async function fetchLrclibLyrics(song) {
@@ -189,12 +202,8 @@ async function fetchLrclibLyrics(song) {
 
     const matches = await response.json();
 
-    const normalizedTitle = normalizeTrackTitle(song.title);
-    const normalizedLyricsTitleValue = normalizeLyricsTitle(song.title);
-
     const result = matches.find((match) =>
-      (normalizeTrackTitle(match.trackName) === normalizedTitle ||
-        normalizeLyricsTitle(match.trackName) === normalizedLyricsTitleValue) &&
+      lyricsTitlesMatch(match.trackName, song.title) &&
       lyricsArtistMatches(match.artistName, song.artist) &&
       (match.syncedLyrics || match.plainLyrics)
     );
