@@ -4845,6 +4845,23 @@ body.has-lyrics .lyrics-panel {
     font-size: 0.75rem;
   }
 
+  .favourite-sort-control label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  .favourite-sort-icon {
+    width: 1.2rem;
+    height: 1.2rem;
+    flex: 0 0 auto;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.55;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
   .favourite-sort-control select { min-height: 2rem; padding: 0.25rem 1.8rem 0.25rem 0.65rem; border: 1px solid rgba(255,255,255,.2); border-radius: 999px; background: #17191e; color: #fff; font: inherit; }
   .favourite-layout-toggle { display: none; }
 
@@ -6054,9 +6071,12 @@ img {
     display: flex;
     width: 100%;
     min-width: 0;
-    align-items: center;
-    gap: 0.45rem;
-    margin: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.65rem;
+    margin: 0 0 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   }
 
   body.view-home.library-playlist-open #genreResults.favourites-list-layout .genre-play-button {
@@ -6069,13 +6089,16 @@ img {
 
   body.view-home.library-playlist-open .liked-folder-toolbar .favourite-sort-control {
     display: flex !important;
+    order: 2;
+    width: 100%;
     flex: 0 0 auto;
-    gap: 0.3rem;
+    justify-content: space-between;
+    gap: 0.75rem;
     white-space: nowrap;
   }
 
   body.view-home.library-playlist-open .liked-folder-toolbar .favourite-sort-control select {
-    width: min(7.4rem, 34vw);
+    width: min(9rem, 52%);
     min-width: 0;
     border-color: rgba(255,255,255,.2);
     background: rgba(255,255,255,.1) !important;
@@ -6090,9 +6113,13 @@ img {
 
   body.view-home.library-playlist-open .liked-folder-toolbar .catalog-search {
     display: flex !important;
-    width: auto;
+    order: 1;
+    width: 100%;
     min-width: 0;
-    flex: 1 1 auto;
+    min-height: 2.8rem;
+    flex: 0 0 auto;
+    margin: 0;
+    border-radius: 1rem;
   }
 
   body.mobile-search-active.view-home .favourite-sort-control {

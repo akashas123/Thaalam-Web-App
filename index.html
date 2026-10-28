@@ -22,7 +22,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=523">
+  <link rel="stylesheet" href="style.css?v=528">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -310,7 +310,13 @@
         <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="you-like">Favourites</button>
       </div>
       <div class="favourite-sort-control" id="favouriteSortControl" hidden>
-        <label for="favouriteSort">Sort by</label>
+        <label for="favouriteSort">
+          <svg class="favourite-sort-icon" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M2.5 3.5h8M2.5 7.5h5.5M2.5 11.5h3" />
+            <path d="m11 8.5 2 2 2-2M13 10.5v-6" />
+          </svg>
+          <span>Sort by</span>
+        </label>
         <select id="favouriteSort">
           <option value="recent">Recents</option>
           <option value="title">Title</option>
@@ -1000,7 +1006,7 @@
       const shouldMove = Boolean(open && mobileFolderToolbarQuery.matches && likedFolderToolbar);
       if (shouldMove) {
         likedFolderToolbar.hidden = false;
-        likedFolderToolbar.append(favouriteSortControl, catalogSearchForm);
+        likedFolderToolbar.append(catalogSearchForm, favouriteSortControl);
         return;
       }
       if (catalogSearchForm?.parentElement === likedFolderToolbar && catalogSearchOriginalParent) {
