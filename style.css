@@ -262,6 +262,11 @@ body.view-now-playing [class~="album-background"] {
     background-color 800ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Keep bright album colors from competing with the Now Playing controls. */
+body.view-now-playing [class~="album-background"]::after {
+  background: rgba(0, 0, 0, 0.38);
+}
+
 body::after {
   content: "";
   position: fixed;

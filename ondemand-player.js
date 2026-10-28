@@ -1690,12 +1690,41 @@ function updateOnDemandMetadata(song, track) {
    (re-selecting the same track should not create a duplicate step). */
 function isSameOnDemandSong(first, second) {
   if (!first || !second) return false;
-  if (first.providerTrackId && second.providerTrackId) {
-    return first.providerTrackId === second.providerTrackId;
-  }
-  if (first.trackKey && second.trackKey) return first.trackKey === second.trackKey;
-  return String(first.trackName || '').trim().toLowerCase() === String(second.trackName || '').trim().toLowerCase() &&
-    String(first.artistName || '').trim().toLowerCase() === String(second.artistName || '').trim().toLowerCase();
+  if (first.providerTrackId && second.providerTrackId &&
+      String(first.providerTrackId) === String(second.providerTrackId)) return true;
+  if (first.trackKey && second.trackKey && first.trackKey === second.trackKey) return true;
+  const normalize = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const firstTitle = normalize(first.trackName || first.title);
+  const secondTitle = normalize(second.trackName || second.title);
+  const firstArtist = normalize(first.artistName || first.artist);
+  const secondArtist = normalize(second.artistName || second.artist);
+  return Boolean(firstTitle && secondTitle && firstArtist && secondArtist &&
+    firstTitle === secondTitle && firstArtist === secondArtist);
+}
+
+function removeDuplicateOnDemandQueueEntries() {
+  if (onDemandQueue.length < 2) return;
+  const previousQueue = onDemandQueue;
+  const previousFavouriteQueueLength = onDemandFavouriteQueueLength;
+  const uniqueQueue = [];
+  const indexMap = [];
+  previousQueue.forEach((song, previousIndex) => {
+    let nextIndex = uniqueQueue.findIndex((queuedSong) => isSameOnDemandSong(queuedSong, song));
+    if (nextIndex < 0) {
+      nextIndex = uniqueQueue.length;
+      uniqueQueue.push(song);
+    }
+    indexMap[previousIndex] = nextIndex;
+  });
+  onDemandQueue = uniqueQueue;
+  onDemandQueueIndex = indexMap[onDemandQueueIndex] ?? 0;
+  onDemandQueueStartIndex = indexMap[onDemandQueueStartIndex] ?? 0;
+  onDemandFavouriteQueueLength = previousFavouriteQueueLength > 0
+    ? uniqueQueue.filter((song) => previousQueue.some((oldSong, oldIndex) =>
+      oldIndex < previousFavouriteQueueLength && isSameOnDemandSong(oldSong, song)
+    )).length
+    : 0;
+  window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
 }
 
 function enqueueOnDemandSong(song) {
@@ -1808,7 +1837,8 @@ function updateTransportButtonState() {
 function skipOnDemandSong(offset, manual = true) {
   if (manual) autoplayTrackTransition = false;
   if (offset > 0 && onDemandRepeatMode === 'all' &&
-      onDemandQueue.length > 1 && onDemandQueueIndex === onDemandQueue.length - 1) {
+      onDemandQueueSource === 'favourites' && onDemandQueue.length > 1 &&
+      onDemandQueueIndex === onDemandQueue.length - 1) {
     onDemandQueueIndex = 0;
     window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
     startOnDemandSong(onDemandQueue[0], {
@@ -1830,7 +1860,19 @@ function skipOnDemandSong(offset, manual = true) {
   // fetched rather than trying to walk past the last entry.
   if (offset > 0 && onDemandQueueIndex >= onDemandQueue.length - 1) {
     const nextRelated = relatedTrackCache[relatedTrackCursor];
-    if (!nextRelated) return;
+    if (!nextRelated) {
+      if (onDemandRepeatMode === 'all' && onDemandQueue.length > 1 && !isFetchingRelated) {
+        onDemandQueueIndex = 0;
+        window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
+        startOnDemandSong(onDemandQueue[0], {
+          preserveQueue: true,
+          openNowPlaying: false,
+          recordRecent: false,
+          gapless: !manual
+        });
+      }
+      return;
+    }
 
     relatedTrackCursor += 1;
     playRelatedTrack(nextRelated, !manual);
@@ -1873,6 +1915,7 @@ async function fetchRelatedTracks(trackId) {
       const queue = await fetchAutoplayQueue(autoplayAnchorTrackId);
       if (queue.stationid) radioStationId = queue.stationid;
       return queue.tracks.filter((track) => track.id && !playedTrackIds.has(track.id) &&
+        !onDemandQueue.some((song) => isSameOnDemandSong(song, relatedTrackToSong(track))) &&
         !NON_CATALOG_TITLE.test(track.title) && !UNOFFICIAL_MIX_TITLE.test(track.title));
     } catch (error) {
       console.warn(
@@ -1937,7 +1980,8 @@ function prefetchRelatedTracks(trackId, isRetry = false) {
       ];
       const seenTrackIds = new Set();
       relatedTrackCache = pendingTracks.filter((track) => {
-        if (!track?.id || playedTrackIds.has(track.id) || seenTrackIds.has(track.id)) return false;
+        if (!track?.id || playedTrackIds.has(track.id) || seenTrackIds.has(track.id) ||
+            onDemandQueue.some((song) => isSameOnDemandSong(song, relatedTrackToSong(track)))) return false;
         seenTrackIds.add(track.id);
         return true;
       });
@@ -2091,7 +2135,8 @@ function advanceToSimilarSong() {
     return;
   }
 
-  if (onDemandRepeatMode === 'all' && onDemandQueue.length > 1) {
+  if (onDemandRepeatMode === 'all' && onDemandQueueSource === 'favourites' &&
+      onDemandQueue.length > 1) {
     onDemandQueueIndex = 0;
     window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
     startOnDemandSong(onDemandQueue[0], {
@@ -2103,9 +2148,9 @@ function advanceToSimilarSong() {
     return;
   }
 
-  // Repeat All applies to the visible session queue. Do not let autoplay
-  // recommendations extend the queue after its last track; wrap to the first
-  // queued song before considering any recommendation.
+  // Finish the already-fetched recommendation queue before wrapping. The
+  // queue grows as those recommendations are played, so Repeat All includes
+  // every track in the current recommendation batch.
   const shuffledTrack = takeShuffledAutoplayTrack();
   if (shuffledTrack) {
     playRelatedTrack(shuffledTrack);
@@ -2117,6 +2162,19 @@ function advanceToSimilarSong() {
   if (nextTrack) {
     relatedTrackCursor += 1;
     playRelatedTrack(nextTrack);
+    return;
+  }
+
+  if (onDemandRepeatMode === 'all' && onDemandQueue.length > 1 &&
+      !isFetchingRelated && !autoplayPrefetchFailed) {
+    onDemandQueueIndex = 0;
+    window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
+    startOnDemandSong(onDemandQueue[0], {
+      preserveQueue: true,
+      openNowPlaying: false,
+      recordRecent: false,
+      gapless: true
+    });
     return;
   }
 
@@ -2144,6 +2202,18 @@ function advanceToSimilarSong() {
         // A failed recommendation request is transient; leave the player in
         // its waiting state while the scheduled retry rebuilds the queue.
         attempts = 0;
+        return;
+      }
+      if (onDemandRepeatMode === 'all' && onDemandQueue.length > 1) {
+        window.clearInterval(autoplayRetryTimer);
+        onDemandQueueIndex = 0;
+        window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
+        startOnDemandSong(onDemandQueue[0], {
+          preserveQueue: true,
+          openNowPlaying: false,
+          recordRecent: false,
+          gapless: true
+        });
         return;
       }
       window.clearInterval(autoplayRetryTimer);
@@ -2300,6 +2370,7 @@ onDemandRepeatButton?.addEventListener('click', () => {
     : onDemandRepeatMode === 'one'
       ? 'all'
       : 'off';
+  if (onDemandRepeatMode === 'all') removeDuplicateOnDemandQueueEntries();
   updateOnDemandModeControls();
 });
 updateOnDemandModeControls();
@@ -2311,14 +2382,24 @@ async function playRelatedTrack(track, gapless = true) {
     finishOnDemandHandoff();
     clearAutoplayPreload();
   }
-  onDemandQueueSource = 'autoplay';
   const artworkPromise = prefetchTrackArtwork(track);
   const song = relatedTrackToSong(track);
   const requestId = ++songRequestId;
 
   selectedDuration = track.durationSeconds || parseDurationString(track.duration) || 0;
-  onDemandQueue.push(song);
-  onDemandQueueIndex = onDemandQueue.length - 1;
+  const existingQueueIndex = onDemandQueue.findIndex((queuedSong) =>
+    isSameOnDemandSong(queuedSong, song)
+  );
+  if (existingQueueIndex >= 0) {
+    onDemandQueueIndex = existingQueueIndex;
+  } else {
+    onDemandQueue.push(song);
+    onDemandQueueIndex = onDemandQueue.length - 1;
+  }
+  onDemandQueueSource = onDemandFavouriteQueueLength > 0 &&
+    onDemandQueueIndex < onDemandFavouriteQueueLength
+    ? 'favourites'
+    : 'autoplay';
   window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
   updateNowPlayingSubtitle(true);
   updateTransportButtonState();
@@ -2520,12 +2601,23 @@ async function startOnDemandSong(song, {
 }
 
 function startOnDemandQueue(songs, startIndex = 0, options = {}) {
-  const queue = Array.isArray(songs)
+  const sourceQueue = Array.isArray(songs)
     ? songs.filter((song) => song?.trackName)
     : [];
+  const queue = [];
+  const sourceIndexToQueueIndex = [];
+  sourceQueue.forEach((song, sourceIndex) => {
+    let queueIndex = queue.findIndex((queuedSong) => isSameOnDemandSong(queuedSong, song));
+    if (queueIndex < 0) {
+      queueIndex = queue.length;
+      queue.push(song);
+    }
+    sourceIndexToQueueIndex[sourceIndex] = queueIndex;
+  });
   if (!queue.length) return;
 
-  const selectedIndex = Math.max(0, Math.min(queue.length - 1, Number(startIndex) || 0));
+  const sourceSelectedIndex = Math.max(0, Math.min(sourceQueue.length - 1, Number(startIndex) || 0));
+  const selectedIndex = sourceIndexToQueueIndex[sourceSelectedIndex] ?? 0;
   const selectedSong = queue[selectedIndex];
   const selectedKey = likedQueuePreparationKey(selectedSong);
   // Mobile taps can fire again while a liked track is still resolving. Reuse
