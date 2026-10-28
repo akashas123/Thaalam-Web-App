@@ -1236,6 +1236,13 @@ function setOnDemandPlaying(isPlaying) {
   window.dispatchEvent(new Event('thaalam:on-demand-playback-state'));
 }
 
+function setOnDemandAudioReady(isReady) {
+  document.body.classList.toggle(
+    'on-demand-audio-ready',
+    Boolean(isReady) && Boolean(window.onDemandPlaybackActive)
+  );
+}
+
 function refreshOnDemandMediaSessionMetadata(song = window.currentNowPlayingSong) {
   if (!window.onDemandPlaybackActive || !navigator.mediaSession ||
       !('MediaMetadata' in window)) return;
@@ -1352,10 +1359,13 @@ function bindOnDemandAudioEvents(audio) {
     updatePlaybackProgress();
   });
   audio.addEventListener('loadedmetadata', () => {
-    if (audio === onDemandAudio) applyPendingMediaIntent();
+    if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
+    setOnDemandAudioReady(true);
+    applyPendingMediaIntent();
   });
   audio.addEventListener('playing', () => {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
+    setOnDemandAudioReady(true);
     autoplayTrackTransition = false;
     resumeOnDemandFadeAudioContext();
     logOnDemand('playing', audio.currentTime.toFixed(1), 's');
@@ -1533,11 +1543,14 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
     && !onDemandAudio.error;
 
   if (alreadyLoaded) {
+    setOnDemandAudioReady(true);
     applyPendingMediaIntent();
     return;
   }
 
   if (!requestedStreamUrl) return;
+
+  setOnDemandAudioReady(false);
 
   const metadataPromise = new Promise((resolve) => {
     let settled = false;
@@ -2378,6 +2391,7 @@ updateOnDemandModeControls();
 /* Starts a track that came from the queue list. It already has a resolved
    stream, so it skips the search round-trip that startOnDemandSong performs. */
 async function playRelatedTrack(track, gapless = true) {
+  setOnDemandAudioReady(false);
   if (!gapless) {
     finishOnDemandHandoff();
     clearAutoplayPreload();
@@ -2448,6 +2462,7 @@ async function startOnDemandSong(song, {
   gapless = true
 } = {}) {
   if (!song?.trackName) return;
+  setOnDemandAudioReady(false);
   void prepareOnDemandFadeAudio();
   if (!gapless) {
     finishOnDemandHandoff();
@@ -2695,6 +2710,7 @@ async function restoreOnDemandSession() {
   }
 
   const song = stored.song;
+  setOnDemandAudioReady(false);
   savePlaybackMode('on-demand');
   // Restore the current song and queue paused on every device. Starting audio
   // after an app reopen always requires an explicit play action.
@@ -2860,6 +2876,7 @@ function returnToLive() {
   stopOnDemandSilentLoop();
 
   window.onDemandPlaybackActive = false;
+  setOnDemandAudioReady(false);
   document.body.classList.remove('on-demand-paused');
   updateTransportButtonState();
   updateNowPlayingSubtitle(false);

@@ -3132,6 +3132,19 @@ body.on-demand-active .stream-quality:not(.is-offline) {
   justify-content: center;
 }
 
+body.on-demand-active:not(.on-demand-audio-ready) .stream-quality {
+  display: none !important;
+}
+
+body.on-demand-active:not(.on-demand-paused) .stream-quality::before {
+  animation: adaptiveDiscSpin 2.4s linear infinite;
+  transform-origin: center;
+}
+
+@keyframes adaptiveDiscSpin {
+  to { transform: rotate(360deg); }
+}
+
 .track-time .stream-quality.is-offline,
 .now-playing-track .stream-quality.is-offline {
   border-color: rgba(255, 255, 255, 0.3);
@@ -3481,7 +3494,11 @@ body.on-demand-active #onDemandNextButton { order: 4; }
 body.on-demand-active #onDemandRepeatButton { order: 5; }
 body.on-demand-active #onDemandRepeatButton { position: relative; }
 body.on-demand-active #onDemandPrevButton,
-body.on-demand-active #onDemandNextButton { flex: 0 0 3rem; }
+body.on-demand-active #onDemandNextButton {
+  width: 3.6rem;
+  height: 3.6rem;
+  flex: 0 0 3.6rem;
+}
 
 @media (min-width: 56.25rem) {
   body.on-demand-active .player-controls {
@@ -3509,6 +3526,12 @@ body.on-demand-active .transport-btn:disabled {
   fill: #fff;
 
   color: #fff;
+}
+
+body.on-demand-active #onDemandPrevButton svg,
+body.on-demand-active #onDemandNextButton svg {
+  width: 1.65rem;
+  height: 1.65rem;
 }
 
 .transport-btn:hover:not(:disabled) {
@@ -6684,6 +6707,15 @@ body.on-demand-active #onDemandRepeatButton { grid-column: 5; grid-row: 1; posit
 body.on-demand-active #onDemandShuffleButton,
 body.on-demand-active #onDemandRepeatButton { justify-self: center; }
 
+body.view-now-playing .player-controls .play-btn,
+body.view-now-playing .player-controls .play-btn:hover {
+  box-shadow: none;
+}
+
+body.view-now-playing .player-controls .play-btn svg {
+  filter: none;
+}
+
 @media (max-width: 56.1875rem) {
   body.on-demand-active .player-controls {
     width: min(100%, 27rem);
@@ -6834,13 +6866,19 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
   }
   body.on-demand-active .player-controls #onDemandPrevButton,
   body.on-demand-active .player-controls #onDemandNextButton {
-    width: 3.25rem;
-    height: 3.25rem;
+    width: 3.6rem;
+    height: 3.6rem;
+    flex-basis: 3.6rem;
   }
   body.on-demand-active .player-controls .side-control svg,
   body.on-demand-active .player-controls .transport-btn svg {
     width: 1.4rem;
     height: 1.4rem;
+  }
+  body.on-demand-active .player-controls #onDemandPrevButton svg,
+  body.on-demand-active .player-controls #onDemandNextButton svg {
+    width: 1.65rem;
+    height: 1.65rem;
   }
   body.on-demand-active .player-controls .play-btn {
     width: 3.75rem;
