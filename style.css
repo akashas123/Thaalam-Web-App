@@ -105,7 +105,7 @@
 /* Keep desktop genre-card controls visually attached to their artwork while
    the results pane scrolls. Blur and hover scaling can composite the overlay
    on a separate layer and make it appear to drift over the moving grid. */
-@media (min-width: 56.25rem) {
+@media (min-width: 56.25rem) and (pointer: fine) {
   body.view-home .genre-results .genre-card-media {
     isolation: isolate;
   }
@@ -143,7 +143,7 @@ body.on-demand-paused .tagline #nowPlaying::after {
 
 /* The liked-folder header and back row belong to the mobile Library flow.
    Hide them on wide layouts even if a mobile folder state survives resizing. */
-@media (min-width: 56.25rem) {
+@media (min-width: 56.25rem) and (pointer: fine) {
   .library-playlist-heading,
   .liked-songs-view-title {
     display: none !important;
@@ -250,7 +250,7 @@ body.view-about {
   transform: translateZ(0);
 }
 
-@media (min-width: 56.25rem) {
+@media (min-width: 56.25rem) and (pointer: fine) {
   body.desktop-cursor-hidden,
   body.desktop-cursor-hidden * {
     cursor: none !important;
@@ -545,7 +545,7 @@ body.view-about .site-page.about-page {
   }
 }
 
-@media (min-width: 56.25rem) {
+@media (min-width: 56.25rem) and (pointer: fine) {
   /* Now Playing's sideways slide is desktop-only. On mobile the page is the
      launch view — showView() no-ops there and the body class never switches —
      so the global rule only made the player card and lyrics slide in on every
@@ -591,7 +591,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
   }
 }
 
-@media (min-width: 56.25rem) {
+@media (min-width: 56.25rem) and (pointer: fine) {
   body.view-rises-from-mini.view-now-playing #nowPlayingHeading {
     animation: nowPlayingHeadingRiseIn 0.8s cubic-bezier(0.4, 0, 0.2, 1);
   }
@@ -601,7 +601,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
   display: none;
 }
 
-@media (min-width: 56.25rem) {
+@media (min-width: 56.25rem) and (pointer: fine) {
   .desktop-profile-button {
     position: fixed;
     z-index: 6;
@@ -2155,7 +2155,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
     }
   }
 
-  @media (min-width: 56.25rem) {
+  @media (min-width: 56.25rem) and (pointer: fine) {
     .genre-results.is-shuffling .genre-card {
       animation-name: genreTileShuffleDesktop;
       animation-duration: 0.56s;
@@ -2412,7 +2412,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
   }
 }
 
-@media (min-width: 56.25rem) {
+@media (min-width: 56.25rem) and (pointer: fine) {
   .now-playing-heading {
   display: none;
 }
@@ -3505,7 +3505,7 @@ body.on-demand-active #onDemandNextButton {
   flex: 0 0 3.6rem;
 }
 
-@media (min-width: 56.25rem) {
+@media (min-width: 56.25rem) and (pointer: fine) {
   body.on-demand-active .player-controls {
     gap: clamp(2.25rem, 4vw, 4rem);
   }
@@ -4290,7 +4290,7 @@ body.on-demand-active #onDemandNextButton svg {
   display: none;
 }
 
-@media (min-width: 56.25rem) {
+@media (min-width: 56.25rem) and (pointer: fine) {
   body.has-lyrics:not(.synced-lyrics)
   .lyrics-content {
     max-height: 68vh;
@@ -4397,7 +4397,7 @@ body.has-lyrics .lyrics-panel {
     translateX(clamp(0.5rem, 1vw, 1rem));
 }
 
-@media (min-width: 56.25rem) {
+@media (min-width: 56.25rem) and (pointer: fine) {
   body.has-lyrics .app {
     transform: translateX(0);
   }
@@ -5530,7 +5530,7 @@ body.has-lyrics .lyrics-panel {
 }
 
 /* Desktop listening layout: artwork beside the complete player controls. */
-@media (min-width: 56.25rem) {
+@media (min-width: 56.25rem) and (pointer: fine) {
   body.view-now-playing .app {
     top: 0;
     display: grid;
@@ -5974,7 +5974,7 @@ img {
   user-drag: none;
 }
 
-@media (min-width: 56.25rem) and (max-width: 75rem) {
+@media (min-width: 56.25rem) and (pointer: fine) and (max-width: 75rem) {
   body.view-now-playing .now-playing-track > .on-demand-like-button {
     left: -0.65rem;
   }
@@ -6497,7 +6497,7 @@ img {
 }
 
 /* Desktop favourites use clean glyph actions instead of circular controls. */
-@media (min-width: 56.25rem) {
+@media (min-width: 56.25rem) and (pointer: fine) {
   .genre-results.favourites-view .genre-info-button,
   .genre-results.favourites-view .genre-remove-favourite-button {
     border: 0;
@@ -6566,7 +6566,7 @@ img {
   .genre-tab[data-genre="recently-played"] { display: none; }
 }
 
-@media (min-width: 56.25rem) {
+@media (min-width: 56.25rem) and (pointer: fine) {
   .genre-results.desktop-search-list-layout {
     grid-template-columns: minmax(0, 1fr);
     gap: 0.1rem;
@@ -6749,7 +6749,7 @@ body.view-now-playing.on-demand-active .live-row .progress-thumb {
   display: none !important;
 }
 
-@media (min-width: 56.25rem) {
+@media (min-width: 56.25rem) and (pointer: fine) {
   body.view-now-playing .desktop-nav {
     background: transparent;
     box-shadow: none;
@@ -6765,7 +6765,7 @@ body.view-now-playing.on-demand-active .live-row .progress-thumb {
   }
 }
 
-@media (min-width: 56.25rem) {
+@media (min-width: 56.25rem) and (pointer: fine) {
   body.view-now-playing.on-demand-active .player-controls {
     justify-self: start;
     margin-left: 0;
@@ -6774,6 +6774,26 @@ body.view-now-playing.on-demand-active .live-row .progress-thumb {
 
 body.on-demand-active #onDemandRepeatButton.is-active {
   color: var(--liked-folder-color, #ff1744);
+}
+/* Keep the selected heart at the same full-strength color as active transport
+   controls. The metadata row is subdued, so apply that opacity to its text only. */
+body.on-demand-active .tagline.now-playing-track {
+  opacity: 1;
+}
+body.on-demand-active .tagline.now-playing-track #nowPlaying {
+  opacity: 0.72;
+}
+body.on-demand-active .on-demand-like-button.rating-selected {
+  color: var(--liked-folder-color, #ff1744) !important;
+  opacity: 1;
+}
+/* Use the same selected-heart color in the mini player on desktop and mobile. */
+.mini-player-like.is-active {
+  color: var(--liked-folder-color, #ff1744) !important;
+}
+.mini-player-like.is-active svg {
+  fill: var(--liked-folder-color, #ff1744) !important;
+  stroke: var(--liked-folder-color, #ff1744) !important;
 }
 body.on-demand-active #onDemandRepeatButton {
   position: relative;
