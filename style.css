@@ -5109,7 +5109,7 @@ body.has-lyrics .lyrics-panel {
     display: grid;
     min-height: 3.75rem;
     padding: 0.45rem 0.75rem 0.2rem;
-    grid-template-columns: minmax(0, 1fr) 2.25rem 2.25rem;
+    grid-template-columns: minmax(0, 1fr) 2.25rem 2.8rem;
     align-items: center;
     border: 0;
     background: color-mix(in srgb, var(--album-dominant-color, #05070d) 42%, #05070d) !important;
@@ -5122,7 +5122,7 @@ body.has-lyrics .lyrics-panel {
 
   body.mini-player-visible.view-home .mini-player.is-on-demand,
   body.mini-player-visible.view-library .mini-player.is-on-demand {
-    grid-template-columns: minmax(0, 1fr) 2.1rem 2.1rem 2.1rem;
+    grid-template-columns: minmax(0, 1fr) 2.1rem 2.8rem 2.1rem;
   }
 
   body.mini-player-visible.view-home .mini-player-transport,
@@ -5142,7 +5142,7 @@ body.has-lyrics .lyrics-panel {
   body.mini-player-visible.view-home #miniVolumeValue,
   body.mini-player-visible.view-library #miniVolumeValue { display: none; }
   body.mini-player-visible.view-home .mini-player-center,
-  body.mini-player-visible.view-library .mini-player-center { position: static; grid-column: 1; grid-row: 1; min-width: 0; overflow: visible; }
+  body.mini-player-visible.view-library .mini-player-center { position: static; grid-column: 1; grid-row: 1; min-width: 0; overflow: visible; padding-right: 0.5rem; }
   body.mini-player-visible.view-home .mini-player-now,
   body.mini-player-visible.view-library .mini-player-now { display: flex; min-width: 0; align-items: center; gap: 0.65rem; }
   body.mini-player-visible.view-home .mini-player-art,
@@ -5178,9 +5178,9 @@ body.has-lyrics .lyrics-panel {
   body.mini-player-visible.view-home .mini-player-like.is-active svg,
   body.mini-player-visible.view-library .mini-player-like.is-active svg { fill: var(--liked-folder-color); stroke: var(--liked-folder-color); }
   body.mini-player-visible.view-home .mini-player-toggle,
-  body.mini-player-visible.view-library .mini-player-toggle { position: relative; display: grid; width: 2.25rem; height: 2.4rem; grid-column: 3; grid-row: 1; place-items: center; border: 0; border-radius: 50%; background: transparent; color: #fff; }
+  body.mini-player-visible.view-library .mini-player-toggle { position: relative; display: grid; width: 2.8rem; height: 2.8rem; grid-column: 3; grid-row: 1; place-items: center; border: 0; border-radius: 50%; background: transparent; color: #fff; }
   body.mini-player-visible.view-home .mini-player-toggle svg,
-  body.mini-player-visible.view-library .mini-player-toggle svg { width: 1.35rem; height: 1.35rem; fill: currentColor; }
+  body.mini-player-visible.view-library .mini-player-toggle svg { width: 1.65rem; height: 1.65rem; fill: currentColor; }
   body.mini-player-visible.view-home #miniNextButton,
   body.mini-player-visible.view-library #miniNextButton { display: none; }
   body.mini-player-visible.view-home #miniNextButton.is-on-demand,
@@ -6293,6 +6293,11 @@ img {
     background: transparent;
   }
 
+  body.mobile-search-active.view-home .genre-results.search-list-layout {
+    padding-bottom: calc(7.5rem + env(safe-area-inset-bottom, 0px));
+    scroll-padding-bottom: calc(7.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
   /* Keep the search results viewport behind the fixed controls, like Home's
      shelves. The scroll tail is then covered by the mini-player/navigation
      instead of appearing as a black strip between the list and the controls. */
@@ -6304,7 +6309,7 @@ img {
     max-height: none;
     min-height: 0;
     margin-bottom: 0;
-    padding-bottom: calc(7.5rem + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(10rem + env(safe-area-inset-bottom, 0px));
   }
 
   /* De-congest the transport row on small phones: the base mobile grid uses
@@ -6403,7 +6408,7 @@ img {
     overscroll-behavior-y: contain;
     touch-action: pan-y;
     -webkit-overflow-scrolling: touch;
-    padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(7.5rem + env(safe-area-inset-bottom, 0px));
     scrollbar-width: none;
   }
 
@@ -6451,7 +6456,7 @@ img {
   }
 
   body.mini-player-visible.view-home.library-playlist-open #genreResults.favourites-list-layout:not(:has(> .genre-empty)) {
-    padding-bottom: calc(8.5rem + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(10rem + env(safe-area-inset-bottom, 0px));
   }
 }
 
