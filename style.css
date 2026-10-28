@@ -1827,6 +1827,37 @@ body.view-rises-from-mini.view-now-playing .player-view {
     font-size: 0.82rem;
   }
 
+  body.view-home .favourite-sort-control {
+    display: grid;
+    width: 100%;
+    box-sizing: border-box;
+    grid-template-columns: max-content max-content max-content;
+    justify-content: end;
+    align-items: center;
+    margin-top: 0;
+  }
+
+  body.view-home .favourite-sort-control label {
+    display: inline-flex;
+    width: max-content;
+    min-width: max-content;
+    align-items: center;
+    gap: 0.45rem;
+    white-space: nowrap;
+  }
+
+  body.view-home .favourite-sort-control label span {
+    display: inline-block;
+    width: max-content;
+    min-width: max-content;
+    overflow: visible;
+    white-space: nowrap;
+  }
+
+  body.view-home .favourite-sort-control[hidden] {
+    display: none;
+  }
+
   .favourite-sort-control[hidden] {
     display: none;
   }
