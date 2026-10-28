@@ -1066,6 +1066,7 @@ function getScrubSecondsFromPointer(clientX, bar) {
 function repaintScrub() {
   updatePlaybackProgress();
   window.updateMiniPlayerTime?.();
+  syncAdaptiveDiscPosition(scrubTargetSeconds, 'seeking');
 }
 
 /* On-demand only: live radio is not seekable, so pointerdown is ignored there. */
@@ -1108,6 +1109,10 @@ function resetScrub() {
   scrubbingBar?.classList.remove('is-scrubbing');
   playbackProgressBar?.classList.remove('is-scrubbing');
   scrubbingBar = null;
+  if (window.onDemandPlaybackActive) {
+    syncAdaptiveDisc(onDemandAudio,
+      !onDemandAudio.paused && !onDemandAudio.ended ? 'playing' : 'paused');
+  }
 }
 
 /* The mini clock reads this so its readout follows the drag too. */
@@ -1349,18 +1354,54 @@ function applyPendingMediaIntent() {
   }
 }
 
+function syncAdaptiveDiscPosition(seconds, state = 'playing') {
+  const badge = document.getElementById('streamQuality');
+  if (!badge) return;
+  const angle = (Number(seconds) || 0) * 150;
+  badge.style.setProperty('--adaptive-disc-angle', `${angle}deg`);
+  badge.classList.toggle('is-disc-paused', state !== 'playing');
+  badge.classList.toggle('is-disc-seeking', state === 'seeking');
+}
+
+function syncAdaptiveDisc(audio, state = 'playing') {
+  if (audio !== onDemandAudio) return;
+  syncAdaptiveDiscPosition(audio.currentTime, state);
+}
+
+function pauseAdaptiveDiscAtCurrentAngle() {
+  const badge = document.getElementById('streamQuality');
+  if (!badge) return;
+  badge.classList.toggle('is-disc-paused', !isScrubbing);
+  badge.classList.toggle('is-disc-seeking', isScrubbing);
+}
+
 function bindOnDemandAudioEvents(audio) {
   audio.addEventListener('timeupdate', () => {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
+    syncAdaptiveDisc(audio, audio.seeking
+      ? 'seeking'
+      : (!audio.paused && !audio.ended ? 'playing' : 'paused'));
     updatePlaybackProgress();
   });
   audio.addEventListener('loadedmetadata', () => {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
+    syncAdaptiveDisc(audio, 'paused');
     setOnDemandAudioReady(true);
     applyPendingMediaIntent();
   });
+  audio.addEventListener('seeking', () => {
+    if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
+    syncAdaptiveDisc(audio, 'seeking');
+  });
+  audio.addEventListener('seeked', () => {
+    if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
+    // Keep the seek transition active through the final seeked position so
+    // reverse scrubbing visibly follows the playhead even while audio is paused.
+    syncAdaptiveDisc(audio, !audio.paused && !audio.ended ? 'playing' : 'paused');
+  });
   audio.addEventListener('playing', () => {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
+    syncAdaptiveDisc(audio, 'playing');
     setOnDemandAudioReady(true);
     autoplayTrackTransition = false;
     resumeOnDemandFadeAudioContext();
@@ -1391,6 +1432,9 @@ function bindOnDemandAudioEvents(audio) {
   // cleared the active flag — this guard keeps teardown from repainting state.
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive ||
         audio.ended || autoplayTrackTransition) return;
+    // Preserve the displayed angle: a scrub preview can be ahead of the media
+    // element until its seek finishes, so pausing must not snap it backward.
+    pauseAdaptiveDiscAtCurrentAngle();
     onDemandModeLabel.textContent = 'ON DEMAND';
     if (navigator.mediaSession) {
       try { navigator.mediaSession.playbackState = 'paused'; } catch { /* ignore */ }
@@ -1408,6 +1452,7 @@ function bindOnDemandAudioEvents(audio) {
   }
   audio.addEventListener('ended', () => {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
+    syncAdaptiveDisc(audio, 'paused');
     if (autoplayTrackTransition) return;
     if (onDemandRepeatMode === 'all' && onDemandQueueSource === 'favourites' &&
         onDemandQueue.length > 1) {
