@@ -33,7 +33,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=619">
+  <link rel="stylesheet" href="style.css?v=622">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -2009,14 +2009,18 @@
     function sampleHomeTint(url) {
       const requestId = ++homeTintSampleRequest;
       // No fallback glow: empty grids, missing art, and CORS-blocked probes
-      // keep Home flat dark. Only a successfully sampled color adds the wash.
-      setHomeTint('');
-      if (!url) return;
+      // keep Home flat dark. Keep the current tint while a new cover is sampled
+      // so the registered color can transition directly to its next value.
+      if (!url) {
+        setHomeTint('');
+        return;
+      }
       const probe = new Image();
       probe.crossOrigin = 'anonymous';
       probe.decoding = 'async';
       probe.onerror = () => {
         if (requestId !== homeTintSampleRequest) return;
+        setHomeTint('');
         // CORS-blocked art (e.g. some chart images) still gets a soft
         // neutral glow from the blurred ::before layer alone — leave the
         // wash cleared so it can't mismatch the real cover.
@@ -2741,6 +2745,11 @@
         const card = document.createElement('article');
         card.className = 'mobile-genre-track';
         card.__onDemandSong = song;
+        if (category.title === 'Recents') {
+          card.dataset.recentTrackKey = song.recentDisplayType === 'liked-folder'
+            ? 'liked-folder'
+            : `${song.providerTrackId || song.trackId || ''}:${song.trackName || ''}:${song.artistName || ''}`.toLocaleLowerCase();
+        }
         const play = document.createElement('button');
         play.type = 'button';
         play.className = 'mobile-genre-track-art';
@@ -2798,7 +2807,12 @@
     function updateMobileRecents() {
       const shelves = document.getElementById('mobileGenreShelves');
       if (!shelves || desktopNavigation.matches) return;
-      shelves.querySelector('.mobile-recents-row')?.remove();
+      const previousRecents = shelves.querySelector('.mobile-recents-row');
+      const previousPositions = new Map();
+      previousRecents?.querySelectorAll('[data-recent-track-key]').forEach((card) => {
+        previousPositions.set(card.dataset.recentTrackKey, card.getBoundingClientRect().left);
+      });
+      previousRecents?.remove();
       const songs = window.getOnDemandHistory?.() || [];
       if (songs.length) {
         const recents = renderMobileHomeGenreRow(
@@ -2806,6 +2820,27 @@
         );
         recents.classList.add('mobile-recents-row');
         shelves.prepend(recents);
+        if (previousPositions.size && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          requestAnimationFrame(() => {
+            recents.querySelectorAll('[data-recent-track-key]').forEach((card) => {
+              const oldLeft = previousPositions.get(card.dataset.recentTrackKey);
+              if (oldLeft === undefined) {
+                card.animate(
+                  [{ opacity: 0, transform: 'translateX(-0.75rem)' }, { opacity: 1, transform: 'translateX(0)' }],
+                  { duration: 240, easing: 'cubic-bezier(.2,.7,.25,1)' }
+                );
+                return;
+              }
+              const shift = oldLeft - card.getBoundingClientRect().left;
+              if (Math.abs(shift) > 1) {
+                card.animate(
+                  [{ transform: `translateX(${shift}px)` }, { transform: 'translateX(0)' }],
+                  { duration: 280, easing: 'cubic-bezier(.2,.7,.25,1)' }
+                );
+              }
+            });
+          });
+        }
       }
       updateMobileHomeTint();
     }
@@ -2933,6 +2968,7 @@
     }
 
     window.addEventListener('thaalam-on-demand-history-change', () => {
+      updateMobileRecents();
       if (desktopNavigation.matches && Object.prototype.hasOwnProperty.call(genreFeedIds, activeGenre)) {
         renderGenreResults(lastGenreResultsSongs);
       }

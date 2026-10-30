@@ -194,14 +194,10 @@ body {
    soft top-left wash flowing down. No albums -> flat dark (#05070d), same
    as About. The live album gradient belongs to Now Playing only. */
 body.view-home {
-  background: #05070d;
-}
-
-/* Keep the app dark while borrowing a small wash from the first album. */
-body.view-home.has-home-glow {
   background:
     radial-gradient(ellipse 88% 52% at 0% 0%, color-mix(in srgb, var(--home-tint) 58%, transparent), transparent 100%),
     #05070d;
+  transition: --home-tint 850ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 body.view-home::before {
