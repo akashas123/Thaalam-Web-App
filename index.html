@@ -301,7 +301,7 @@
       <header class="home-catalog-header">
         <div>
           <h1 id="homeTitle" tabindex="-1">Browse music</h1>
-          <p class="site-page-copy">Explore songs by genre</p>
+          <p class="site-page-copy">Personalised picks refreshed daily</p>
         </div>
         <form class="catalog-search" id="catalogSearchForm" role="search">
           <input id="catalogSearchInput" type="search" autocomplete="off" aria-label="Search songs or artists" aria-autocomplete="list" aria-controls="catalogSuggestions" aria-expanded="false" placeholder="Search songs or artists">
@@ -1107,6 +1107,19 @@
     const catalogSearchInput = document.getElementById('catalogSearchInput');
     const catalogSuggestions = document.getElementById('catalogSuggestions');
     const catalogClearButton = document.getElementById('catalogClearButton');
+    function setPersonalisedPicksSubtitle() {
+      if (homeSubtitle) {
+        homeSubtitle.textContent = desktopNavigation.matches
+          ? 'Personalised picks refreshed daily'
+          : 'Personalised picks';
+      }
+    }
+    setPersonalisedPicksSubtitle();
+    desktopNavigation.addEventListener('change', () => {
+      if (['Personalised picks', 'Personalised picks refreshed daily'].includes(homeSubtitle?.textContent.trim())) {
+        setPersonalisedPicksSubtitle();
+      }
+    });
     const catalogSongInfoDialog = document.getElementById('catalogSongInfoDialog');
     const catalogSongInfoArt = document.getElementById('catalogSongInfoArt');
     const catalogSongInfoTrack = document.getElementById('catalogSongInfoTrack');
@@ -3724,10 +3737,9 @@
           : genre === 'recently-played' ? 'Search recent songs' : 'Search songs'
       );
       if (desktopNavigation.matches) {
-        homeSubtitle.textContent = genre === 'you-like'
-          ? 'Explore songs from your library'
-          : genre === 'recently-played' ? 'Your playback history'
-          : 'Explore songs by genre';
+        if (genre === 'you-like') homeSubtitle.textContent = 'Explore songs from your library';
+        else if (genre === 'recently-played') homeSubtitle.textContent = 'Your playback history';
+        else setPersonalisedPicksSubtitle();
       }
       genreTabList.hidden = false;
       genreTabs.forEach((tab) => {
@@ -3999,11 +4011,9 @@
         return;
       }
       const storedView = readActiveView();
-      homeSubtitle.textContent = activeGenre === 'you-like'
-        ? 'Explore songs from your library'
-        : activeGenre.startsWith('search:')
-          ? 'Explore songs by search'
-          : 'Explore songs by genre';
+      if (activeGenre === 'you-like') homeSubtitle.textContent = 'Explore songs from your library';
+      else if (activeGenre.startsWith('search:')) homeSubtitle.textContent = 'Explore songs by search';
+      else setPersonalisedPicksSubtitle();
       applyView(storedView);
       requestAnimationFrame(() => {
         window.updateMiniPlayerMarquees?.();
@@ -4200,9 +4210,8 @@
       document.getElementById('likedSongsHeader').hidden = !state.likedSongsOpen;
       moveLikedFolderControls(Boolean(state.likedSongsOpen));
       setMobileDestination(destination);
-      homeSubtitle.textContent = state.searching
-        ? 'Explore songs by search'
-        : 'Explore songs by genre';
+      if (state.searching) homeSubtitle.textContent = 'Explore songs by search';
+      else setPersonalisedPicksSubtitle();
       if (view === 'now-playing') {
         showView('now-playing', { riseFromMiniPlayer: true });
         return;
@@ -4256,7 +4265,7 @@
           if (activeGenre !== 'international' || (cameFromSearch && !hadSearchText) || (cameFromLikedSongs && !hadSearchText)) {
             loadGenre('international');
           }
-          homeSubtitle.textContent = 'Explore songs by genre';
+          setPersonalisedPicksSubtitle();
           showView('home');
         } else if (destination === 'search') {
           moveLikedFolderControls(false);
