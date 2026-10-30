@@ -2928,11 +2928,6 @@
     }
 
     window.addEventListener('thaalam-on-demand-history-change', () => {
-      updateMobileRecents();
-      if (!desktopNavigation.matches && !document.body.classList.contains('mobile-search-active')) {
-        mobileHomeGenresLoaded = false;
-        void loadMobileHomeGenres();
-      }
       if (desktopNavigation.matches && Object.prototype.hasOwnProperty.call(genreFeedIds, activeGenre)) {
         renderGenreResults(lastGenreResultsSongs);
       }
