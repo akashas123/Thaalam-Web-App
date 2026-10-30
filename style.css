@@ -922,7 +922,11 @@ body.view-rises-from-mini.view-now-playing .player-view {
   }
 
   .mini-player-volume.is-muted {
-    color: #ff5c7a;
+    color: var(--liked-folder-color, #ff1744);
+  }
+
+  .mini-player-volume {
+    color: var(--liked-folder-color, #ff1744);
   }
 
   /* Visible volume slider (0-100) sitting right after the speaker icon. */
@@ -980,7 +984,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
   .mini-player-volume-value {
     min-width: 2ch;
     margin-left: 0.15rem;
-    color: rgba(255, 255, 255, 0.72);
+    color: var(--liked-folder-color, #ff1744);
     font-size: 0.72rem;
     font-variant-numeric: tabular-nums;
     text-align: right;
@@ -989,13 +993,25 @@ body.view-rises-from-mini.view-now-playing .player-view {
   }
 
   .mini-player-volume-value.is-muted {
-    color: #ff5c7a;
+    color: var(--liked-folder-color, #ff1744);
   }
 
   .mini-player-ctrl:hover:not(:disabled) {
     background: rgba(255, 255, 255, 0.1);
     color: #fff;
     transform: scale(1.06);
+  }
+
+  .mini-player .mini-player-ctrl:hover:not(:disabled),
+  .mini-player .mini-player-ctrl:active:not(:disabled) {
+    background: transparent;
+    transform: none;
+  }
+
+  .mini-player .mini-player-ctrl:focus-visible,
+  .mini-player .mini-player-toggle:focus-visible {
+    outline: none;
+    filter: brightness(1.4);
   }
 
   .mini-player-ctrl:active:not(:disabled) {
@@ -1242,8 +1258,13 @@ body.view-rises-from-mini.view-now-playing .player-view {
   }
 
   .mini-player-toggle:hover {
-    transform: scale(1.06);
-    background: rgba(255, 255, 255, 0.12);
+    transform: none;
+    background: transparent;
+  }
+
+  .mini-player-toggle:active {
+    transform: none;
+    background: transparent;
   }
 
   .mini-player-toggle:focus-visible,
@@ -6016,11 +6037,15 @@ body.has-lyrics .lyrics-panel {
   }
 
   body.view-now-playing:not(.has-lyrics) .lyrics-content {
-    display: grid;
-    height: 100%;
+    position: absolute;
+    top: calc(50% - 8.25rem);
+    left: 50%;
+    width: max-content;
+    height: auto;
     max-height: none;
+    max-width: 100%;
     padding: 0;
-    place-items: center;
+    transform: translate(-50%, -50%);
     text-align: center;
   }
 
@@ -6049,6 +6074,13 @@ body {
 img {
   -webkit-user-drag: none;
   user-drag: none;
+}
+
+/* Keep keyboard interaction working without showing browser-style selection
+   rings around controls across the site. */
+:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
 }
 
 @media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) and (max-width: 75rem) {

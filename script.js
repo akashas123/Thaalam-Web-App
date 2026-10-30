@@ -999,6 +999,46 @@ window.showPlayerPlayIcon = showPlayIcon;
 window.showPlayerPauseIcon = showPauseIcon;
 window.togglePlay = togglePlay;
 
+document.addEventListener('keydown', (event) => {
+  if (event.repeat || event.defaultPrevented || !miniPlayer || miniPlayer.hidden ||
+      miniPlayer.getClientRects().length === 0) return;
+  const target = event.target;
+  if (target instanceof Element && target.closest(
+    'input, textarea, select, button, a, [contenteditable="true"], [role="button"], [role="textbox"], [role="slider"]'
+  )) return;
+
+  const key = event.code === 'Space' ? 'space' : event.key.toLowerCase();
+  const shortcuts = {
+    space: null,
+    arrowleft: miniPrevButton,
+    arrowright: miniNextButton,
+    s: miniShuffleButton,
+    r: miniRepeatButton,
+    l: miniLikeButton,
+    i: miniInfoButton,
+    m: miniVolumeButton
+  };
+  if (key === '+' || key === '=') {
+    event.preventDefault();
+    applyVolumeLevel(Number(miniVolumeSlider?.value || 0) + 5, { persist: true });
+    return;
+  }
+  if (key === '-') {
+    event.preventDefault();
+    applyVolumeLevel(Number(miniVolumeSlider?.value || 0) - 5, { persist: true });
+    return;
+  }
+  if (!(key in shortcuts)) return;
+
+  event.preventDefault();
+  if (key === 'space') {
+    togglePlay();
+    return;
+  }
+  const button = shortcuts[key];
+  if (button && !button.disabled) button.click();
+});
+
 if (radio) {
   const markStreamStalled = () => {
     if (radio.paused) return;
