@@ -1167,6 +1167,43 @@
         'shankar mahadevan tamil', 'srinivas tamil'
       ]
     };
+
+    function reorderDesktopGenreTabsFromHistory() {
+      if (!genreTabList) return;
+      const languageToGenre = [
+        ['international', 'english'],
+        ['hindi', 'hindi'],
+        ['malayalam', 'malayalam'],
+        ['tamil', 'tamil']
+      ];
+      const playsByGenre = new Map(languageToGenre.map(([genre]) => [genre, 0]));
+      if (desktopNavigation.matches) {
+        (window.getOnDemandPlaybackHistory?.() || []).forEach((song) => {
+          const language = String(song?.language || '').trim().toLocaleLowerCase();
+          const match = languageToGenre.find(([, languageKey]) => language.includes(languageKey));
+          if (match) playsByGenre.set(match[0], playsByGenre.get(match[0]) + 1);
+        });
+      }
+
+      const originalOrder = new Map(languageToGenre.map(([genre], index) => [genre, index]));
+      const genreTabsInOrder = [...genreTabs]
+        .filter((tab) => Object.prototype.hasOwnProperty.call(genreFeedIds, tab.dataset.genre))
+        .sort((first, second) =>
+          playsByGenre.get(second.dataset.genre) - playsByGenre.get(first.dataset.genre) ||
+          originalOrder.get(first.dataset.genre) - originalOrder.get(second.dataset.genre)
+        );
+      const firstUtilityTab = [...genreTabs].find((tab) =>
+        !Object.prototype.hasOwnProperty.call(genreFeedIds, tab.dataset.genre)
+      );
+      if (!firstUtilityTab) return;
+      const orderedTabs = document.createDocumentFragment();
+      genreTabsInOrder.forEach((tab) => orderedTabs.appendChild(tab));
+      genreTabList.insertBefore(orderedTabs, firstUtilityTab);
+    }
+
+    reorderDesktopGenreTabsFromHistory();
+    desktopNavigation.addEventListener('change', reorderDesktopGenreTabsFromHistory);
+
     const genreResultCache = new Map();
     const genreResultCacheDay = new Map();
     const genreChartRequests = new Map();
@@ -3715,6 +3752,7 @@
     }
 
     window.addEventListener('thaalam-on-demand-playback-history-change', () => {
+      reorderDesktopGenreTabsFromHistory();
       if (desktopNavigation.matches && activeGenre === 'recently-played') {
         renderGenreResults(window.getOnDemandPlaybackHistory?.() || []);
       }
@@ -3864,7 +3902,8 @@
       tab.addEventListener('keydown', (event) => {
         if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
         event.preventDefault();
-        const tabs = Array.from(genreTabs).filter((candidate) => candidate.getClientRects().length > 0);
+        const tabs = Array.from(genreTabList.querySelectorAll('[data-genre]'))
+          .filter((candidate) => candidate.getClientRects().length > 0);
         const direction = event.key === 'ArrowRight' ? 1 : -1;
         const currentIndex = tabs.indexOf(tab);
         const nextTab = tabs[(currentIndex + direction + tabs.length) % tabs.length];
