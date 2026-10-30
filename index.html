@@ -33,7 +33,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=618">
+  <link rel="stylesheet" href="style.css?v=619">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -907,7 +907,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=90"></script>
-  <script src="ondemand-player.js?v=144"></script>
+  <script src="ondemand-player.js?v=157"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=12"></script>
@@ -2115,6 +2115,7 @@
     function renderGenreResults(songs) {
       if (activeGenre.startsWith('search:')) genreResults.scrollTop = 0;
       lastGenreResultsSongs = songs;
+      songs = window.filterUnavailableOnDemandSongs?.(songs) || songs;
       const wasBusy = genreResults.getAttribute('aria-busy') === 'true';
       genreResults.setAttribute('aria-busy', 'false');
       genreResults.classList.toggle(
@@ -2255,6 +2256,7 @@
         }
         const card = document.createElement('article');
         card.className = 'genre-card';
+        card.__onDemandSong = song;
         if (recentHistoryLayout) {
           card.dataset.queueSessionId = song.queueSessionId || '';
           card.dataset.queueStep = String(Number(song.queueStep) || 0);
@@ -2306,7 +2308,7 @@
             window.startOnDemandQueue(queue, songIndex >= 0 ? songIndex : 0, { openNowPlaying: false });
             return;
           }
-          window.startOnDemandSong?.(song, { openNowPlaying: false });
+          window.startOnDemandSong?.(song, { openNowPlaying: false, immediateCut: true });
         });
 
         const infoButton = document.createElement('button');
@@ -2466,7 +2468,7 @@
               window.toggleOnDemandPlayback?.();
               return;
             }
-            window.startOnDemandSong?.(song, { openNowPlaying: false });
+            window.startOnDemandSong?.(song, { openNowPlaying: false, immediateCut: true });
           });
           card.append(tapButton);
         }
@@ -2630,6 +2632,7 @@
               if (genreKey && !matchesGenreLanguage(song, genreKey)) continue;
               const mapped = {
                 trackId: song.id,
+                providerTrackId: song.id,
                 trackName: song.title,
                 artistName: song.artist,
                 collectionName: song.album,
@@ -2722,6 +2725,7 @@
 
     function renderMobileHomeGenreRow(category, songs, { shuffle = true, all = false } = {}) {
       if (!songs.length) return renderMobileGenrePlaceholders(category);
+      songs = window.filterUnavailableOnDemandSongs?.(songs) || songs;
       const section = document.createElement('section');
       section.className = 'mobile-genre-row';
       section.setAttribute('aria-label', `${category.title} songs`);
@@ -2736,6 +2740,7 @@
       (all ? tracks : tracks.slice(0, 10)).forEach((song) => {
         const card = document.createElement('article');
         card.className = 'mobile-genre-track';
+        card.__onDemandSong = song;
         const play = document.createElement('button');
         play.type = 'button';
         play.className = 'mobile-genre-track-art';
@@ -2775,7 +2780,7 @@
               .finally(() => { play.disabled = false; });
             return;
           }
-          window.startOnDemandSong?.(song, { openNowPlaying: false });
+          window.startOnDemandSong?.(song, { openNowPlaying: false, immediateCut: true });
         });
         const title = document.createElement('p');
         title.className = 'mobile-genre-track-title';
@@ -2931,6 +2936,17 @@
       if (desktopNavigation.matches && Object.prototype.hasOwnProperty.call(genreFeedIds, activeGenre)) {
         renderGenreResults(lastGenreResultsSongs);
       }
+    });
+
+    window.addEventListener('thaalam-unavailable-tracks-change', () => {
+      if (lastGenreResultsSongs.length) renderGenreResults(lastGenreResultsSongs);
+      document.querySelectorAll('.mobile-genre-track').forEach((card) => {
+        if (!window.isOnDemandSongUnavailable?.(card.__onDemandSong)) return;
+        const row = card.closest('.mobile-genre-row');
+        card.remove();
+        if (row && !row.querySelector('.mobile-genre-track')) row.remove();
+      });
+      if (!desktopNavigation.matches) updateMobileHomeTint();
     });
 
     // The daily cache is keyed to the listener's local calendar day. Refresh
