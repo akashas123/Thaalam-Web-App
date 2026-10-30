@@ -6770,6 +6770,7 @@ img {
     width: 10.5rem;
     min-height: 0;
     padding: 0.5rem 0;
+    overflow: visible;
     color: rgba(255, 255, 255, 0.62);
     pointer-events: none;
   }
@@ -6800,12 +6801,13 @@ img {
     width: max-content;
     max-width: none;
     transform: translateY(-50%);
-    color: #fff;
+    color: rgba(255, 255, 255, 0.55);
     font-size: 1.45rem;
     font-weight: 750;
     line-height: 1.35;
     text-align: right;
     white-space: nowrap;
+    overflow: visible;
     pointer-events: none;
   }
 
