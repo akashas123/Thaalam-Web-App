@@ -424,8 +424,14 @@
   </main>
 
   <aside class="mini-player" id="miniPlayer" aria-label="Now playing" hidden>
-    <!-- Left: transport cluster (prev / play / next) -->
+    <!-- Desktop transport cluster: shuffle / previous / play / next / repeat -->
     <div class="mini-player-transport">
+      <button class="mini-player-ctrl mini-player-mode" id="miniShuffleButton" type="button" aria-label="Shuffle off" title="Shuffle" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M2 7h3c4 0 8 10 12 10h5M18 14l4 3-4 3"/>
+          <path d="M2 17h3c4 0 8-10 12-10h5M18 4l4 3-4 3"/>
+        </svg>
+      </button>
       <button class="mini-player-ctrl" id="miniPrevButton" type="button" aria-label="Previous song" title="Previous song">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h2v12H6zm12 0-8.5 6L18 18z"/></svg>
       </button>
@@ -436,6 +442,9 @@
       </button>
       <button class="mini-player-ctrl" id="miniNextButton" type="button" aria-label="Next song" title="Next song">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 6h2v12h-2zM6 6l8.5 6L6 18z"/></svg>
+      </button>
+      <button class="mini-player-ctrl mini-player-mode" id="miniRepeatButton" type="button" aria-label="Repeat off" title="Repeat" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 2l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"/></svg>
       </button>
     </div>
 
@@ -625,7 +634,10 @@
       </button>
 
       <button class="side-control on-demand-mode-control" id="onDemandShuffleButton" type="button" aria-label="Shuffle off" title="Shuffle" aria-pressed="false">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M4 4l5 5m4 4 8 8"/></svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M2 7h3c4 0 8 10 12 10h5M18 14l4 3-4 3"/>
+          <path d="M2 17h3c4 0 8-10 12-10h5M18 4l4 3-4 3"/>
+        </svg>
       </button>
 
       <button
@@ -886,7 +898,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=88"></script>
-  <script src="ondemand-player.js?v=142"></script>
+  <script src="ondemand-player.js?v=144"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=12"></script>
