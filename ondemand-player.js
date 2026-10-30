@@ -50,6 +50,7 @@ let handoffOutgoingAudio = null;
 let handoffFadeIncomingAudio = null;
 let handoffVolume = 1;
 let handoffFadeProgress = 1;
+let handoffUsesGainNodes = false;
 
 // A continuously looping, inaudible stream. Mobile browsers (notably Android
 // Chrome) suspend a page's timers/JS when no audio is playing - including when
@@ -102,7 +103,7 @@ function getOnDemandGainNode(audio) {
   if (!audio) return null;
   // Keep cross-origin CDN audio on the native media path. Web Audio requires
   // CORS permission from the CDN and otherwise turns the element's output
-  // silent; the player crossfades with the media element's volume instead.
+  // silent; the player falls back to the media element's volume for fading.
   const audioSource = audio.currentSrc || audio.getAttribute('src');
   if (!audioSource) return null;
   try {
@@ -140,6 +141,32 @@ function setOnDemandGain(audio, value) {
   const now = context.currentTime;
   gain.gain.cancelScheduledValues(now);
   gain.gain.setValueAtTime(value, now);
+  return true;
+}
+function scheduleOnDemandGainCrossfade(incomingAudio, outgoingAudio, durationSeconds) {
+  const context = getOnDemandFadeAudioContext();
+  const incomingGain = getOnDemandGainNode(incomingAudio);
+  const outgoingGain = getOnDemandGainNode(outgoingAudio);
+  if (!context || context.state !== 'running' || !incomingGain || !outgoingGain) return false;
+
+  const now = context.currentTime;
+  const duration = Math.max(0.03, durationSeconds);
+  const steps = 64;
+  const incomingCurve = new Float32Array(steps + 1);
+  const outgoingCurve = new Float32Array(steps + 1);
+  for (let index = 0; index <= steps; index += 1) {
+    const progress = index / steps;
+    incomingCurve[index] = Math.sin(progress * Math.PI / 2);
+    outgoingCurve[index] = Math.cos(progress * Math.PI / 2);
+  }
+
+  [incomingGain.gain, outgoingGain.gain].forEach((parameter) => {
+    parameter.cancelScheduledValues(now);
+  });
+  incomingGain.gain.setValueAtTime(0, now);
+  outgoingGain.gain.setValueAtTime(1, now);
+  incomingGain.gain.setValueCurveAtTime(incomingCurve, now, duration);
+  outgoingGain.gain.setValueCurveAtTime(outgoingCurve, now, duration);
   return true;
 }
 function prepareOnDemandFadeAudio() {
@@ -185,6 +212,8 @@ function promotePreloadedTrack(track) {
   // Keep the outgoing stream alive while the incoming source buffers.
   handoffOutgoingAudio = previousAudio;
   handoffFadeIncomingAudio = null;
+  handoffFadeProgress = 0;
+  handoffUsesGainNodes = false;
   handoffVolume = getOnDemandVolumeLevel();
   previousAudio.volume = handoffVolume;
   onDemandAudio.volume = handoffVolume;
@@ -193,7 +222,6 @@ function promotePreloadedTrack(track) {
   // ramp below is the single source of truth for the audible crossfade.
   setOnDemandGain(previousAudio, 1);
   setOnDemandGain(onDemandAudio, 1);
-  handoffFadeProgress = 0;
   autoplayPreloadAudio.preload = 'auto';
   autoplayPreloadedTrackId = '';
   autoplayPreloadedStreamUrl = '';
@@ -227,6 +255,7 @@ function finishOnDemandHandoff() {
   handoffOutgoingAudio = null;
   handoffFadeIncomingAudio = null;
   handoffFadeProgress = 1;
+  handoffUsesGainNodes = false;
   if (onDemandAudio) onDemandAudio.volume = handoffVolume;
   if (onDemandAudio) setOnDemandGain(onDemandAudio, 1);
   if (window.onDemandPlaying !== true) {
@@ -236,12 +265,11 @@ function finishOnDemandHandoff() {
 }
 
 let handoffFinishTimer = 0;
-function finishOnDemandHandoffWhenPlaying() {
+async function finishOnDemandHandoffWhenPlaying() {
   if (!handoffOutgoingAudio || handoffFadeIncomingAudio === onDemandAudio) return;
   const incomingAudio = onDemandAudio;
   const outgoingAudio = handoffOutgoingAudio;
   handoffFadeIncomingAudio = incomingAudio;
-  const fadeStartedAt = performance.now();
   const plannedFadeMs = getAdaptiveCrossfadeSeconds(outgoingAudio.duration) * 1000;
   const outgoingDuration = Number(outgoingAudio.duration);
   const outgoingRemainingMs = Number.isFinite(outgoingDuration) && outgoingDuration > 0
@@ -260,6 +288,33 @@ function finishOnDemandHandoffWhenPlaying() {
     }
     return;
   }
+
+  // Schedule the equal-power curve in the audio renderer so it can progress
+  // without 30 ms JavaScript timer ticks while the page is backgrounded.
+  const context = getOnDemandFadeAudioContext();
+  if (context && context.state !== 'running') {
+    try { await context.resume(); }
+    catch (error) { logOnDemand('Web Audio context resume rejected:', error?.name || error); }
+  }
+  if (incomingAudio !== onDemandAudio || outgoingAudio !== handoffOutgoingAudio) return;
+  if (scheduleOnDemandGainCrossfade(incomingAudio, outgoingAudio, fadeDurationMs / 1000)) {
+    handoffFadeProgress = 0;
+    handoffUsesGainNodes = true;
+    incomingAudio.volume = handoffVolume;
+    outgoingAudio.volume = handoffVolume;
+    handoffFinishTimer = window.setTimeout(() => {
+      handoffFadeProgress = 1;
+      finishOnDemandHandoff();
+      if (!window.onDemandPlaybackActive) return;
+      if (onDemandQueueSource === 'favourites') preloadNextLikedQueueTrack();
+      else preloadNextAutoplayTrack();
+    }, fadeDurationMs + 80);
+    return;
+  }
+
+  // Cross-origin Saavn streams may deny Web Audio access, so use the media
+  // elements' volume as a fallback while continuing to stream directly.
+  const fadeStartedAt = performance.now();
   handoffFadeProgress = 0;
   incomingAudio.volume = 0;
   outgoingAudio.volume = handoffVolume;
@@ -1404,8 +1459,13 @@ function updateOnDemandMediaSessionPositionState(elapsed, duration) {
 function syncOnDemandVolumeToStored() {
   if (handoffOutgoingAudio) {
     handoffVolume = getOnDemandVolumeLevel();
-    onDemandAudio.volume = handoffVolume * handoffFadeProgress;
-    handoffOutgoingAudio.volume = handoffVolume * (1 - handoffFadeProgress);
+    if (handoffUsesGainNodes) {
+      onDemandAudio.volume = handoffVolume;
+      handoffOutgoingAudio.volume = handoffVolume;
+    } else {
+      onDemandAudio.volume = handoffVolume * handoffFadeProgress;
+      handoffOutgoingAudio.volume = handoffVolume * (1 - handoffFadeProgress);
+    }
     return;
   }
   try {
