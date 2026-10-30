@@ -455,6 +455,8 @@ function rememberOnDemandPlayback(song) {
     collectionName: String(song.collectionName || ''),
     artworkUrl100: String(song.artworkUrl100 || ''),
     trackTimeMillis: Number(song.trackTimeMillis) || 0,
+    language: String(song.language || ''),
+    primaryGenreName: String(song.primaryGenreName || ''),
     providerTrackId: String(song.providerTrackId || ''),
     queueSource: onDemandQueueSource === 'favourites' ? 'favourites' : 'autoplay',
     queueStartTrackName: String(onDemandQueue[onDemandQueueStartIndex]?.trackName || song.trackName),

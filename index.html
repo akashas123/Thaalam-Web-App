@@ -1107,7 +1107,7 @@
     // Genre tabs use Apple's genre charts. Versioned separately from the old
     // text-search and filtered result caches.
     // v9 keeps only the first 21 chart tracks (7 columns x 3 rows).
-    const GENRE_CACHE_KEY = 'thaalam-jiosaavn-genre-cache-v4';
+    const GENRE_CACHE_KEY = 'thaalam-jiosaavn-genre-cache-v5';
     const GENRE_CHART_LIMIT = 21;
     // One small ranked search request feeds both the suggestion dropdown and
     // the results grid: fetch 20, rank by relevance, show the top 20.
@@ -1237,12 +1237,28 @@
       );
     }
 
+    function getGenreHistoryArtistQueries() {
+      const counts = new Map();
+      (window.getOnDemandPlaybackHistory?.() || []).forEach((song) => {
+        const artist = String(song?.artistName || '').split(',')[0].trim();
+        // Search artists from all history, then keep only tracks explicitly
+        // tagged with this shelf's language in searchGenreChart().
+        if (!artist) return;
+        counts.set(artist, (counts.get(artist) || 0) + 1);
+      });
+      return [...counts.entries()]
+        .sort((first, second) => second[1] - first[1])
+        .slice(0, 2)
+        .map(([artist]) => artist);
+    }
+
     function loadDailyGenreChart(key) {
       const cachedSongs = getCachedDailyGenreChart(key);
       if (cachedSongs) return Promise.resolve(cachedSongs);
       if (genreChartRequests.has(key)) return genreChartRequests.get(key);
 
-      const request = searchGenreChart(getDailyGenreFeedQueries(key), 0, GENRE_CHART_LIMIT + 4, key)
+      const queries = [...getDailyGenreFeedQueries(key), ...getGenreHistoryArtistQueries()];
+      const request = searchGenreChart(queries, 0, GENRE_CHART_LIMIT + 4, key)
         .then((results) => {
           if (!results.length) throw new Error(`No ${key} songs matched the language filter.`);
           const songs = shuffleMobileItems(results).slice(0, GENRE_CHART_LIMIT);
@@ -1603,6 +1619,37 @@
         recentArtists.push(keyFor(song.artistName));
       }
       return ordered;
+    }
+
+    // Keep the full genre chart playable, while bringing familiar artists into
+    // the mix and spacing repeats on both mobile and desktop.
+    function personalizeGenreSongs(songs) {
+      const history = window.getOnDemandPlaybackHistory?.() || [];
+      if (!history.length) return songs;
+
+      const normalize = (value) => String(value || '').trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+      const artistPlays = new Map();
+      history.forEach((song) => {
+        const artist = normalize(song.artistName);
+        if (artist) artistPlays.set(artist, (artistPlays.get(artist) || 0) + 1);
+      });
+
+      const ranked = songs.map((song, index) => ({ song, index,
+        affinity: artistPlays.get(normalize(song.artistName)) || 0
+      })).sort((first, second) => second.affinity - first.affinity || first.index - second.index);
+      const mixed = [];
+      const recentArtists = [];
+      while (ranked.length) {
+        let index = ranked.findIndex(({ song }) => {
+          const artist = normalize(song.artistName);
+          return !artist || !recentArtists.slice(-2).includes(artist);
+        });
+        if (index < 0) index = 0;
+        const [{ song }] = ranked.splice(index, 1);
+        mixed.push(song);
+        recentArtists.push(normalize(song.artistName));
+      }
+      return mixed;
     }
 
     function favouriteSongIdentity(song) {
@@ -2040,14 +2087,15 @@
         ? desktopGenreShufflePending && isGenreChart
         : mobileShuffle;
       if (shuffle && desktopNavigation.matches) desktopGenreShufflePending = false;
+      const genreSongs = isGenreChart ? personalizeGenreSongs(songs) : songs;
       const orderedSongs = activeGenre === 'you-like'
         ? sortFavouriteSongs(songs)
         : recentHistoryLayout
           ? orderRecentPlaybackHistory(songs)
           : isGenreChart
             ? desktopNavigation.matches
-              ? getDesktopGenreOrder(activeGenre, songs)
-              : shuffleMobileItems(songs)
+              ? getDesktopGenreOrder(activeGenre, genreSongs)
+              : shuffleMobileItems(genreSongs)
             : diversifyGenreSongs(songs);
       // Identity of everything the cards actually show, in display order.
       // The liked-songs rescue passes patch titles/artwork on the same
@@ -2583,7 +2631,10 @@
       heading.textContent = category.title;
       const trackRow = document.createElement('div');
       trackRow.className = 'mobile-genre-track-row';
-      const tracks = shuffle ? shuffleMobileItems(songs) : songs.slice();
+      const recommendationSongs = category.key && Object.prototype.hasOwnProperty.call(genreFeedIds, category.key)
+        ? personalizeGenreSongs(songs)
+        : songs;
+      const tracks = shuffle ? shuffleMobileItems(recommendationSongs) : recommendationSongs.slice();
       (all ? tracks : tracks.slice(0, 10)).forEach((song) => {
         const card = document.createElement('article');
         card.className = 'mobile-genre-track';
@@ -2752,7 +2803,33 @@
       updateMobileRecents();
     }
 
-    window.addEventListener('thaalam-on-demand-history-change', updateMobileRecents);
+    window.addEventListener('thaalam-on-demand-history-change', () => {
+      updateMobileRecents();
+      if (!desktopNavigation.matches && !document.body.classList.contains('mobile-search-active')) {
+        mobileHomeGenresLoaded = false;
+        void loadMobileHomeGenres();
+      }
+      if (desktopNavigation.matches && Object.prototype.hasOwnProperty.call(genreFeedIds, activeGenre)) {
+        renderGenreResults(lastGenreResultsSongs);
+      }
+    });
+
+    // The daily cache is keyed to the listener's local calendar day. Refresh
+    // an already-open view shortly after midnight as well as on page visits.
+    let observedRecommendationDay = localCalendarDayKey();
+    window.setInterval(() => {
+      const today = localCalendarDayKey();
+      if (today === observedRecommendationDay) return;
+      observedRecommendationDay = today;
+      genreResultCache.clear();
+      genreResultCacheDay.clear();
+      mobileHomeGenresLoaded = false;
+      if (desktopNavigation.matches && Object.prototype.hasOwnProperty.call(genreFeedIds, activeGenre)) {
+        void loadCatalog(activeGenre, '', genreFeedIds[activeGenre]);
+      } else if (!desktopNavigation.matches && !document.body.classList.contains('mobile-search-active')) {
+        void loadMobileHomeGenres();
+      }
+    }, 60 * 1000);
 
     // Prefer official title matches over "(From "Album")" album references:
     // a query matching the song's core title (parentheticals stripped) ranks
