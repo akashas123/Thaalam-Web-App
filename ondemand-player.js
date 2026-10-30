@@ -37,7 +37,6 @@ const onDemandFallbackArtwork = new URL('thaalam-icon-512.png?v=1', window.locat
    just-ended element. */
 let onDemandAudio = new Audio();
 onDemandAudio.preload = 'auto';
-onDemandAudio.crossOrigin = 'anonymous';
 onDemandAudio.setAttribute('playsinline', '');
 onDemandAudio.setAttribute('webkit-playsinline', '');
 // Warm the next queue stream while the current track is still playing.
@@ -45,13 +44,13 @@ onDemandAudio.setAttribute('webkit-playsinline', '');
 // making the next track's first media request at that boundary.
 let autoplayPreloadAudio = new Audio();
 autoplayPreloadAudio.preload = 'auto';
-autoplayPreloadAudio.crossOrigin = 'anonymous';
 let autoplayPreloadedTrackId = '';
 let autoplayPreloadedStreamUrl = '';
 let handoffOutgoingAudio = null;
 let handoffFadeIncomingAudio = null;
 let handoffVolume = 1;
 let handoffFadeProgress = 1;
+
 // A continuously looping, inaudible stream. Mobile browsers (notably Android
 // Chrome) suspend a page's timers/JS when no audio is playing - including when
 // the screen locks - which stops on-demand track transitions. Keeping this
@@ -101,6 +100,16 @@ function getOnDemandFadeAudioContext() {
 }
 function getOnDemandGainNode(audio) {
   if (!audio) return null;
+  // Keep cross-origin CDN audio on the native media path. Web Audio requires
+  // CORS permission from the CDN and otherwise turns the element's output
+  // silent; the player crossfades with the media element's volume instead.
+  const audioSource = audio.currentSrc || audio.getAttribute('src');
+  if (!audioSource) return null;
+  try {
+    if (new URL(audioSource, window.location.href).origin !== window.location.origin) return null;
+  } catch {
+    return null;
+  }
   const existing = onDemandGainNodes.get(audio);
   if (existing) return existing;
   const context = getOnDemandFadeAudioContext();
@@ -290,6 +299,7 @@ let liveProgressSyncTime = 0;
 let trackCandidates = [];
 let trackCandidateIndex = 0;
 let rerresolvedTrackId = '';
+let fallbackSearchRequestId = -1;
 let onDemandArtworkRequestId = 0;
 const albumArtworkCache = new Map();
 
@@ -372,6 +382,66 @@ const MUSIC_SEARCH_CACHE_PREFIX = 'thaalam-jiosaavn-search-v1:';
 const MUSIC_SEARCH_CACHE_TTL = 6 * 60 * 60 * 1000;
 const NON_CATALOG_TITLE = /\b(?:official\s+)?music\s+video\b|\b(?:official\s+)?video\b|\bvisuali[sz]er\b|\blyrics?\b|\blive\b|\bkaraoke\b|\bcover\b|\bperformance\b|\breaction\b/i;
 const UNOFFICIAL_MIX_TITLE = /\b(?:unofficial|remix(?:es)?|mix(?:es)?|mash[ -]?up|medley|compilation|playlist|slowed(?:\s+\+?\s+reverb)?|sped\s*up|nightcore|bootleg|fan[ -]?made|edit|1\s*hour|extended|instrumental|8d(?:\s+audio)?|bass\s+boosted|reverb)\b/i;
+
+const UNAVAILABLE_ON_DEMAND_KEY = 'thaalam-unavailable-tracks-v1';
+const UNAVAILABLE_ON_DEMAND_TTL = 24 * 60 * 60 * 1000;
+const unavailableOnDemandKeys = new Map();
+try {
+  const storedUnavailable = JSON.parse(localStorage.getItem(UNAVAILABLE_ON_DEMAND_KEY) || '[]');
+  if (Array.isArray(storedUnavailable)) {
+    storedUnavailable.forEach((entry) => {
+      if (entry?.key && Number(entry.expiresAt) > Date.now()) {
+        const key = String(entry.key);
+        const expiresAt = Number(entry.expiresAt);
+        unavailableOnDemandKeys.set(key, expiresAt);
+        // Older entries were keyed by title + artist. Migrate them to a title
+        // key so alternate credits and duplicate catalog IDs are hidden too.
+        if (key.startsWith('song:')) {
+          const title = key.slice('song:'.length).split('|')[0];
+          if (title) unavailableOnDemandKeys.set(`title:${title}`, expiresAt);
+        }
+      }
+    });
+  }
+} catch { /* Unavailable-track filtering is best-effort when storage is blocked. */ }
+
+function unavailableSongKeys(song) {
+  if (!song) return [];
+  const id = String(song.providerTrackId || song.trackId || song.id || '');
+  const title = normalizeText(song.trackName || song.title || '');
+  const artist = normalizeText(song.artistName || song.artist || '');
+  return [
+    ...(id ? [`id:${id}`] : []),
+    ...(title ? [`title:${title}`] : []),
+    ...(title && artist ? [`song:${title}|${artist}`] : [])
+  ];
+}
+
+function isUnavailableOnDemandSong(song) {
+  return unavailableSongKeys(song).some((key) =>
+    Number(unavailableOnDemandKeys.get(key)) > Date.now());
+}
+
+function filterUnavailableOnDemandSongs(songs) {
+  return (Array.isArray(songs) ? songs : []).filter((song) => !isUnavailableOnDemandSong(song));
+}
+
+function markOnDemandSongUnavailable(song, failedCandidates = []) {
+  const expiresAt = Date.now() + UNAVAILABLE_ON_DEMAND_TTL;
+  const keys = new Set(unavailableSongKeys(song));
+  failedCandidates.forEach((candidate) => {
+    unavailableSongKeys(candidate).forEach((key) => keys.add(key));
+  });
+  keys.forEach((key) => unavailableOnDemandKeys.set(key, expiresAt));
+  try {
+    localStorage.setItem(UNAVAILABLE_ON_DEMAND_KEY, JSON.stringify(
+      [...unavailableOnDemandKeys].map(([key, expiration]) => ({ key, expiresAt: expiration }))
+    ));
+  } catch { /* Keep this visit's unavailable list in memory. */ }
+  window.dispatchEvent(new CustomEvent('thaalam-unavailable-tracks-change'));
+}
+window.filterUnavailableOnDemandSongs = filterUnavailableOnDemandSongs;
+window.isOnDemandSongUnavailable = isUnavailableOnDemandSong;
 
 /* TEMPORARY DIAGNOSTIC: set to false to silence. Reports what is written, what
    is read back, and which branch the restore actually takes. */
@@ -1635,11 +1705,87 @@ document.addEventListener('visibilitychange', resumeMobilePlaybackAfterBackgroun
 window.addEventListener('pageshow', resumeMobilePlaybackAfterBackground);
 document.addEventListener('resume', resumeMobilePlaybackAfterBackground);
 
+function markUnavailableAndSkipSong(song, failedCandidates, failedRequestId) {
+  if (failedRequestId !== songRequestId || !window.onDemandPlaybackActive) return;
+  const failedQueueIndex = onDemandQueue.findIndex((queuedSong) =>
+    isSameOnDemandSong(queuedSong, song));
+  markOnDemandSongUnavailable(song, failedCandidates);
+  const previousQueue = onDemandQueue;
+  const previousQueueIndex = onDemandQueueIndex;
+  const previousQueueStartIndex = onDemandQueueStartIndex;
+  const previousFavouriteQueueLength = onDemandFavouriteQueueLength;
+  let removedBeforeCurrent = 0;
+  let removedBeforeStart = 0;
+  let keptFavouriteCount = 0;
+  onDemandQueue = previousQueue.filter((queuedSong, index) => {
+    const unavailable = isUnavailableOnDemandSong(queuedSong);
+    if (unavailable && index < previousQueueIndex) removedBeforeCurrent += 1;
+    if (unavailable && index < previousQueueStartIndex) removedBeforeStart += 1;
+    if (!unavailable && index < previousFavouriteQueueLength) keptFavouriteCount += 1;
+    return !unavailable;
+  });
+  onDemandFavouriteQueueLength = keptFavouriteCount;
+  onDemandQueueIndex = onDemandQueue.length
+    ? Math.min(onDemandQueue.length - 1, Math.max(0, previousQueueIndex - removedBeforeCurrent))
+    : -1;
+  onDemandQueueStartIndex = onDemandQueue.length
+    ? Math.min(onDemandQueue.length - 1, Math.max(0, previousQueueStartIndex - removedBeforeStart))
+    : 0;
+  relatedTrackCache = relatedTrackCache.filter((candidate) =>
+    !isUnavailableOnDemandSong(relatedTrackToSong(candidate)));
+  relatedTrackCursor = Math.min(relatedTrackCursor, relatedTrackCache.length);
+  window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
+  updateTransportButtonState();
+
+  const nextQueuedSong = failedQueueIndex >= 0
+    ? previousQueue.slice(failedQueueIndex + 1).find((queuedSong) =>
+        !isUnavailableOnDemandSong(queuedSong))
+    : null;
+  if (nextQueuedSong) {
+    const nextQueueIndex = onDemandQueue.indexOf(nextQueuedSong);
+    if (nextQueueIndex >= 0) {
+      onDemandQueueIndex = nextQueueIndex;
+      onDemandQueueSource = nextQueueIndex < onDemandFavouriteQueueLength
+        ? 'favourites'
+        : 'autoplay';
+      updateTransportButtonState();
+      void startOnDemandSong(nextQueuedSong, {
+        preserveQueue: true,
+        openNowPlaying: false,
+        recordRecent: false,
+        gapless: false,
+        immediateCut: true
+      });
+      return;
+    }
+  }
+
+  const nextRelatedTrack = relatedTrackCache[relatedTrackCursor];
+  if (nextRelatedTrack) {
+    relatedTrackCursor += 1;
+    void playRelatedTrack(nextRelatedTrack, false);
+    return;
+  }
+
+  onDemandArtwork.hidden = false;
+  onDemandArtwork.style.opacity = '1';
+  onDemandPlayButton.disabled = false;
+  onDemandMiniToggle.disabled = false;
+  onDemandModeLabel.textContent = 'FINDING NEXT SONG';
+  onDemandStation.textContent = 'Skipping unavailable song';
+  autoplayTrackTransition = false;
+  returnToLiveButton.hidden = false;
+  advanceToSimilarSong();
+}
+
 /* Called when a stream fails: fall through to the next search result first,
    then ask the server for one fresh stream URL per track (expired CDN links),
    and only then give up with the visible UNAVAILABLE state. */
 async function handlePlaybackError() {
   if (!window.onDemandPlaybackActive) return;
+  const failedRequestId = songRequestId;
+  const failedCandidate = trackCandidates[trackCandidateIndex];
+  const failedStreamUrl = failedCandidate?.streamUrl || requestedStreamUrl;
 
   if (trackCandidateIndex + 1 < trackCandidates.length) {
     trackCandidateIndex += 1;
@@ -1658,7 +1804,7 @@ async function handlePlaybackError() {
     try {
       const fresh = await resolveSong(trackId);
       if (!window.onDemandPlaybackActive || currentOnDemandTrackId !== trackId) return;
-      if (fresh?.streamUrl) {
+      if (fresh?.streamUrl && fresh.streamUrl !== failedStreamUrl) {
         trackCandidates = [{ id: trackId, streamUrl: fresh.streamUrl }];
         trackCandidateIndex = 0;
         if (currentOnDemandSong) {
@@ -1674,16 +1820,39 @@ async function handlePlaybackError() {
     }
   }
 
+  // Some JioSaavn rows point at CDN files that have been removed (404). A
+  // fresh detail lookup can return that same dead URL, so search the matching
+  // title again and try another catalog copy before giving up.
+  if (fallbackSearchRequestId !== songRequestId && currentOnDemandSong?.trackName) {
+    fallbackSearchRequestId = songRequestId;
+    onDemandModeLabel.textContent = 'FINDING ANOTHER SOURCE';
+    try {
+      const fallback = await findOnDemandSong(currentOnDemandSong);
+      if (!window.onDemandPlaybackActive || failedRequestId !== songRequestId) return;
+      const candidates = [fallback, ...(fallback.alternatives || [])]
+        .filter((candidate) => candidate?.id && candidate?.streamUrl)
+        .filter((candidate) => String(candidate.id) !== String(trackId))
+        .filter((candidate) => candidate.streamUrl !== failedStreamUrl);
+      if (candidates.length) {
+        trackCandidates = candidates;
+        trackCandidateIndex = 0;
+        rerresolvedTrackId = '';
+        currentOnDemandSong.providerTrackId = candidates[0].id;
+        currentOnDemandSong.streamUrl = candidates[0].streamUrl;
+        setCurrentOnDemandTrack(currentOnDemandSong, candidates[0].id);
+        persistCurrentOnDemandSession();
+        updateOnDemandMetadata(currentOnDemandSong, candidates[0]);
+        await loadTrack(candidates[0], failedRequestId, 0, true);
+        return;
+      }
+    } catch (error) {
+      logOnDemand('alternate catalog search failed:', error?.message || error);
+    }
+  }
+
+  if (failedRequestId !== songRequestId || !window.onDemandPlaybackActive) return;
   console.error('Rejected every stream for this track');
-  onDemandArtwork.hidden = false;
-  onDemandArtwork.style.opacity = '1';
-  onDemandPlayButton.disabled = true;
-  onDemandMiniToggle.disabled = true;
-  onDemandModeLabel.textContent = 'UNAVAILABLE';
-  onDemandStation.textContent = 'Playback unavailable';
-  autoplayTrackTransition = false;
-  setOnDemandPlaying(false);
-  returnToLiveButton.hidden = false;
+  markUnavailableAndSkipSong(currentOnDemandSong, trackCandidates, failedRequestId);
 }
 
 /* Loads one { id, streamUrl } candidate into the audio element. Resolves once
@@ -1943,6 +2112,7 @@ function removeDuplicateOnDemandQueueEntries() {
 }
 
 function enqueueOnDemandSong(song) {
+  if (isUnavailableOnDemandSong(song)) return;
   const current = onDemandQueue[onDemandQueueIndex];
   const isSameAsCurrent = isSameOnDemandSong(current, song);
 
@@ -2182,7 +2352,8 @@ function prefetchRelatedTracks(trackId, isRetry = false) {
       ];
       const seenTrackIds = new Set();
       relatedTrackCache = pendingTracks.filter((track) => {
-        if (!track?.id || playedTrackIds.has(track.id) || seenTrackIds.has(track.id) ||
+        if (!track?.id || isUnavailableOnDemandSong(relatedTrackToSong(track)) ||
+            playedTrackIds.has(track.id) || seenTrackIds.has(track.id) ||
             onDemandQueue.some((song) => isSameOnDemandSong(song, relatedTrackToSong(track)))) return false;
         seenTrackIds.add(track.id);
         return true;
@@ -2939,6 +3110,10 @@ async function startOnDemandSong(song, {
   } catch (error) {
     if (requestId !== songRequestId) return;
     console.error('Unable to start on-demand playback:', error);
+    if (/song not playable/i.test(String(error?.message || ''))) {
+      markUnavailableAndSkipSong(song, [], requestId);
+      return;
+    }
     onDemandModeLabel.textContent = 'UNAVAILABLE';
     const message = error instanceof TypeError && error.message === 'Failed to fetch'
       ? 'Song not playable. Check your connection'
@@ -2950,8 +3125,14 @@ async function startOnDemandSong(song, {
 }
 
 function startOnDemandQueue(songs, startIndex = 0, options = {}) {
+  const originalSongs = Array.isArray(songs) ? songs.filter((song) => song?.trackName) : [];
+  const originalSelectedIndex = Math.max(0, Math.min(
+    originalSongs.length - 1,
+    Number(startIndex) || 0
+  ));
+  const originalSelectedSong = originalSongs[originalSelectedIndex];
   const sourceQueue = Array.isArray(songs)
-    ? songs.filter((song) => song?.trackName)
+    ? filterUnavailableOnDemandSongs(songs.filter((song) => song?.trackName))
     : [];
   const queue = [];
   const sourceIndexToQueueIndex = [];
@@ -2965,7 +3146,12 @@ function startOnDemandQueue(songs, startIndex = 0, options = {}) {
   });
   if (!queue.length) return;
 
-  const sourceSelectedIndex = Math.max(0, Math.min(sourceQueue.length - 1, Number(startIndex) || 0));
+  const selectedSourceIndex = originalSelectedSong
+    ? sourceQueue.findIndex((song) => isSameOnDemandSong(song, originalSelectedSong))
+    : -1;
+  const sourceSelectedIndex = selectedSourceIndex >= 0
+    ? selectedSourceIndex
+    : Math.max(0, Math.min(sourceQueue.length - 1, originalSelectedIndex));
   const selectedIndex = sourceIndexToQueueIndex[sourceSelectedIndex] ?? 0;
   const selectedSong = queue[selectedIndex];
   const selectedKey = likedQueuePreparationKey(selectedSong);
