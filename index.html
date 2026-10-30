@@ -33,7 +33,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=580">
+  <link rel="stylesheet" href="style.css?v=581">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -345,7 +345,14 @@
           </button>
         </div>
       </div>
-      <div class="genre-results" id="genreResults" role="tabpanel" aria-live="polite">
+      <div class="recent-history-panel" id="recentHistoryPanel">
+        <div class="genre-results" id="genreResults" role="tabpanel" aria-live="polite"></div>
+        <aside class="recent-history-date-rail" id="recentHistoryDateRail" aria-label="Playback history dates" hidden>
+          <label for="recentHistoryDateSlider">Date</label>
+          <output id="recentHistoryDateLabel" for="recentHistoryDateSlider">Today</output>
+          <input id="recentHistoryDateSlider" type="range" min="0" max="0" value="0" step="1" aria-label="Scroll playback history by date">
+          <span class="recent-history-date-rail-oldest" aria-hidden="true">Older</span>
+        </aside>
       </div>
     </div>
   </main>
@@ -994,6 +1001,35 @@
     const genreTabList = document.querySelector('.genre-tabs');
     const genreResults =
       document.getElementById('genreResults');
+    const recentHistoryPanel = document.getElementById('recentHistoryPanel');
+    const recentHistoryDateRail = document.getElementById('recentHistoryDateRail');
+    const recentHistoryDateSlider = document.getElementById('recentHistoryDateSlider');
+    const recentHistoryDateLabel = document.getElementById('recentHistoryDateLabel');
+    recentHistoryDateSlider.addEventListener('input', () => {
+      const headings = [...genreResults.querySelectorAll('.recent-history-date')];
+      const heading = headings[Number(recentHistoryDateSlider.value)];
+      if (!heading) return;
+      recentHistoryDateLabel.textContent = heading.textContent;
+      const scrollTop = genreResults.scrollTop + heading.getBoundingClientRect().top -
+        genreResults.getBoundingClientRect().top - 12;
+      genreResults.scrollTo({ top: scrollTop, behavior: 'smooth' });
+    });
+    let recentHistoryScrollFrame = 0;
+    genreResults.addEventListener('scroll', () => {
+      if (!genreResults.classList.contains('recent-history-layout') || recentHistoryScrollFrame) return;
+      recentHistoryScrollFrame = requestAnimationFrame(() => {
+        recentHistoryScrollFrame = 0;
+        const headings = [...genreResults.querySelectorAll('.recent-history-date')];
+        if (!headings.length) return;
+        const top = genreResults.getBoundingClientRect().top + 28;
+        let activeIndex = 0;
+        headings.forEach((heading, index) => {
+          if (heading.getBoundingClientRect().top <= top) activeIndex = index;
+        });
+        recentHistoryDateSlider.value = String(activeIndex);
+        recentHistoryDateLabel.textContent = headings[activeIndex].textContent;
+      });
+    }, { passive: true });
     // Same query as the mobile media block in style.css: search results render
     // as list rows (info button beside the details) where the
     // body.mobile-search-active rules apply, and as grid tiles elsewhere.
@@ -2045,7 +2081,12 @@
       );
       genreResults.classList.toggle('favourites-view', activeGenre === 'you-like');
       const recentHistoryLayout = activeGenre === 'recently-played';
+      if (recentHistoryLayout && !genreResults.classList.contains('recent-history-layout')) {
+        genreResults.scrollTop = 0;
+      }
       genreResults.classList.toggle('recent-history-layout', recentHistoryLayout);
+      recentHistoryPanel.classList.toggle('is-recent-history', recentHistoryLayout);
+      recentHistoryDateRail.hidden = !recentHistoryLayout || !desktopNavigation.matches;
       const desktopSearchListLayout = activeGenre.startsWith('search:') && desktopNavigation.matches;
       genreResults.classList.toggle('desktop-search-list-layout', desktopSearchListLayout);
       // Search cards keep grid-tile DOM on desktop (info button overlaid on
@@ -2074,6 +2115,7 @@
           ? 'No liked songs'
           : recentHistoryLayout ? 'No playback history available' : 'No matching songs were found.';
         genreResults.appendChild(empty);
+        recentHistoryDateRail.hidden = true;
         if (!desktopNavigation.matches && !document.body.classList.contains('mobile-search-active')) {
           updateMobileHomeTint();
         } else {
@@ -2136,6 +2178,7 @@
           if (dateKey !== previousRecentDate) {
             const heading = document.createElement('h2');
             heading.className = 'recent-history-date';
+            heading.dataset.recentDateKey = dateKey;
             const today = new Date();
             const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
             if (date.toDateString() === today.toDateString()) heading.textContent = 'Today';
@@ -2392,6 +2435,13 @@
           artwork.src = 'album-placeholder.svg?v=3';
         }
       });
+      const recentDateHeadings = [...genreResults.querySelectorAll('.recent-history-date')];
+      if (recentHistoryLayout && desktopNavigation.matches && recentDateHeadings.length) {
+        recentHistoryDateRail.hidden = recentDateHeadings.length < 2;
+        recentHistoryDateSlider.max = String(recentDateHeadings.length - 1);
+        recentHistoryDateSlider.value = '0';
+        recentHistoryDateLabel.textContent = recentDateHeadings[0].textContent;
+      }
       genreResults.dataset.renderKey = renderKey;
       refreshFavouriteListPlaybackState();
       if (shuffle) {
@@ -2710,6 +2760,18 @@
     function orderRecentPlaybackHistory(songs) {
       const dates = new Map();
       const inferredLegacySessionIds = new Map();
+      const currentSong = window.onDemandPlaybackActive
+        ? window.getCurrentOnDemandSong?.()
+        : null;
+      const normalizeTrackPart = (value) => String(value || '').trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+      const isCurrentSong = (song) => {
+        if (!currentSong) return false;
+        const currentId = String(currentSong.providerTrackId || currentSong.trackId || '');
+        const songId = String(song.providerTrackId || song.trackId || '');
+        if (currentId && songId && currentId === songId) return true;
+        return normalizeTrackPart(song.trackName) === normalizeTrackPart(currentSong.trackName) &&
+          normalizeTrackPart(song.artistName) === normalizeTrackPart(currentSong.artistName);
+      };
       const legacyEntries = songs
         .map((song, index) => ({ song, index, playedAt: Number(song.playedAt) || 0 }))
         .filter(({ song }) => !song.queueSessionId)
@@ -2758,10 +2820,24 @@
         .flatMap((day) => [...day.sessions.values()]
           .sort((first, second) => second.latestAt - first.latestAt)
           .flatMap((session) => session.songs
-            .sort((first, second) =>
-              (Number(first.queueStep) || 0) - (Number(second.queueStep) || 0) ||
-              (Number(first.playedAt) || 0) - (Number(second.playedAt) || 0)
-            )
+            .sort((first, second) => {
+              if (session.queueSource === 'autoplay') {
+                const startTrackName = session.songs[0]?.queueStartTrackName;
+                const isStartedTrack = (song) => Number(song.queueStep) === 0 ||
+                  (startTrackName && normalizeTrackPart(song.trackName) === normalizeTrackPart(startTrackName));
+                const priority = (song) => isStartedTrack(song)
+                  ? 0
+                  : isCurrentSong(song) ? 1 : 2;
+                const priorityDifference = priority(first) - priority(second);
+                if (priorityDifference) return priorityDifference;
+              } else if (currentSong) {
+                const firstIsCurrent = isCurrentSong(first);
+                const secondIsCurrent = isCurrentSong(second);
+                if (firstIsCurrent !== secondIsCurrent) return firstIsCurrent ? -1 : 1;
+              }
+              return (Number(first.queueStep) || 0) - (Number(second.queueStep) || 0) ||
+                (Number(first.playedAt) || 0) - (Number(second.playedAt) || 0);
+            })
             .map((song) => ({
               ...song,
               displayQueueSessionId: session.id,
