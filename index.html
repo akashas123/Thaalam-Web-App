@@ -33,7 +33,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=581">
+  <link rel="stylesheet" href="style.css?v=609">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -351,6 +351,8 @@
           <label for="recentHistoryDateSlider">Date</label>
           <output id="recentHistoryDateLabel" for="recentHistoryDateSlider">Today</output>
           <input id="recentHistoryDateSlider" type="range" min="0" max="0" value="0" step="1" aria-label="Scroll playback history by date">
+          <span class="recent-history-date-progress" id="recentHistoryDateProgress" aria-hidden="true"></span>
+          <span class="recent-history-date-thumb" id="recentHistoryDateThumb" aria-hidden="true"></span>
           <span class="recent-history-date-rail-oldest" aria-hidden="true">Older</span>
         </aside>
       </div>
@@ -1005,14 +1007,33 @@
     const recentHistoryDateRail = document.getElementById('recentHistoryDateRail');
     const recentHistoryDateSlider = document.getElementById('recentHistoryDateSlider');
     const recentHistoryDateLabel = document.getElementById('recentHistoryDateLabel');
-    recentHistoryDateSlider.addEventListener('input', () => {
-      const headings = [...genreResults.querySelectorAll('.recent-history-date')];
-      const heading = headings[Number(recentHistoryDateSlider.value)];
+    const recentHistoryDateProgress = document.getElementById('recentHistoryDateProgress');
+    const recentHistoryDateThumb = document.getElementById('recentHistoryDateThumb');
+    function updateRecentHistoryDateIndicator(headings, index) {
+      const heading = headings[index];
       if (!heading) return;
       recentHistoryDateLabel.textContent = heading.textContent;
-      const scrollTop = genreResults.scrollTop + heading.getBoundingClientRect().top -
-        genreResults.getBoundingClientRect().top - 12;
-      genreResults.scrollTo({ top: scrollTop, behavior: 'smooth' });
+      const range = Number(recentHistoryDateSlider.max) || 0;
+      const progress = range ? Number(recentHistoryDateSlider.value) / range : 0;
+      const thumbInset = 4;
+      const sliderTop = recentHistoryDateSlider.offsetTop;
+      const sliderTravel = Math.max(0, recentHistoryDateSlider.clientHeight - thumbInset * 2);
+      const thumbTop = sliderTop + thumbInset + progress * sliderTravel;
+      recentHistoryDateProgress.style.top = `${sliderTop}px`;
+      recentHistoryDateProgress.style.height = `${thumbInset + progress * sliderTravel}px`;
+      recentHistoryDateThumb.style.top = `${thumbTop}px`;
+      const labelHeight = recentHistoryDateLabel.offsetHeight || 18;
+      const maxTop = Math.max(labelHeight / 2, recentHistoryDateRail.clientHeight - labelHeight / 2 - 16);
+      const labelTop = Math.min(maxTop, Math.max(labelHeight / 2,
+        thumbTop));
+      recentHistoryDateLabel.style.top = `${labelTop}px`;
+    }
+    recentHistoryDateSlider.addEventListener('input', () => {
+      const maxScroll = Math.max(0, genreResults.scrollHeight - genreResults.clientHeight);
+      genreResults.scrollTo({
+        top: maxScroll * (Number(recentHistoryDateSlider.value) / (Number(recentHistoryDateSlider.max) || 1)),
+        behavior: 'auto'
+      });
     });
     let recentHistoryScrollFrame = 0;
     genreResults.addEventListener('scroll', () => {
@@ -1026,10 +1047,31 @@
         headings.forEach((heading, index) => {
           if (heading.getBoundingClientRect().top <= top) activeIndex = index;
         });
-        recentHistoryDateSlider.value = String(activeIndex);
-        recentHistoryDateLabel.textContent = headings[activeIndex].textContent;
+        const maxScroll = Math.max(0, genreResults.scrollHeight - genreResults.clientHeight);
+        const range = Number(recentHistoryDateSlider.max) || 1;
+        recentHistoryDateSlider.value = String(Math.round(maxScroll
+          ? genreResults.scrollTop / maxScroll * range
+          : 0));
+        updateRecentHistoryDateIndicator(headings, activeIndex);
       });
     }, { passive: true });
+    function updateRecentHistoryDateRailVisibility() {
+      const hasScrollableHistory = genreResults.scrollHeight > genreResults.clientHeight + 1;
+      const visible = activeGenre === 'recently-played' && desktopNavigation.matches && hasScrollableHistory;
+      recentHistoryDateRail.hidden = !visible;
+      recentHistoryPanel.classList.toggle('has-date-scroll', visible);
+      if (visible) {
+        const headings = [...genreResults.querySelectorAll('.recent-history-date')];
+        if (!headings.length) return;
+        const top = genreResults.getBoundingClientRect().top + 28;
+        let activeIndex = 0;
+        headings.forEach((heading, index) => {
+          if (heading.getBoundingClientRect().top <= top) activeIndex = index;
+        });
+        updateRecentHistoryDateIndicator(headings, activeIndex);
+      }
+    }
+    window.addEventListener('resize', updateRecentHistoryDateRailVisibility, { passive: true });
     // Same query as the mobile media block in style.css: search results render
     // as list rows (info button beside the details) where the
     // body.mobile-search-active rules apply, and as grid tiles elsewhere.
@@ -2086,7 +2128,8 @@
       }
       genreResults.classList.toggle('recent-history-layout', recentHistoryLayout);
       recentHistoryPanel.classList.toggle('is-recent-history', recentHistoryLayout);
-      recentHistoryDateRail.hidden = !recentHistoryLayout || !desktopNavigation.matches;
+      recentHistoryDateRail.hidden = true;
+      recentHistoryPanel.classList.remove('has-date-scroll');
       const desktopSearchListLayout = activeGenre.startsWith('search:') && desktopNavigation.matches;
       genreResults.classList.toggle('desktop-search-list-layout', desktopSearchListLayout);
       // Search cards keep grid-tile DOM on desktop (info button overlaid on
@@ -2116,6 +2159,7 @@
           : recentHistoryLayout ? 'No playback history available' : 'No matching songs were found.';
         genreResults.appendChild(empty);
         recentHistoryDateRail.hidden = true;
+        recentHistoryPanel.classList.remove('has-date-scroll');
         if (!desktopNavigation.matches && !document.body.classList.contains('mobile-search-active')) {
           updateMobileHomeTint();
         } else {
@@ -2163,6 +2207,7 @@
         genreResults.childElementCount === orderedSongs.length &&
         genreResults.firstElementChild?.classList.contains('genre-card')
       ) {
+        if (recentHistoryLayout) requestAnimationFrame(updateRecentHistoryDateRailVisibility);
         return;
       }
 
@@ -2437,10 +2482,13 @@
       });
       const recentDateHeadings = [...genreResults.querySelectorAll('.recent-history-date')];
       if (recentHistoryLayout && desktopNavigation.matches && recentDateHeadings.length) {
-        recentHistoryDateRail.hidden = recentDateHeadings.length < 2;
-        recentHistoryDateSlider.max = String(recentDateHeadings.length - 1);
-        recentHistoryDateSlider.value = '0';
-        recentHistoryDateLabel.textContent = recentDateHeadings[0].textContent;
+        recentHistoryDateSlider.max = '1000';
+        const maxScroll = Math.max(0, genreResults.scrollHeight - genreResults.clientHeight);
+        recentHistoryDateSlider.value = String(maxScroll
+          ? Math.round(genreResults.scrollTop / maxScroll * 1000)
+          : 0);
+        updateRecentHistoryDateIndicator(recentDateHeadings, 0);
+        requestAnimationFrame(updateRecentHistoryDateRailVisibility);
       }
       genreResults.dataset.renderKey = renderKey;
       refreshFavouriteListPlaybackState();
