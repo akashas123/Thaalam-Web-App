@@ -455,6 +455,8 @@ function rememberOnDemandPlayback(song) {
     collectionName: String(song.collectionName || ''),
     artworkUrl100: String(song.artworkUrl100 || ''),
     trackTimeMillis: Number(song.trackTimeMillis) || 0,
+    language: String(song.language || ''),
+    primaryGenreName: String(song.primaryGenreName || ''),
     providerTrackId: String(song.providerTrackId || ''),
     queueSource: onDemandQueueSource === 'favourites' ? 'favourites' : 'autoplay',
     queueStartTrackName: String(onDemandQueue[onDemandQueueStartIndex]?.trackName || song.trackName),
@@ -910,14 +912,16 @@ function updatePlaybackProgress() {
     const queuedNextSong = onDemandQueueIndex >= 0
       ? onDemandQueue[onDemandQueueIndex + 1]
       : null;
-    // When repeat-all reaches the last queued track, the next song wraps to the
-    // first queue entry. Treat that as the upcoming track so it can be preloaded
-    // and crossfaded into, just like repeat-one does for the current song.
-    const repeatAllWrapSong = onDemandRepeatMode === 'all' &&
+    // When repeat-all reaches the end of the queue, preload the next entry
+    // that differs from the current song, even if the queue contains duplicates.
+    const repeatAllWrapIndex = onDemandRepeatMode === 'all' &&
       onDemandQueue.length > 1 &&
       onDemandQueueIndex >= 0 &&
       onDemandQueueIndex === onDemandQueue.length - 1
-      ? onDemandQueue[0]
+      ? getNextDifferentQueueIndex()
+      : -1;
+    const repeatAllWrapSong = repeatAllWrapIndex >= 0
+      ? onDemandQueue[repeatAllWrapIndex]
       : null;
     shuffleUpcomingRelatedTrack();
     const relatedNextTrack = relatedTrackCache[relatedTrackCursor];
@@ -1551,21 +1555,12 @@ function bindOnDemandAudioEvents(audio) {
     if (autoplayTrackTransition) return;
     if (onDemandRepeatMode === 'all' && onDemandQueueSource === 'favourites' &&
         onDemandQueue.length > 1) {
-      const isAtQueueEnd = onDemandQueueIndex === onDemandQueue.length - 1;
-      const nextSong = isAtQueueEnd
-        ? onDemandQueue[0]
-        : onDemandQueue[onDemandQueueIndex + 1];
-      if (nextSong) {
-        // This event means the timed fade window was missed. Don't advance
-        // here: keep this queue index active and replay the current track so
-        // the progress timer can hand off while both tracks are still live.
-        if (isAtQueueEnd) preloadRepeatAllWrapTrack();
-        else preloadNextLikedQueueTrack();
-        autoplayTrackTransition = false;
-        try { audio.currentTime = 0; } catch { /* ended audio may reject the seek */ }
-        audio.play().catch(() => {});
-        return;
-      }
+      // The queue can include recommendation tracks after the favourites
+      // segment, so don't infer the next item from the favourites boundary.
+      // Find the current song in the full queue and advance exactly one entry,
+      // wrapping only after the actual queue end. Replaying here can trap the
+      // player on one track when the preloaded handoff was missed.
+      if (playNextRepeatAllQueueSong(true)) return;
     }
     autoplayTrackTransition = true;
     onDemandModeLabel.textContent = 'ON DEMAND';
@@ -1873,6 +1868,42 @@ function isSameOnDemandSong(first, second) {
     firstTitle === secondTitle && firstArtist === secondArtist);
 }
 
+function getNextDifferentQueueIndex() {
+  if (onDemandQueue.length < 2) return -1;
+  const currentIndex = onDemandQueue[onDemandQueueIndex] &&
+    isSameOnDemandSong(onDemandQueue[onDemandQueueIndex], currentOnDemandSong)
+    ? onDemandQueueIndex
+    : onDemandQueue.findIndex((song) => isSameOnDemandSong(song, currentOnDemandSong));
+  const baseIndex = currentIndex >= 0 ? currentIndex : -1;
+  for (let step = 1; step <= onDemandQueue.length; step += 1) {
+    const candidateIndex = (baseIndex + step + onDemandQueue.length) % onDemandQueue.length;
+    if (!isSameOnDemandSong(onDemandQueue[candidateIndex], currentOnDemandSong)) {
+      return candidateIndex;
+    }
+  }
+  return -1;
+}
+
+function playNextRepeatAllQueueSong(gapless = true) {
+  const nextIndex = getNextDifferentQueueIndex();
+  const nextSong = onDemandQueue[nextIndex];
+  if (!nextSong) return false;
+
+  onDemandQueueIndex = nextIndex;
+  onDemandQueueSource = nextIndex < onDemandFavouriteQueueLength
+    ? 'favourites'
+    : 'autoplay';
+  window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
+  autoplayTrackTransition = Boolean(gapless);
+  void startOnDemandSong(nextSong, {
+    preserveQueue: true,
+    openNowPlaying: false,
+    recordRecent: false,
+    gapless
+  });
+  return true;
+}
+
 function removeDuplicateOnDemandQueueEntries() {
   if (onDemandQueue.length < 2) return;
   const previousQueue = onDemandQueue;
@@ -2010,14 +2041,7 @@ function skipOnDemandSong(offset, manual = true) {
   if (offset > 0 && onDemandRepeatMode === 'all' &&
       onDemandQueueSource === 'favourites' && onDemandQueue.length > 1 &&
       onDemandQueueIndex === onDemandQueue.length - 1) {
-    onDemandQueueIndex = 0;
-    window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
-    startOnDemandSong(onDemandQueue[0], {
-      preserveQueue: true,
-      openNowPlaying: false,
-      recordRecent: false,
-      gapless: !manual
-    });
+    playNextRepeatAllQueueSong(!manual);
     return;
   }
   if (offset > 0 && manual) {
@@ -2033,14 +2057,7 @@ function skipOnDemandSong(offset, manual = true) {
     const nextRelated = relatedTrackCache[relatedTrackCursor];
     if (!nextRelated) {
       if (onDemandRepeatMode === 'all' && onDemandQueue.length > 1 && !isFetchingRelated) {
-        onDemandQueueIndex = 0;
-        window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
-        startOnDemandSong(onDemandQueue[0], {
-          preserveQueue: true,
-          openNowPlaying: false,
-          recordRecent: false,
-          gapless: !manual
-        });
+        playNextRepeatAllQueueSong(!manual);
       }
       return;
     }
@@ -2259,16 +2276,17 @@ async function promoteTrackForHandoff(track, waitForReady) {
 function preloadRepeatAllWrapTrack() {
   if (onDemandRepeatMode !== 'all' || onDemandQueueSource !== 'favourites') return;
   if (!(onDemandQueue.length > 1 && onDemandQueueIndex === onDemandQueue.length - 1)) return;
-  const firstSong = onDemandQueue[0];
-  if (!firstSong) return;
-  const key = likedQueuePreparationKey(firstSong);
+  const nextIndex = getNextDifferentQueueIndex();
+  const nextSong = onDemandQueue[nextIndex];
+  if (!nextSong) return;
+  const key = likedQueuePreparationKey(nextSong);
   let preparation = likedQueuePreparations.get(key);
   if (!preparation) {
-    preparation = resolveLikedQueueTrack(firstSong);
+    preparation = resolveLikedQueueTrack(nextSong);
     likedQueuePreparations.set(key, preparation);
   }
   Promise.resolve(preparation).then((track) => {
-    if (onDemandRepeatMode !== 'all' || onDemandQueue[0] !== firstSong) return;
+    if (onDemandRepeatMode !== 'all' || onDemandQueue[nextIndex] !== nextSong) return;
     if (!track?.id || !track.streamUrl || handoffOutgoingAudio) return;
     if (autoplayPreloadedTrackId === track.id) return;
     preloadTrackAudio(track);
@@ -2365,14 +2383,7 @@ function advanceToSimilarSong() {
 
   if (onDemandRepeatMode === 'all' && onDemandQueueSource === 'favourites' &&
       onDemandQueue.length > 1) {
-    onDemandQueueIndex = 0;
-    window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
-    startOnDemandSong(onDemandQueue[0], {
-      preserveQueue: true,
-      openNowPlaying: false,
-      recordRecent: false,
-      gapless: true
-    });
+    playNextRepeatAllQueueSong(true);
     return;
   }
 
@@ -2395,15 +2406,7 @@ function advanceToSimilarSong() {
 
   if (onDemandRepeatMode === 'all' && onDemandQueue.length > 1 &&
       !isFetchingRelated && !autoplayPrefetchFailed) {
-    onDemandQueueIndex = 0;
-    window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
-    startOnDemandSong(onDemandQueue[0], {
-      preserveQueue: true,
-      openNowPlaying: false,
-      recordRecent: false,
-      gapless: true
-    });
-    return;
+    if (playNextRepeatAllQueueSong(true)) return;
   }
 
   // The prefetch has not landed yet (or returned no eligible tracks). Wait for
@@ -2434,14 +2437,11 @@ function advanceToSimilarSong() {
       }
       if (onDemandRepeatMode === 'all' && onDemandQueue.length > 1) {
         window.clearInterval(autoplayRetryTimer);
-        onDemandQueueIndex = 0;
-        window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
-        startOnDemandSong(onDemandQueue[0], {
-          preserveQueue: true,
-          openNowPlaying: false,
-          recordRecent: false,
-          gapless: true
-        });
+        if (!playNextRepeatAllQueueSong(true)) {
+          autoplayTrackTransition = false;
+          onDemandModeLabel.textContent = 'ON DEMAND';
+          setOnDemandPlaying(false);
+        }
         return;
       }
       window.clearInterval(autoplayRetryTimer);
@@ -2686,27 +2686,30 @@ async function playRelatedTrack(track, gapless = true) {
     if (!promoted && (autoplayTrackTransition || scheduledHandoff)) {
       logOnDemand('scheduled related-track handoff could not promote its preload', track.id);
       if (scheduledHandoff) {
-        if (existingQueueIndex < 0 && onDemandQueue.length > previousQueueLength) {
-          onDemandQueue.pop();
-        }
-        if (previousQueueIndex >= 0) {
-          onDemandQueueIndex = previousQueueIndex;
-          onDemandQueueSource = onDemandFavouriteQueueLength > 0 &&
-            previousQueueIndex < onDemandFavouriteQueueLength
-            ? 'favourites'
-            : 'autoplay';
-        }
-        selectedDuration = previousSelectedDuration;
-        window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
-        updateTransportButtonState();
-        autoplayTrackTransition = false;
-        onDemandModeLabel.textContent = 'ON DEMAND';
-        setOnDemandAudioReady(true);
         if (onDemandAudio.ended) {
-          try { onDemandAudio.currentTime = 0; } catch { /* ended audio may reject the seek */ }
-          onDemandAudio.play().catch(() => {});
+          // The outgoing track is already over, so retrying it would trap the
+          // queue on the same song. Keep the selected queue entry and load its
+          // resolved stream directly instead of waiting for another fade.
+          autoplayTrackTransition = false;
+        } else {
+          if (existingQueueIndex < 0 && onDemandQueue.length > previousQueueLength) {
+            onDemandQueue.pop();
+          }
+          if (previousQueueIndex >= 0) {
+            onDemandQueueIndex = previousQueueIndex;
+            onDemandQueueSource = onDemandFavouriteQueueLength > 0 &&
+              previousQueueIndex < onDemandFavouriteQueueLength
+              ? 'favourites'
+              : 'autoplay';
+          }
+          selectedDuration = previousSelectedDuration;
+          window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
+          updateTransportButtonState();
+          autoplayTrackTransition = false;
+          onDemandModeLabel.textContent = 'ON DEMAND';
+          setOnDemandAudioReady(true);
+          return;
         }
-        return;
       }
     }
   } else {
@@ -2861,25 +2864,27 @@ async function startOnDemandSong(song, {
       if (!promoted && (autoplayTrackTransition || scheduledHandoff)) {
         logOnDemand('scheduled queue-track handoff could not promote its preload', track.id);
         if (scheduledHandoff) {
-          // Keep the outgoing song and its metadata together. The active audio
-          // source is untouched, so its progress handler can retry the fade.
-          if (previousQueueIndex >= 0) {
-            onDemandQueueIndex = previousQueueIndex;
-            onDemandQueueSource = onDemandFavouriteQueueLength > 0 &&
-              previousQueueIndex < onDemandFavouriteQueueLength
-              ? 'favourites'
-              : 'autoplay';
-          }
-          window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
-          updateTransportButtonState();
-          autoplayTrackTransition = false;
-          onDemandModeLabel.textContent = 'ON DEMAND';
-          setOnDemandAudioReady(true);
           if (onDemandAudio.ended) {
-            try { onDemandAudio.currentTime = 0; } catch { /* ended audio may reject the seek */ }
-            onDemandAudio.play().catch(() => {});
+            // There is no outgoing audio left to fade from. Keep this queue
+            // entry selected and let loadTrack start it directly below.
+            autoplayTrackTransition = false;
+          } else {
+            // Keep the outgoing song and its metadata together. The active
+            // source is untouched, so its progress handler can retry the fade.
+            if (previousQueueIndex >= 0) {
+              onDemandQueueIndex = previousQueueIndex;
+              onDemandQueueSource = onDemandFavouriteQueueLength > 0 &&
+                previousQueueIndex < onDemandFavouriteQueueLength
+                ? 'favourites'
+                : 'autoplay';
+            }
+            window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
+            updateTransportButtonState();
+            autoplayTrackTransition = false;
+            onDemandModeLabel.textContent = 'ON DEMAND';
+            setOnDemandAudioReady(true);
+            return;
           }
-          return;
         }
       }
     } else {

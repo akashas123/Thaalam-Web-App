@@ -33,7 +33,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=571">
+  <link rel="stylesheet" href="style.css?v=581">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -345,7 +345,14 @@
           </button>
         </div>
       </div>
-      <div class="genre-results" id="genreResults" role="tabpanel" aria-live="polite">
+      <div class="recent-history-panel" id="recentHistoryPanel">
+        <div class="genre-results" id="genreResults" role="tabpanel" aria-live="polite"></div>
+        <aside class="recent-history-date-rail" id="recentHistoryDateRail" aria-label="Playback history dates" hidden>
+          <label for="recentHistoryDateSlider">Date</label>
+          <output id="recentHistoryDateLabel" for="recentHistoryDateSlider">Today</output>
+          <input id="recentHistoryDateSlider" type="range" min="0" max="0" value="0" step="1" aria-label="Scroll playback history by date">
+          <span class="recent-history-date-rail-oldest" aria-hidden="true">Older</span>
+        </aside>
       </div>
     </div>
   </main>
@@ -424,8 +431,14 @@
   </main>
 
   <aside class="mini-player" id="miniPlayer" aria-label="Now playing" hidden>
-    <!-- Left: transport cluster (prev / play / next) -->
+    <!-- Desktop transport cluster: shuffle / previous / play / next / repeat -->
     <div class="mini-player-transport">
+      <button class="mini-player-ctrl mini-player-mode" id="miniShuffleButton" type="button" aria-label="Shuffle off" title="Shuffle" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M2 7h3c4 0 8 10 12 10h5M18 14l4 3-4 3"/>
+          <path d="M2 17h3c4 0 8-10 12-10h5M18 4l4 3-4 3"/>
+        </svg>
+      </button>
       <button class="mini-player-ctrl" id="miniPrevButton" type="button" aria-label="Previous song" title="Previous song">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h2v12H6zm12 0-8.5 6L18 18z"/></svg>
       </button>
@@ -436,6 +449,9 @@
       </button>
       <button class="mini-player-ctrl" id="miniNextButton" type="button" aria-label="Next song" title="Next song">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 6h2v12h-2zM6 6l8.5 6L6 18z"/></svg>
+      </button>
+      <button class="mini-player-ctrl mini-player-mode" id="miniRepeatButton" type="button" aria-label="Repeat off" title="Repeat" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 2l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"/></svg>
       </button>
     </div>
 
@@ -625,7 +641,10 @@
       </button>
 
       <button class="side-control on-demand-mode-control" id="onDemandShuffleButton" type="button" aria-label="Shuffle off" title="Shuffle" aria-pressed="false">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M4 4l5 5m4 4 8 8"/></svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M2 7h3c4 0 8 10 12 10h5M18 14l4 3-4 3"/>
+          <path d="M2 17h3c4 0 8-10 12-10h5M18 4l4 3-4 3"/>
+        </svg>
       </button>
 
       <button
@@ -885,8 +904,8 @@
   </aside>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
-  <script src="script.js?v=88"></script>
-  <script src="ondemand-player.js?v=142"></script>
+  <script src="script.js?v=90"></script>
+  <script src="ondemand-player.js?v=144"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=12"></script>
@@ -982,6 +1001,35 @@
     const genreTabList = document.querySelector('.genre-tabs');
     const genreResults =
       document.getElementById('genreResults');
+    const recentHistoryPanel = document.getElementById('recentHistoryPanel');
+    const recentHistoryDateRail = document.getElementById('recentHistoryDateRail');
+    const recentHistoryDateSlider = document.getElementById('recentHistoryDateSlider');
+    const recentHistoryDateLabel = document.getElementById('recentHistoryDateLabel');
+    recentHistoryDateSlider.addEventListener('input', () => {
+      const headings = [...genreResults.querySelectorAll('.recent-history-date')];
+      const heading = headings[Number(recentHistoryDateSlider.value)];
+      if (!heading) return;
+      recentHistoryDateLabel.textContent = heading.textContent;
+      const scrollTop = genreResults.scrollTop + heading.getBoundingClientRect().top -
+        genreResults.getBoundingClientRect().top - 12;
+      genreResults.scrollTo({ top: scrollTop, behavior: 'smooth' });
+    });
+    let recentHistoryScrollFrame = 0;
+    genreResults.addEventListener('scroll', () => {
+      if (!genreResults.classList.contains('recent-history-layout') || recentHistoryScrollFrame) return;
+      recentHistoryScrollFrame = requestAnimationFrame(() => {
+        recentHistoryScrollFrame = 0;
+        const headings = [...genreResults.querySelectorAll('.recent-history-date')];
+        if (!headings.length) return;
+        const top = genreResults.getBoundingClientRect().top + 28;
+        let activeIndex = 0;
+        headings.forEach((heading, index) => {
+          if (heading.getBoundingClientRect().top <= top) activeIndex = index;
+        });
+        recentHistoryDateSlider.value = String(activeIndex);
+        recentHistoryDateLabel.textContent = headings[activeIndex].textContent;
+      });
+    }, { passive: true });
     // Same query as the mobile media block in style.css: search results render
     // as list rows (info button beside the details) where the
     // body.mobile-search-active rules apply, and as grid tiles elsewhere.
@@ -1095,7 +1143,7 @@
     // Genre tabs use Apple's genre charts. Versioned separately from the old
     // text-search and filtered result caches.
     // v9 keeps only the first 21 chart tracks (7 columns x 3 rows).
-    const GENRE_CACHE_KEY = 'thaalam-jiosaavn-genre-cache-v4';
+    const GENRE_CACHE_KEY = 'thaalam-jiosaavn-genre-cache-v5';
     const GENRE_CHART_LIMIT = 21;
     // One small ranked search request feeds both the suggestion dropdown and
     // the results grid: fetch 20, rank by relevance, show the top 20.
@@ -1225,12 +1273,28 @@
       );
     }
 
+    function getGenreHistoryArtistQueries() {
+      const counts = new Map();
+      (window.getOnDemandPlaybackHistory?.() || []).forEach((song) => {
+        const artist = String(song?.artistName || '').split(',')[0].trim();
+        // Search artists from all history, then keep only tracks explicitly
+        // tagged with this shelf's language in searchGenreChart().
+        if (!artist) return;
+        counts.set(artist, (counts.get(artist) || 0) + 1);
+      });
+      return [...counts.entries()]
+        .sort((first, second) => second[1] - first[1])
+        .slice(0, 2)
+        .map(([artist]) => artist);
+    }
+
     function loadDailyGenreChart(key) {
       const cachedSongs = getCachedDailyGenreChart(key);
       if (cachedSongs) return Promise.resolve(cachedSongs);
       if (genreChartRequests.has(key)) return genreChartRequests.get(key);
 
-      const request = searchGenreChart(getDailyGenreFeedQueries(key), 0, GENRE_CHART_LIMIT + 4, key)
+      const queries = [...getDailyGenreFeedQueries(key), ...getGenreHistoryArtistQueries()];
+      const request = searchGenreChart(queries, 0, GENRE_CHART_LIMIT + 4, key)
         .then((results) => {
           if (!results.length) throw new Error(`No ${key} songs matched the language filter.`);
           const songs = shuffleMobileItems(results).slice(0, GENRE_CHART_LIMIT);
@@ -1591,6 +1655,37 @@
         recentArtists.push(keyFor(song.artistName));
       }
       return ordered;
+    }
+
+    // Keep the full genre chart playable, while bringing familiar artists into
+    // the mix and spacing repeats on both mobile and desktop.
+    function personalizeGenreSongs(songs) {
+      const history = window.getOnDemandPlaybackHistory?.() || [];
+      if (!history.length) return songs;
+
+      const normalize = (value) => String(value || '').trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+      const artistPlays = new Map();
+      history.forEach((song) => {
+        const artist = normalize(song.artistName);
+        if (artist) artistPlays.set(artist, (artistPlays.get(artist) || 0) + 1);
+      });
+
+      const ranked = songs.map((song, index) => ({ song, index,
+        affinity: artistPlays.get(normalize(song.artistName)) || 0
+      })).sort((first, second) => second.affinity - first.affinity || first.index - second.index);
+      const mixed = [];
+      const recentArtists = [];
+      while (ranked.length) {
+        let index = ranked.findIndex(({ song }) => {
+          const artist = normalize(song.artistName);
+          return !artist || !recentArtists.slice(-2).includes(artist);
+        });
+        if (index < 0) index = 0;
+        const [{ song }] = ranked.splice(index, 1);
+        mixed.push(song);
+        recentArtists.push(normalize(song.artistName));
+      }
+      return mixed;
     }
 
     function favouriteSongIdentity(song) {
@@ -1986,7 +2081,12 @@
       );
       genreResults.classList.toggle('favourites-view', activeGenre === 'you-like');
       const recentHistoryLayout = activeGenre === 'recently-played';
+      if (recentHistoryLayout && !genreResults.classList.contains('recent-history-layout')) {
+        genreResults.scrollTop = 0;
+      }
       genreResults.classList.toggle('recent-history-layout', recentHistoryLayout);
+      recentHistoryPanel.classList.toggle('is-recent-history', recentHistoryLayout);
+      recentHistoryDateRail.hidden = !recentHistoryLayout || !desktopNavigation.matches;
       const desktopSearchListLayout = activeGenre.startsWith('search:') && desktopNavigation.matches;
       genreResults.classList.toggle('desktop-search-list-layout', desktopSearchListLayout);
       // Search cards keep grid-tile DOM on desktop (info button overlaid on
@@ -2015,6 +2115,7 @@
           ? 'No liked songs'
           : recentHistoryLayout ? 'No playback history available' : 'No matching songs were found.';
         genreResults.appendChild(empty);
+        recentHistoryDateRail.hidden = true;
         if (!desktopNavigation.matches && !document.body.classList.contains('mobile-search-active')) {
           updateMobileHomeTint();
         } else {
@@ -2028,14 +2129,15 @@
         ? desktopGenreShufflePending && isGenreChart
         : mobileShuffle;
       if (shuffle && desktopNavigation.matches) desktopGenreShufflePending = false;
+      const genreSongs = isGenreChart ? personalizeGenreSongs(songs) : songs;
       const orderedSongs = activeGenre === 'you-like'
         ? sortFavouriteSongs(songs)
         : recentHistoryLayout
           ? orderRecentPlaybackHistory(songs)
           : isGenreChart
             ? desktopNavigation.matches
-              ? getDesktopGenreOrder(activeGenre, songs)
-              : shuffleMobileItems(songs)
+              ? getDesktopGenreOrder(activeGenre, genreSongs)
+              : shuffleMobileItems(genreSongs)
             : diversifyGenreSongs(songs);
       // Identity of everything the cards actually show, in display order.
       // The liked-songs rescue passes patch titles/artwork on the same
@@ -2076,6 +2178,7 @@
           if (dateKey !== previousRecentDate) {
             const heading = document.createElement('h2');
             heading.className = 'recent-history-date';
+            heading.dataset.recentDateKey = dateKey;
             const today = new Date();
             const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
             if (date.toDateString() === today.toDateString()) heading.textContent = 'Today';
@@ -2332,6 +2435,13 @@
           artwork.src = 'album-placeholder.svg?v=3';
         }
       });
+      const recentDateHeadings = [...genreResults.querySelectorAll('.recent-history-date')];
+      if (recentHistoryLayout && desktopNavigation.matches && recentDateHeadings.length) {
+        recentHistoryDateRail.hidden = recentDateHeadings.length < 2;
+        recentHistoryDateSlider.max = String(recentDateHeadings.length - 1);
+        recentHistoryDateSlider.value = '0';
+        recentHistoryDateLabel.textContent = recentDateHeadings[0].textContent;
+      }
       genreResults.dataset.renderKey = renderKey;
       refreshFavouriteListPlaybackState();
       if (shuffle) {
@@ -2571,7 +2681,10 @@
       heading.textContent = category.title;
       const trackRow = document.createElement('div');
       trackRow.className = 'mobile-genre-track-row';
-      const tracks = shuffle ? shuffleMobileItems(songs) : songs.slice();
+      const recommendationSongs = category.key && Object.prototype.hasOwnProperty.call(genreFeedIds, category.key)
+        ? personalizeGenreSongs(songs)
+        : songs;
+      const tracks = shuffle ? shuffleMobileItems(recommendationSongs) : recommendationSongs.slice();
       (all ? tracks : tracks.slice(0, 10)).forEach((song) => {
         const card = document.createElement('article');
         card.className = 'mobile-genre-track';
@@ -2647,6 +2760,18 @@
     function orderRecentPlaybackHistory(songs) {
       const dates = new Map();
       const inferredLegacySessionIds = new Map();
+      const currentSong = window.onDemandPlaybackActive
+        ? window.getCurrentOnDemandSong?.()
+        : null;
+      const normalizeTrackPart = (value) => String(value || '').trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+      const isCurrentSong = (song) => {
+        if (!currentSong) return false;
+        const currentId = String(currentSong.providerTrackId || currentSong.trackId || '');
+        const songId = String(song.providerTrackId || song.trackId || '');
+        if (currentId && songId && currentId === songId) return true;
+        return normalizeTrackPart(song.trackName) === normalizeTrackPart(currentSong.trackName) &&
+          normalizeTrackPart(song.artistName) === normalizeTrackPart(currentSong.artistName);
+      };
       const legacyEntries = songs
         .map((song, index) => ({ song, index, playedAt: Number(song.playedAt) || 0 }))
         .filter(({ song }) => !song.queueSessionId)
@@ -2695,10 +2820,24 @@
         .flatMap((day) => [...day.sessions.values()]
           .sort((first, second) => second.latestAt - first.latestAt)
           .flatMap((session) => session.songs
-            .sort((first, second) =>
-              (Number(first.queueStep) || 0) - (Number(second.queueStep) || 0) ||
-              (Number(first.playedAt) || 0) - (Number(second.playedAt) || 0)
-            )
+            .sort((first, second) => {
+              if (session.queueSource === 'autoplay') {
+                const startTrackName = session.songs[0]?.queueStartTrackName;
+                const isStartedTrack = (song) => Number(song.queueStep) === 0 ||
+                  (startTrackName && normalizeTrackPart(song.trackName) === normalizeTrackPart(startTrackName));
+                const priority = (song) => isStartedTrack(song)
+                  ? 0
+                  : isCurrentSong(song) ? 1 : 2;
+                const priorityDifference = priority(first) - priority(second);
+                if (priorityDifference) return priorityDifference;
+              } else if (currentSong) {
+                const firstIsCurrent = isCurrentSong(first);
+                const secondIsCurrent = isCurrentSong(second);
+                if (firstIsCurrent !== secondIsCurrent) return firstIsCurrent ? -1 : 1;
+              }
+              return (Number(first.queueStep) || 0) - (Number(second.queueStep) || 0) ||
+                (Number(first.playedAt) || 0) - (Number(second.playedAt) || 0);
+            })
             .map((song) => ({
               ...song,
               displayQueueSessionId: session.id,
@@ -2740,7 +2879,33 @@
       updateMobileRecents();
     }
 
-    window.addEventListener('thaalam-on-demand-history-change', updateMobileRecents);
+    window.addEventListener('thaalam-on-demand-history-change', () => {
+      updateMobileRecents();
+      if (!desktopNavigation.matches && !document.body.classList.contains('mobile-search-active')) {
+        mobileHomeGenresLoaded = false;
+        void loadMobileHomeGenres();
+      }
+      if (desktopNavigation.matches && Object.prototype.hasOwnProperty.call(genreFeedIds, activeGenre)) {
+        renderGenreResults(lastGenreResultsSongs);
+      }
+    });
+
+    // The daily cache is keyed to the listener's local calendar day. Refresh
+    // an already-open view shortly after midnight as well as on page visits.
+    let observedRecommendationDay = localCalendarDayKey();
+    window.setInterval(() => {
+      const today = localCalendarDayKey();
+      if (today === observedRecommendationDay) return;
+      observedRecommendationDay = today;
+      genreResultCache.clear();
+      genreResultCacheDay.clear();
+      mobileHomeGenresLoaded = false;
+      if (desktopNavigation.matches && Object.prototype.hasOwnProperty.call(genreFeedIds, activeGenre)) {
+        void loadCatalog(activeGenre, '', genreFeedIds[activeGenre]);
+      } else if (!desktopNavigation.matches && !document.body.classList.contains('mobile-search-active')) {
+        void loadMobileHomeGenres();
+      }
+    }, 60 * 1000);
 
     // Prefer official title matches over "(From "Album")" album references:
     // a query matching the song's core title (parentheticals stripped) ranks

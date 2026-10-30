@@ -5,8 +5,9 @@
   overflow: hidden;
 }
 
-/* On-demand metadata uses pseudo-elements on narrow layouts. Keep the same
-   one-pass marquee and short reset pause used by live metadata and the dock. */
+.recent-history-panel { display: contents; }
+.recent-history-date-rail[hidden] { display: none !important; }
+
 @media (max-width: 56.1875rem), (pointer: coarse) and (any-pointer: coarse) {
   body.mini-player-visible .mini-player-meta,
   body.mini-player-visible .mini-player-track {
@@ -813,6 +814,9 @@ body.view-rises-from-mini.view-now-playing .player-view {
   }
 
   .mini-player-transport {
+    width: max-content;
+    flex: 0 0 auto;
+    margin-left: calc(-1 * clamp(0.5rem, 2vw, 1.25rem));
     grid-column: 1;
     grid-row: 1;
     justify-self: start;
@@ -868,6 +872,42 @@ body.view-rises-from-mini.view-now-playing .player-view {
     fill: currentColor;
   }
 
+  .mini-player-mode {
+    position: relative;
+    flex: 0 0 2.3rem;
+    color: rgba(255, 255, 255, 0.58);
+  }
+
+  .mini-player-mode svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  #miniShuffleButton svg {
+    width: 1.25rem;
+    height: 1.25rem;
+    stroke-width: 2.4;
+  }
+
+  .mini-player-mode.is-active {
+    color: var(--liked-folder-color, #ff1744);
+  }
+
+  .mini-player-mode[data-repeat-mode="one"]::after {
+    position: absolute;
+    top: 68%;
+    right: 24%;
+    z-index: 2;
+    color: currentColor;
+    content: "1";
+    font-size: 0.55rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
   /* Volume toggle: show the "speaker" icon by default, the "muted" icon when
      the button carries .is-muted. Both SVGs live in the button; only one shows. */
   .mini-player-volume .icon-off {
@@ -883,7 +923,11 @@ body.view-rises-from-mini.view-now-playing .player-view {
   }
 
   .mini-player-volume.is-muted {
-    color: #ff5c7a;
+    color: var(--liked-folder-color, #ff1744);
+  }
+
+  .mini-player-volume {
+    color: var(--liked-folder-color, #ff1744);
   }
 
   /* Visible volume slider (0-100) sitting right after the speaker icon. */
@@ -941,7 +985,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
   .mini-player-volume-value {
     min-width: 2ch;
     margin-left: 0.15rem;
-    color: rgba(255, 255, 255, 0.72);
+    color: var(--liked-folder-color, #ff1744);
     font-size: 0.72rem;
     font-variant-numeric: tabular-nums;
     text-align: right;
@@ -950,13 +994,25 @@ body.view-rises-from-mini.view-now-playing .player-view {
   }
 
   .mini-player-volume-value.is-muted {
-    color: #ff5c7a;
+    color: var(--liked-folder-color, #ff1744);
   }
 
   .mini-player-ctrl:hover:not(:disabled) {
     background: rgba(255, 255, 255, 0.1);
     color: #fff;
     transform: scale(1.06);
+  }
+
+  .mini-player .mini-player-ctrl:hover:not(:disabled),
+  .mini-player .mini-player-ctrl:active:not(:disabled) {
+    background: transparent;
+    transform: none;
+  }
+
+  .mini-player .mini-player-ctrl:focus-visible,
+  .mini-player .mini-player-toggle:focus-visible {
+    outline: none;
+    filter: brightness(1.4);
   }
 
   .mini-player-ctrl:active:not(:disabled) {
@@ -978,6 +1034,10 @@ body.view-rises-from-mini.view-now-playing .player-view {
   /* Active (pressed) transport/action state, e.g. a liked track. */
   .mini-player-ctrl.is-active {
     color: #fff;
+  }
+
+  .mini-player-ctrl.mini-player-mode.is-active {
+    color: var(--liked-folder-color, #ff1744);
   }
 
   .mini-player-like.is-active svg {
@@ -1199,8 +1259,13 @@ body.view-rises-from-mini.view-now-playing .player-view {
   }
 
   .mini-player-toggle:hover {
-    transform: scale(1.06);
-    background: rgba(255, 255, 255, 0.12);
+    transform: none;
+    background: transparent;
+  }
+
+  .mini-player-toggle:active {
+    transform: none;
+    background: transparent;
   }
 
   .mini-player-toggle:focus-visible,
@@ -1283,7 +1348,11 @@ body.view-rises-from-mini.view-now-playing .player-view {
 
     .mini-player-transport,
     .mini-player-actions {
-      gap: 0.5rem;
+      gap: 0.25rem;
+    }
+
+    .mini-player-transport {
+      margin-left: 0;
     }
 
     .mini-player-center {
@@ -1300,12 +1369,16 @@ body.view-rises-from-mini.view-now-playing .player-view {
     }
 
     .mini-player-seek {
-      width: clamp(6rem, 24vw, 14rem);
+      width: clamp(5rem, 18vw, 10rem);
     }
 
     .mini-player-volume-slider {
-      width: 4.5rem;
-      margin: 0 0.25rem;
+      width: clamp(3.25rem, 7vw, 4rem);
+      margin: 0 0.15rem;
+    }
+
+    .mini-player-volume-value {
+      display: none;
     }
   }
 
@@ -5965,11 +6038,15 @@ body.has-lyrics .lyrics-panel {
   }
 
   body.view-now-playing:not(.has-lyrics) .lyrics-content {
-    display: grid;
-    height: 100%;
+    position: absolute;
+    top: calc(50% - 8.25rem);
+    left: 50%;
+    width: max-content;
+    height: auto;
     max-height: none;
+    max-width: 100%;
     padding: 0;
-    place-items: center;
+    transform: translate(-50%, -50%);
     text-align: center;
   }
 
@@ -5998,6 +6075,13 @@ body {
 img {
   -webkit-user-drag: none;
   user-drag: none;
+}
+
+/* Keep keyboard interaction working without showing browser-style selection
+   rings around controls across the site. */
+:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
 }
 
 @media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) and (max-width: 75rem) {
@@ -6644,6 +6728,74 @@ img {
     color: color-mix(in srgb, var(--liked-folder-color) 86%, white);
     text-shadow: none;
   }
+
+  .recent-history-panel { display: contents; }
+  .recent-history-date-rail[hidden] { display: none !important; }
+
+  .recent-history-panel.is-recent-history {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-row: 4;
+    grid-template-columns: minmax(0, 1fr) 5.25rem;
+    gap: 0.65rem;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .recent-history-panel.is-recent-history .genre-results.recent-history-layout {
+    grid-column: 1;
+    grid-row: 1;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    max-height: none;
+    margin-top: 0;
+    padding-bottom: 1rem;
+  }
+
+  .recent-history-date-rail {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    min-height: 0;
+    padding: 0.5rem 0;
+    color: rgba(255, 255, 255, 0.62);
+    text-align: center;
+  }
+
+  .recent-history-date-rail label,
+  .recent-history-date-rail-oldest {
+    font-size: 0.65rem;
+    font-weight: 650;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .recent-history-date-rail output {
+    min-height: 2.5rem;
+    color: #dcecff;
+    font-size: 0.68rem;
+    font-weight: 650;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+
+  #recentHistoryDateSlider {
+    width: min(2rem, 100%);
+    height: min(48dvh, 30rem);
+    min-height: 8rem;
+    margin: 0;
+    accent-color: #91c4ff;
+    writing-mode: vertical-lr;
+    cursor: pointer;
+    touch-action: pan-y;
+  }
+
+  #recentHistoryDateSlider:disabled { cursor: default; opacity: 0.45; }
 
   .genre-results.recent-history-layout {
     grid-template-columns: minmax(0, 1fr);

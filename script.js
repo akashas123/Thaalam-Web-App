@@ -21,6 +21,8 @@ const miniPlayerProgress = document.getElementById('miniPlayerProgress');
 const miniPlayerProgressFill = document.getElementById('miniPlayerProgressFill');
 const miniPrevButton = document.getElementById('miniPrevButton');
 const miniNextButton = document.getElementById('miniNextButton');
+const miniShuffleButton = document.getElementById('miniShuffleButton');
+const miniRepeatButton = document.getElementById('miniRepeatButton');
 const miniLikeButton = document.getElementById('miniLikeButton');
 const miniInfoButton = document.getElementById('miniInfoButton');
 const miniVolumeButton = document.getElementById('miniVolumeButton');
@@ -444,6 +446,8 @@ function bindMiniPlayerProxy(miniButton, targetId) {
 
 bindMiniPlayerProxy(miniPrevButton, 'onDemandPrevButton');
 bindMiniPlayerProxy(miniNextButton, 'onDemandNextButton');
+bindMiniPlayerProxy(miniShuffleButton, 'onDemandShuffleButton');
+bindMiniPlayerProxy(miniRepeatButton, 'onDemandRepeatButton');
 miniInfoButton?.addEventListener('click', () => {
   const onDemand = Boolean(window.onDemandPlaybackActive);
   const source = onDemand
@@ -495,6 +499,19 @@ function syncMiniPlayerControls() {
 
   if (miniPrevButton) miniPrevButton.disabled = !onDemandActive || Boolean(prevButton?.disabled);
   if (miniNextButton) miniNextButton.disabled = !onDemandActive || Boolean(nextButton?.disabled);
+
+  const shuffleButton = document.getElementById('onDemandShuffleButton');
+  const repeatButton = document.getElementById('onDemandRepeatButton');
+  for (const [miniButton, sourceButton] of [[miniShuffleButton, shuffleButton], [miniRepeatButton, repeatButton]]) {
+    if (!miniButton) continue;
+    const pressed = sourceButton?.getAttribute('aria-pressed') === 'true';
+    miniButton.disabled = !onDemandActive || !sourceButton || Boolean(sourceButton.disabled);
+    miniButton.setAttribute('aria-pressed', String(pressed));
+    miniButton.setAttribute('aria-label', sourceButton?.getAttribute('aria-label') || (miniButton === miniShuffleButton ? 'Shuffle off' : 'Repeat off'));
+    miniButton.title = miniButton === miniShuffleButton ? 'Shuffle' : 'Repeat';
+    miniButton.dataset.repeatMode = sourceButton?.dataset.repeatMode || 'off';
+    miniButton.classList.toggle('is-active', sourceButton?.classList.contains('is-active') || false);
+  }
 
   // "Like" is pressed when either the on-demand heart or the live thumbs-up is.
   const liked = Boolean(
@@ -981,6 +998,46 @@ window.setPlayerVisualState = setVisualState;
 window.showPlayerPlayIcon = showPlayIcon;
 window.showPlayerPauseIcon = showPauseIcon;
 window.togglePlay = togglePlay;
+
+document.addEventListener('keydown', (event) => {
+  if (event.repeat || event.defaultPrevented || !miniPlayer || miniPlayer.hidden ||
+      miniPlayer.getClientRects().length === 0) return;
+  const target = event.target;
+  if (target instanceof Element && target.closest(
+    'input, textarea, select, button, a, [contenteditable="true"], [role="button"], [role="textbox"], [role="slider"]'
+  )) return;
+
+  const key = event.code === 'Space' ? 'space' : event.key.toLowerCase();
+  const shortcuts = {
+    space: null,
+    arrowleft: miniPrevButton,
+    arrowright: miniNextButton,
+    s: miniShuffleButton,
+    r: miniRepeatButton,
+    l: miniLikeButton,
+    i: miniInfoButton,
+    m: miniVolumeButton
+  };
+  if (key === '+' || key === '=') {
+    event.preventDefault();
+    applyVolumeLevel(Number(miniVolumeSlider?.value || 0) + 5, { persist: true });
+    return;
+  }
+  if (key === '-') {
+    event.preventDefault();
+    applyVolumeLevel(Number(miniVolumeSlider?.value || 0) - 5, { persist: true });
+    return;
+  }
+  if (!(key in shortcuts)) return;
+
+  event.preventDefault();
+  if (key === 'space') {
+    togglePlay();
+    return;
+  }
+  const button = shortcuts[key];
+  if (button && !button.disabled) button.click();
+});
 
 if (radio) {
   const markStreamStalled = () => {
