@@ -588,7 +588,10 @@ function normalizeText(value) {
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
-    .replace(/[^a-z0-9]/g, '');
+    // Keep letters and digits from every script. Stripping everything outside
+    // ASCII made Malayalam, Tamil, and other localized titles normalize to an
+    // empty string, so otherwise-correct search results were rejected.
+    .replace(/[^\p{L}\p{N}]/gu, '');
 }
 
 function normalizeSongTitle(value) {
@@ -637,14 +640,16 @@ async function findOnDemandSong(song) {
   const album = song.collectionName || '';
   const normalizedTitle = normalizeSongTitle(title);
   const sourceArtists = artist.split(/,|&|\bfeat(?:uring)?\b|\bwith\b/i)
-    .map(normalizeText).filter(Boolean);
+    .map(normalizeText).filter((name) => name.length >= 3);
   const normalizedAlbum = normalizeText(album);
+  const sourceLanguage = normalizeText(song.language || '');
 
   const rankResults = (items, albumFirst) => items
     .map((item, index) => {
       const candidateTitle = normalizeSongTitle(item.title);
       const candidateArtist = normalizeText(item.artist);
       const candidateAlbum = normalizeText(item.album);
+      const candidateLanguage = normalizeText(item.language || '');
       const exactTitle = candidateTitle === normalizedTitle;
       const titleMatch = exactTitle ||
         (normalizedTitle.length > 3 && candidateTitle.includes(normalizedTitle)) ||
@@ -656,6 +661,8 @@ async function findOnDemandSong(song) {
         (candidateAlbum.includes(normalizedAlbum) || normalizedAlbum.includes(candidateAlbum)));
       const rejectedTitle = UNOFFICIAL_MIX_TITLE.test(item.title);
       const nonCatalogTitle = NON_CATALOG_TITLE.test(item.title);
+      const languageMismatch = Boolean(sourceLanguage && candidateLanguage &&
+        sourceLanguage !== candidateLanguage);
       const officialAudio = /\b(?:official\s+)?(?:original\s+)?audio\b/i.test(item.title);
       return {
         ...item,
@@ -663,13 +670,17 @@ async function findOnDemandSong(song) {
         // not be available, so title/artist search resolves the stream. Give
         // the credited artist enough weight that an exact-title recording by
         // another artist cannot outrank the intended recording.
-        score: (exactTitle ? 100 : titleMatch ? 60 : 0) +
-          (artistMatch ? 60 : 0) + (featuredArtistMatch ? 10 : 0) +
+        score: (exactTitle ? 120 : titleMatch ? 45 : 0) +
+          (artistMatch ? 90 : 0) + (featuredArtistMatch ? 10 : 0) +
           (albumFirst && albumMatch ? 24 : albumMatch ? 12 : 0) +
           (officialAudio ? 15 : 0) + Math.max(0, 20 - index) -
-          (rejectedTitle ? 1000 : 0) - (nonCatalogTitle ? 400 : 0)
+          (rejectedTitle ? 1000 : 0) - (nonCatalogTitle ? 400 : 0) -
+          (languageMismatch ? 1000 : 0),
+        titleMatch,
+        languageMismatch
       };
     }).filter((item) => item.id && item.streamUrl &&
+      item.titleMatch && !item.languageMismatch &&
       !UNOFFICIAL_MIX_TITLE.test(item.title))
       .sort((a, b) => b.score - a.score);
 
@@ -723,9 +734,10 @@ function likedQueuePreparationKey(song) {
 }
 
 async function resolveLikedQueueTrack(song) {
-  if (song?.providerTrackId && song?.streamUrl) {
+  const providerTrackId = String(song?.providerTrackId || song?.trackId || '');
+  if (providerTrackId && song?.streamUrl) {
     return {
-      id: song.providerTrackId,
+      id: providerTrackId,
       streamUrl: song.streamUrl,
       durationSeconds: Number(song.trackTimeMillis) / 1000 || 0,
       thumbnail: song.artworkUrl100,
@@ -736,8 +748,8 @@ async function resolveLikedQueueTrack(song) {
     };
   }
   let track = null;
-  if (song?.providerTrackId) {
-    try { track = await resolveSong(song.providerTrackId); } catch { /* Search by metadata below. */ }
+  if (providerTrackId) {
+    try { track = await resolveSong(providerTrackId); } catch { /* Search by metadata below. */ }
   }
   if (!track?.streamUrl) track = await findOnDemandSong(song);
   if (track?.id && track?.streamUrl) {
@@ -1899,7 +1911,8 @@ function playNextRepeatAllQueueSong(gapless = true) {
     preserveQueue: true,
     openNowPlaying: false,
     recordRecent: false,
-    gapless
+    gapless,
+    immediateCut: false
   });
   return true;
 }
@@ -2083,7 +2096,8 @@ function skipOnDemandSong(offset, manual = true) {
     preserveQueue: true,
     openNowPlaying: false,
     recordRecent: false,
-    gapless: !manual
+    gapless: !manual,
+    immediateCut: manual
   });
 }
 
@@ -2736,19 +2750,28 @@ async function startOnDemandSong(song, {
   preserveQueue = false,
   openNowPlaying = true,
   recordRecent = !preserveQueue,
-  gapless = true
+  gapless = true,
+  immediateCut = false
 } = {}) {
   if (!song?.trackName) return;
-  const scheduledHandoff = Boolean(gapless && autoplayTrackTransition && currentOnDemandSong);
+  const scheduledHandoff = Boolean(!immediateCut && gapless && autoplayTrackTransition && currentOnDemandSong);
   const previousSong = currentOnDemandSong;
   const previousQueueIndex = previousSong
     ? onDemandQueue.findIndex((queuedSong) => isSameOnDemandSong(queuedSong, previousSong))
     : -1;
   setOnDemandAudioReady(false);
   void prepareOnDemandFadeAudio();
-  if (!gapless) {
+  if (!gapless || immediateCut) {
     finishOnDemandHandoff();
     clearAutoplayPreload();
+  }
+  if (immediateCut) {
+    // A deliberate song pick should silence the previous source before its
+    // metadata changes or the replacement stream lookup begins.
+    autoplayTrackTransition = false;
+    onDemandAudio.pause();
+    onDemandAudio.removeAttribute('src');
+    onDemandAudio.load();
   }
   // Ratings-backed favourites may contain partial or older metadata. Keep the
   // player input shape consistent before artwork lookup, search, and queueing.
@@ -2977,7 +3000,8 @@ function startOnDemandQueue(songs, startIndex = 0, options = {}) {
   const start = startOnDemandSong(selectedSong, {
     ...options,
     preserveQueue: true,
-    recordRecent: true
+    recordRecent: true,
+    immediateCut: options.immediateCut ?? true
   });
   let trackedStart;
   trackedStart = Promise.resolve(start).finally(() => {
@@ -3266,7 +3290,7 @@ if (onDemandArtwork) {
         collectionName: liveSong.album || liveSong.album_name || '',
         artworkUrl100: liveSong.art
       };
-    if (song?.trackName) void startOnDemandSong(song);
+    if (song?.trackName) void startOnDemandSong(song, { immediateCut: true });
   };
   onDemandArtwork.addEventListener('click', searchCurrentSong);
   onDemandArtwork.addEventListener('keydown', (event) => {

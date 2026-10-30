@@ -907,7 +907,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=90"></script>
-  <script src="ondemand-player.js?v=144"></script>
+  <script src="ondemand-player.js?v=149"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=12"></script>
@@ -2306,7 +2306,7 @@
             window.startOnDemandQueue(queue, songIndex >= 0 ? songIndex : 0, { openNowPlaying: false });
             return;
           }
-          window.startOnDemandSong?.(song, { openNowPlaying: false });
+          window.startOnDemandSong?.(song, { openNowPlaying: false, immediateCut: true });
         });
 
         const infoButton = document.createElement('button');
@@ -2466,7 +2466,7 @@
               window.toggleOnDemandPlayback?.();
               return;
             }
-            window.startOnDemandSong?.(song, { openNowPlaying: false });
+            window.startOnDemandSong?.(song, { openNowPlaying: false, immediateCut: true });
           });
           card.append(tapButton);
         }
@@ -2630,6 +2630,7 @@
               if (genreKey && !matchesGenreLanguage(song, genreKey)) continue;
               const mapped = {
                 trackId: song.id,
+                providerTrackId: song.id,
                 trackName: song.title,
                 artistName: song.artist,
                 collectionName: song.album,
@@ -2775,7 +2776,7 @@
               .finally(() => { play.disabled = false; });
             return;
           }
-          window.startOnDemandSong?.(song, { openNowPlaying: false });
+          window.startOnDemandSong?.(song, { openNowPlaying: false, immediateCut: true });
         });
         const title = document.createElement('p');
         title.className = 'mobile-genre-track-title';
