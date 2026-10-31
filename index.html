@@ -301,7 +301,7 @@
       <header class="home-catalog-header">
         <div>
           <h1 id="homeTitle" tabindex="-1">Browse music</h1>
-          <p class="site-page-copy">Personalised picks refreshed daily</p>
+          <p class="site-page-copy">Personalised picks</p>
         </div>
         <form class="catalog-search" id="catalogSearchForm" role="search">
           <input id="catalogSearchInput" type="search" autocomplete="off" aria-label="Search songs or artists" aria-autocomplete="list" aria-controls="catalogSuggestions" aria-expanded="false" placeholder="Search songs or artists">
@@ -1108,15 +1108,11 @@
     const catalogSuggestions = document.getElementById('catalogSuggestions');
     const catalogClearButton = document.getElementById('catalogClearButton');
     function setPersonalisedPicksSubtitle() {
-      if (homeSubtitle) {
-        homeSubtitle.textContent = desktopNavigation.matches
-          ? 'Personalised picks refreshed daily'
-          : 'Personalised picks';
-      }
+      if (homeSubtitle) homeSubtitle.textContent = 'Personalised picks';
     }
     setPersonalisedPicksSubtitle();
     desktopNavigation.addEventListener('change', () => {
-      if (['Personalised picks', 'Personalised picks refreshed daily'].includes(homeSubtitle?.textContent.trim())) {
+      if (homeSubtitle?.textContent.trim() === 'Personalised picks') {
         setPersonalisedPicksSubtitle();
       }
     });
