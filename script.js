@@ -689,10 +689,10 @@ function setStreamOffline(isOffline) {
   isStreamOffline = isOffline;
   if (window.onDemandPlaybackActive) {
     streamQuality.classList.remove('is-offline');
-    streamQuality.textContent = 'SPATIAL';
+    streamQuality.textContent = 'ADAPTIVE';
     streamQuality.setAttribute(
       'aria-label',
-      'Spatial sound enabled for on-demand audio'
+      'On-demand audio quality: adaptive (selected by YouTube; exact bitrate unavailable)'
     );
     return;
   }
@@ -739,10 +739,10 @@ window.setOnDemandAudioQuality = (isOnDemand) => {
 
   if (isOnDemand) {
     streamQuality.classList.remove('is-offline');
-    streamQuality.textContent = 'SPATIAL';
+    streamQuality.textContent = 'ADAPTIVE';
     streamQuality.setAttribute(
       'aria-label',
-      'Spatial sound enabled for on-demand audio'
+      'On-demand audio quality: adaptive (selected by YouTube; exact bitrate unavailable)'
     );
     return;
   }
