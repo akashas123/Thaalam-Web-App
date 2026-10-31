@@ -19,7 +19,6 @@ const nowPlayingSubtitle = document.getElementById('nowPlayingSubtitle');
 const nowPlayingAutoplayContext = document.getElementById('nowPlayingAutoplayContext');
 const onDemandMiniArtwork = document.getElementById('miniPlayerArt');
 const onDemandMiniProgressBar = document.getElementById('miniPlayerProgress');
-const onDemandMiniProgressFill = document.getElementById('miniPlayerProgressFill');
 const playbackProgressBar = document.getElementById('progressBar');
 const playbackProgressFill = document.getElementById('progressFill');
 const playbackProgressThumb = document.getElementById('progressThumb');
@@ -896,18 +895,12 @@ function setPlaybackProgress(elapsed, duration) {
     : 0;
 
   playbackProgressFill.style.width = `${percent}%`;
-  // The shared mini-player clock in script.js owns live progress. Keeping
-  // this routine as the only mini-fill writer for On-Demand prevents its
-  // separate live estimate from fighting the live clock on pause/resume.
-  if (onDemandMiniProgressFill && window.onDemandPlaybackActive) {
-    const miniPercent = percent > 0 ? Math.max(0.5, Math.min(98, percent)) : 0;
-    onDemandMiniProgressFill.style.display = 'block';
-    onDemandMiniProgressFill.style.width = `${miniPercent}%`;
-  }
+  // script.js is the sole owner of the mini-player fill. Writing it here as
+  // well lets two clocks with slightly different duration values fight during
+  // a track swap, which looks like the bar moving backward and forward.
   onDemandMiniProgressBar?.classList.remove('is-live');
   if (playbackProgressThumb) playbackProgressThumb.style.left = `${percent}%`;
   playbackProgressBar.setAttribute('aria-valuenow', String(Math.round(percent)));
-  onDemandMiniProgressBar?.setAttribute('aria-valuenow', String(Math.round(percent)));
 }
 
 /* Resolves the seconds a pointer x-position maps to, clamped to the track. */
@@ -2407,6 +2400,11 @@ async function playRelatedTrack(track) {
   const song = relatedTrackToSong(track);
   const requestId = ++songRequestId;
   setOnDemandAudioReady(false);
+  // Detach the ended/near-ended source before publishing the next song's
+  // metadata, so its final timeupdate cannot repaint the new song's progress.
+  onDemandAudio.pause();
+  onDemandAudio.removeAttribute('src');
+  onDemandAudio.load();
   const artworkPromise = prefetchTrackArtwork(track);
 
   const existingQueueIndex = onDemandQueue.findIndex((queuedSong) =>
@@ -2437,6 +2435,7 @@ async function playRelatedTrack(track) {
   song.providerArtistIds = track.artistIds || [];
   song.providerAlbumId = track.albumId || '';
   selectedDuration = track.durationSeconds || parseDurationString(track.duration) || 0;
+  updatePlaybackProgress();
   setCurrentOnDemandTrack(song, track.id);
   persistCurrentOnDemandSession();
   updateOnDemandMetadata(song, { id: track.id, title: track.title, artist: track.artist, album: track.album, thumbnail: track.thumbnail });
@@ -2526,6 +2525,7 @@ async function startOnDemandSong(song, {
   updateTransportButtonState();
   resetScrub();
   window.onDemandPlaybackActive = true;
+  updatePlaybackProgress();
   document.body.classList.toggle('on-demand-paused', window.onDemandPlaying !== true);
   startOnDemandSilentLoop();
 
