@@ -295,7 +295,7 @@ function recordCompletedTasteTrack() {
       playedAt: Date.now()
     }, ...completedTasteTracks].slice(0, 500);
     // Count completed plays cumulatively per artist, including interleaved
-    // listening. Refresh at each five-play milestone, while each snapshot still
+    // listening. Refresh at each three-play milestone, while each snapshot still
     // contains the full completed history from every artist.
     const playsByArtist = new Map();
     completedTasteTracks.forEach((completedSong) => {
@@ -305,7 +305,7 @@ function recordCompletedTasteTrack() {
     });
     const shouldRefreshProfile = completedArtists.some((artist) => {
       const plays = playsByArtist.get(artist) || 0;
-      return plays >= 5 && plays % 5 === 0;
+      return plays >= 3 && plays % 3 === 0;
     });
     if (shouldRefreshProfile) personalizedTasteProfile = completedTasteTracks.slice();
     try {

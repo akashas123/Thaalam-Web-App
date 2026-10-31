@@ -33,7 +33,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=622">
+  <link rel="stylesheet" href="style.css?v=628">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -906,8 +906,8 @@
   </aside>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
-  <script src="script.js?v=90"></script>
-  <script src="ondemand-player.js?v=176"></script>
+  <script src="script.js?v=91"></script>
+  <script src="ondemand-player.js?v=177"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=12"></script>
@@ -1009,6 +1009,21 @@
     const recentHistoryDateLabel = document.getElementById('recentHistoryDateLabel');
     const recentHistoryDateProgress = document.getElementById('recentHistoryDateProgress');
     const recentHistoryDateThumb = document.getElementById('recentHistoryDateThumb');
+    let recentHistoryDateFadeTimer = 0;
+    function revealRecentHistoryDate() {
+      if (recentHistoryDateRail.hidden) return;
+      recentHistoryDateRail.classList.add('is-date-scrolling');
+      window.clearTimeout(recentHistoryDateFadeTimer);
+      recentHistoryDateFadeTimer = window.setTimeout(() => {
+        recentHistoryDateRail.classList.remove('is-date-scrolling');
+        recentHistoryDateFadeTimer = 0;
+      }, 2200);
+    }
+    function holdRecentHistoryDateVisible() {
+      window.clearTimeout(recentHistoryDateFadeTimer);
+      recentHistoryDateFadeTimer = 0;
+      if (!recentHistoryDateRail.hidden) recentHistoryDateRail.classList.add('is-date-scrolling');
+    }
     function updateRecentHistoryDateIndicator(headings, index) {
       const heading = headings[index];
       if (!heading) return;
@@ -1029,15 +1044,22 @@
       recentHistoryDateLabel.style.top = `${labelTop}px`;
     }
     recentHistoryDateSlider.addEventListener('input', () => {
+      revealRecentHistoryDate();
       const maxScroll = Math.max(0, genreResults.scrollHeight - genreResults.clientHeight);
       genreResults.scrollTo({
         top: maxScroll * (Number(recentHistoryDateSlider.value) / (Number(recentHistoryDateSlider.max) || 1)),
         behavior: 'auto'
       });
     });
+    recentHistoryDateSlider.addEventListener('pointerdown', holdRecentHistoryDateVisible);
+    recentHistoryDateSlider.addEventListener('pointerup', revealRecentHistoryDate);
+    recentHistoryDateSlider.addEventListener('pointercancel', revealRecentHistoryDate);
+    recentHistoryDateSlider.addEventListener('blur', revealRecentHistoryDate);
     let recentHistoryScrollFrame = 0;
     genreResults.addEventListener('scroll', () => {
-      if (!genreResults.classList.contains('recent-history-layout') || recentHistoryScrollFrame) return;
+      if (!genreResults.classList.contains('recent-history-layout')) return;
+      revealRecentHistoryDate();
+      if (recentHistoryScrollFrame) return;
       recentHistoryScrollFrame = requestAnimationFrame(() => {
         recentHistoryScrollFrame = 0;
         const headings = [...genreResults.querySelectorAll('.recent-history-date')];
@@ -2443,6 +2465,7 @@
           if (sessionId && sessionId !== previousRecentSessionId) {
             const sessionHeading = document.createElement('h3');
             sessionHeading.className = 'recent-history-session-heading';
+            sessionHeading.dataset.queueSessionId = sessionId;
             const source = document.createElement('span');
             source.className = 'recent-history-session-source';
             source.textContent = song.displayQueueSource === 'favourites' || song.queueSource === 'favourites'
@@ -2460,7 +2483,7 @@
         card.className = 'genre-card';
         card.__onDemandSong = song;
         if (recentHistoryLayout) {
-          card.dataset.queueSessionId = song.queueSessionId || '';
+          card.dataset.queueSessionId = song.displayQueueSessionId || song.queueSessionId || '';
           card.dataset.queueStep = String(Number(song.queueStep) || 0);
           if ((Number(song.queueStep) || 0) > 0) card.style.marginInlineStart = '1.25rem';
         }
@@ -2684,6 +2707,64 @@
           artwork.src = 'album-placeholder.svg?v=3';
         }
       });
+      if (recentHistoryLayout) {
+        const currentQueueSessionId = window.getOnDemandQueuePosition?.().queueSessionId || '';
+        const cardsPerSession = new Map();
+        orderedSongs.forEach((song) => {
+          const sessionId = song.displayQueueSessionId || song.queueSessionId || '';
+          if (sessionId) cardsPerSession.set(sessionId, (cardsPerSession.get(sessionId) || 0) + 1);
+        });
+        const grouped = document.createDocumentFragment();
+        let activeGroup = null;
+        [...genreResults.children].forEach((child) => {
+          if (child.classList.contains('recent-history-date')) {
+            activeGroup = null;
+            grouped.appendChild(child);
+            return;
+          }
+          if (child.classList.contains('recent-history-session-heading')) {
+            const sessionId = child.dataset.queueSessionId || '';
+            if (!sessionId || sessionId === currentQueueSessionId ||
+                (cardsPerSession.get(sessionId) || 0) < 2) {
+              activeGroup = null;
+              grouped.appendChild(child);
+              return;
+            }
+            const details = document.createElement('details');
+            details.className = 'recent-history-queue-group';
+            details.dataset.queueSessionId = sessionId;
+            details.open = sessionId === currentQueueSessionId;
+            const summary = document.createElement('summary');
+            summary.className = 'recent-history-queue-summary';
+            const summaryHead = document.createElement('div');
+            summaryHead.className = 'recent-history-queue-summary-head';
+            const more = document.createElement('span');
+            more.className = 'recent-history-queue-more';
+            more.textContent = `${cardsPerSession.get(sessionId) - 1} more`;
+            child.appendChild(more);
+            summaryHead.appendChild(child);
+            summary.appendChild(summaryHead);
+            const queueItems = document.createElement('div');
+            queueItems.className = 'recent-history-queue-items';
+            details.append(summary, queueItems);
+            grouped.appendChild(details);
+            activeGroup = { summary, queueItems, hasMainSong: false };
+            return;
+          }
+          if (child.classList.contains('genre-card') && activeGroup) {
+            if (!activeGroup.hasMainSong) {
+              activeGroup.summary.appendChild(child);
+              activeGroup.hasMainSong = true;
+            } else {
+              activeGroup.queueItems.appendChild(child);
+            }
+            return;
+          }
+          activeGroup = null;
+          grouped.appendChild(child);
+        });
+        genreResults.replaceChildren(grouped);
+      }
       const recentDateHeadings = [...genreResults.querySelectorAll('.recent-history-date')];
       if (recentHistoryLayout && desktopNavigation.matches && recentDateHeadings.length) {
         recentHistoryDateSlider.max = '1000';
@@ -3002,19 +3083,32 @@
       return section;
     }
 
+    let mobileRecentsRenderSignature = null;
     function updateMobileRecents() {
       const shelves = document.getElementById('mobileGenreShelves');
       if (!shelves || desktopNavigation.matches) return;
+      const songs = window.getOnDemandHistory?.() || [];
+      const visibleSongs = songs.slice(0, 10);
+      const signature = visibleSongs.map((song) => [
+        song.recentDisplayType || '',
+        song.providerTrackId || song.trackId || '',
+        song.trackName || '',
+        song.artistName || '',
+        song.artworkUrl100 || '',
+        song.recentDisplayName || '',
+        song.recentDisplayArtist || ''
+      ].join('|')).join('::');
+      if (signature === mobileRecentsRenderSignature) return;
+      mobileRecentsRenderSignature = signature;
       const previousRecents = shelves.querySelector('.mobile-recents-row');
       const previousPositions = new Map();
       previousRecents?.querySelectorAll('[data-recent-track-key]').forEach((card) => {
         previousPositions.set(card.dataset.recentTrackKey, card.getBoundingClientRect().left);
       });
       previousRecents?.remove();
-      const songs = window.getOnDemandHistory?.() || [];
-      if (songs.length) {
+      if (visibleSongs.length) {
         const recents = renderMobileHomeGenreRow(
-          { title: 'Recents' }, songs.slice(0, 10), { shuffle: false, all: true }
+          { title: 'Recents' }, visibleSongs, { shuffle: false, all: true }
         );
         recents.classList.add('mobile-recents-row');
         shelves.prepend(recents);

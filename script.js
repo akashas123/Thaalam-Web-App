@@ -115,6 +115,9 @@ document.addEventListener('selectstart', (event) => {
 });
 
 document.addEventListener('click', (event) => {
+  // Native disclosure summaries need their default click action to toggle
+  // their <details> content. They are not buttons, so let those clicks pass.
+  if (event.target.closest('.recent-history-queue-summary')) return;
   // Mobile mini-player surfaces are clickable navigation targets, including
   // their non-button padding. Let the event bubble to #miniPlayer's handler.
   if (
