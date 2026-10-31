@@ -302,7 +302,10 @@ function recordCompletedAutoplayTasteTrack() {
     playedAt: Date.now()
   }, ...completedAutoplayTasteTracks].slice(0, 500);
 
-  if (consecutiveTasteArtistCount === 5) {
+  // Refresh in five-track batches as the same artist keeps playing. This
+  // keeps recommendations stable between milestones while allowing the
+  // profile to learn from continued listening beyond the first five tracks.
+  if (consecutiveTasteArtistCount >= 5 && consecutiveTasteArtistCount % 5 === 0) {
     personalizedTasteProfile = completedAutoplayTasteTracks.slice();
     window.dispatchEvent(new CustomEvent('thaalam-personalized-recommendations-update'));
   }
