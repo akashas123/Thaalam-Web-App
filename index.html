@@ -3650,16 +3650,51 @@
       const words = query.split(' ').filter(Boolean);
       const titleWords = title.split(' ');
       const artistWords = artist.split(' ');
-      const matched = words.filter((word) =>
-        titleWords.some((candidate) => candidate.startsWith(word)) ||
-        artistWords.some((candidate) => candidate.startsWith(word)));
-      if (matched.length !== words.length) return -1;
-      return 600 + matched.length * 10 + (words.every((word) => title.includes(word)) ? 20 : 0);
+      let nearMatches = 0;
+      const matched = words.every((word) => {
+        const candidates = [...titleWords, ...artistWords];
+        if (candidates.some((candidate) => candidate.startsWith(word))) return true;
+        if (word.length < 4) return false;
+        const maxDistance = word.length >= 7 ? 2 : 1;
+        const hasNearWord = candidates.some((candidate) => {
+          if (Math.abs(candidate.length - word.length) > maxDistance) return false;
+          let previousRow = Array.from({ length: candidate.length + 1 }, (_, index) => index);
+          for (let row = 1; row <= word.length; row += 1) {
+            const currentRow = [row];
+            for (let column = 1; column <= candidate.length; column += 1) {
+              currentRow[column] = Math.min(
+                currentRow[column - 1] + 1,
+                previousRow[column] + 1,
+                previousRow[column - 1] + (word[row - 1] === candidate[column - 1] ? 0 : 1)
+              );
+            }
+            previousRow = currentRow;
+          }
+          let distance = previousRow[candidate.length];
+          if (distance === 2 && word.length === candidate.length) {
+            for (let index = 0; index < word.length - 1; index += 1) {
+              if (word[index] !== candidate[index] && word[index + 1] !== candidate[index + 1] &&
+                  word[index] === candidate[index + 1] && word[index + 1] === candidate[index] &&
+                  word.slice(index + 2) === candidate.slice(index + 2)) {
+                distance = 1;
+                break;
+              }
+            }
+          }
+          return distance <= maxDistance && 1 - distance / Math.max(word.length, candidate.length) >= 0.68;
+        });
+        if (hasNearWord) nearMatches += 1;
+        return hasNearWord;
+      });
+      if (!matched) return -1;
+      return 560 + words.length * 10 - nearMatches * 12 + (words.every((word) => title.includes(word)) ? 20 : 0);
     }
 
     function filterCatalogSuggestions(songs, term) {
       return songs.map((song, index) => ({ song, index, score: scoreCatalogSuggestion(song, term) }))
         .filter((entry) => entry.score >= 0)
+        // Match quality is primary; the provider's ranking breaks ties between
+        // equally close candidates as the best available popularity signal.
         .sort((a, b) => b.score - a.score || a.index - b.index)
         .map((entry) => entry.song);
     }
@@ -3702,9 +3737,38 @@
       const pending = suggestionRequests.get(key);
       if (pending) return pending;
       const request = searchGenre(term, ++suggestionRequestId, SEARCH_FETCH_LIMIT)
-        .then((songs) => {
-          cacheSuggestions(term, songs);
-          return songs;
+        .then(async (songs) => {
+          if (filterCatalogSuggestions(songs, term).length) {
+            cacheSuggestions(term, songs);
+            return songs;
+          }
+          const fallbackTerms = [];
+          normalizeSuggestionText(term).split(' ').filter((word) => word.length >= 4)
+            .slice(0, 3).forEach((word) => {
+              const prefix = word.slice(0, Math.max(3, Math.ceil(word.length * 0.55)));
+              for (const candidate of [word.slice(0, 3), prefix]) {
+                if (candidate.length >= 3 && !fallbackTerms.includes(candidate)) fallbackTerms.push(candidate);
+              }
+            });
+          fallbackTerms.splice(5);
+          if (!fallbackTerms.length) {
+            cacheSuggestions(term, songs);
+            return songs;
+          }
+          const fallbackPages = await Promise.all(fallbackTerms.map((fallbackTerm) =>
+            searchGenre(fallbackTerm, ++suggestionRequestId, SEARCH_FETCH_LIMIT)
+          ));
+          const combined = [...songs, ...fallbackPages.flat()];
+          const seen = new Set();
+          const matches = filterCatalogSuggestions(combined, term).filter((song) => {
+            const id = String(song.providerTrackId || song.trackId ||
+              `${song.trackName || ''}|${song.artistName || ''}`).toLowerCase();
+            if (seen.has(id)) return false;
+            seen.add(id);
+            return true;
+          });
+          cacheSuggestions(term, matches);
+          return matches;
         })
         .finally(() => suggestionRequests.delete(key));
       suggestionRequests.set(key, request);
