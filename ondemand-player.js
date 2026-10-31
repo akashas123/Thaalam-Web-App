@@ -19,7 +19,6 @@ const nowPlayingSubtitle = document.getElementById('nowPlayingSubtitle');
 const nowPlayingAutoplayContext = document.getElementById('nowPlayingAutoplayContext');
 const onDemandMiniArtwork = document.getElementById('miniPlayerArt');
 const onDemandMiniProgressBar = document.getElementById('miniPlayerProgress');
-const onDemandMiniProgressFill = document.getElementById('miniPlayerProgressFill');
 const playbackProgressBar = document.getElementById('progressBar');
 const playbackProgressFill = document.getElementById('progressFill');
 const playbackProgressThumb = document.getElementById('progressThumb');
@@ -254,6 +253,75 @@ try {
       .slice(0, 500);
   }
 } catch { /* Keep playback history available for this visit if storage is blocked. */ }
+
+const ON_DEMAND_TASTE_PROFILE_KEY = 'thaalam-on-demand-taste-profile-v1';
+let completedTasteTracks = [];
+let personalizedTasteProfile = [];
+let lastTasteCompletionRequestId = -1;
+try {
+  const storedTaste = JSON.parse(localStorage.getItem(ON_DEMAND_TASTE_PROFILE_KEY) || '{}');
+  if (Array.isArray(storedTaste.completedTracks)) completedTasteTracks = storedTaste.completedTracks.slice(0, 500);
+  if (Array.isArray(storedTaste.profile)) personalizedTasteProfile = storedTaste.profile.slice(0, 500);
+} catch { /* Start with an empty taste profile if storage is unavailable. */ }
+
+function scheduleTasteProfileWork(callback) {
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(callback, { timeout: 1500 });
+  } else {
+    window.setTimeout(callback, 0);
+  }
+}
+
+function recordCompletedTasteTrack() {
+  if (lastTasteCompletionRequestId === songRequestId) return;
+  lastTasteCompletionRequestId = songRequestId;
+  if (!currentOnDemandSong?.trackName) return;
+  // Capture the finished song now; the player may advance before background
+  // taste processing runs.
+  const song = { ...currentOnDemandSong };
+  scheduleTasteProfileWork(() => {
+    const splitArtists = (artistName) => [...new Set(String(artistName || '')
+      .split(/,|&|\bfeat(?:uring)?\b|\bwith\b|\bx\b|\u00d7/i)
+      .map((artist) => artist.trim().toLocaleLowerCase().replace(/\s+/g, ' '))
+      .filter(Boolean))];
+    const completedArtists = splitArtists(song.artistName);
+    completedTasteTracks = [{
+      trackName: String(song.trackName),
+      artistName: String(song.artistName || ''),
+      collectionName: String(song.collectionName || ''),
+      artworkUrl100: String(song.artworkUrl100 || ''),
+      language: String(song.language || ''),
+      primaryGenreName: String(song.primaryGenreName || ''),
+      playedAt: Date.now()
+    }, ...completedTasteTracks].slice(0, 500);
+    // Count completed plays cumulatively per artist, including interleaved
+    // listening. Refresh at each five-play milestone, while each snapshot still
+    // contains the full completed history from every artist.
+    const playsByArtist = new Map();
+    completedTasteTracks.forEach((completedSong) => {
+      splitArtists(completedSong.artistName).forEach((artist) => {
+        playsByArtist.set(artist, (playsByArtist.get(artist) || 0) + 1);
+      });
+    });
+    const shouldRefreshProfile = completedArtists.some((artist) => {
+      const plays = playsByArtist.get(artist) || 0;
+      return plays >= 5 && plays % 5 === 0;
+    });
+    if (shouldRefreshProfile) personalizedTasteProfile = completedTasteTracks.slice();
+    try {
+      localStorage.setItem(ON_DEMAND_TASTE_PROFILE_KEY, JSON.stringify({
+        completedTracks: completedTasteTracks,
+        profile: personalizedTasteProfile
+      }));
+    } catch { /* Keep this session's taste profile in memory. */ }
+    if (shouldRefreshProfile) {
+      scheduleTasteProfileWork(() => {
+        window.dispatchEvent(new CustomEvent('thaalam-personalized-recommendations-update'));
+      });
+    }
+  });
+}
+window.getOnDemandTasteProfile = () => personalizedTasteProfile.map((song) => ({ ...song }));
 
 let pendingHistoryCommit = 0;
 let recentHistoryDirty = false;
@@ -833,18 +901,12 @@ function setPlaybackProgress(elapsed, duration) {
     : 0;
 
   playbackProgressFill.style.width = `${percent}%`;
-  // The shared mini-player clock in script.js owns live progress. Keeping
-  // this routine as the only mini-fill writer for On-Demand prevents its
-  // separate live estimate from fighting the live clock on pause/resume.
-  if (onDemandMiniProgressFill && window.onDemandPlaybackActive) {
-    const miniPercent = percent > 0 ? Math.max(0.5, Math.min(98, percent)) : 0;
-    onDemandMiniProgressFill.style.display = 'block';
-    onDemandMiniProgressFill.style.width = `${miniPercent}%`;
-  }
+  // script.js is the sole owner of the mini-player fill. Writing it here as
+  // well lets two clocks with slightly different duration values fight during
+  // a track swap, which looks like the bar moving backward and forward.
   onDemandMiniProgressBar?.classList.remove('is-live');
   if (playbackProgressThumb) playbackProgressThumb.style.left = `${percent}%`;
   playbackProgressBar.setAttribute('aria-valuenow', String(Math.round(percent)));
-  onDemandMiniProgressBar?.setAttribute('aria-valuenow', String(Math.round(percent)));
 }
 
 /* Resolves the seconds a pointer x-position maps to, clamped to the track. */
@@ -1327,6 +1389,7 @@ function bindOnDemandAudioEvents(audio) {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
     syncAdaptiveDisc(audio, 'paused');
     if (autoplayTrackTransition) return;
+    recordCompletedTasteTrack();
     if (onDemandRepeatMode === 'all' && onDemandQueueSource === 'favourites' &&
         onDemandQueue.length > 1) {
       // The queue can include recommendation tracks after the favourites
@@ -1372,6 +1435,7 @@ function resumeMobilePlaybackAfterBackground() {
     (Number.isFinite(duration) && duration > 0 &&
       onDemandAudio.currentTime >= duration - 0.35);
   if (reachedTrackEnd) {
+    recordCompletedTasteTrack();
     autoplayTrackTransition = true;
     advanceToSimilarSong();
   } else if (onDemandAudio.paused) {
@@ -2342,6 +2406,11 @@ async function playRelatedTrack(track) {
   const song = relatedTrackToSong(track);
   const requestId = ++songRequestId;
   setOnDemandAudioReady(false);
+  // Detach the ended/near-ended source before publishing the next song's
+  // metadata, so its final timeupdate cannot repaint the new song's progress.
+  onDemandAudio.pause();
+  onDemandAudio.removeAttribute('src');
+  onDemandAudio.load();
   const artworkPromise = prefetchTrackArtwork(track);
 
   const existingQueueIndex = onDemandQueue.findIndex((queuedSong) =>
@@ -2372,6 +2441,7 @@ async function playRelatedTrack(track) {
   song.providerArtistIds = track.artistIds || [];
   song.providerAlbumId = track.albumId || '';
   selectedDuration = track.durationSeconds || parseDurationString(track.duration) || 0;
+  updatePlaybackProgress();
   setCurrentOnDemandTrack(song, track.id);
   persistCurrentOnDemandSession();
   updateOnDemandMetadata(song, { id: track.id, title: track.title, artist: track.artist, album: track.album, thumbnail: track.thumbnail });
@@ -2461,6 +2531,7 @@ async function startOnDemandSong(song, {
   updateTransportButtonState();
   resetScrub();
   window.onDemandPlaybackActive = true;
+  updatePlaybackProgress();
   document.body.classList.toggle('on-demand-paused', window.onDemandPlaying !== true);
   startOnDemandSilentLoop();
 
