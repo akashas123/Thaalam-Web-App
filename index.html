@@ -1282,7 +1282,7 @@
     // Genre tabs use Apple's genre charts. Versioned separately from the old
     // text-search and filtered result caches.
     // v9 keeps only the first 21 chart tracks (7 columns x 3 rows).
-    const GENRE_CACHE_KEY = 'thaalam-jiosaavn-genre-cache-v7';
+    const GENRE_CACHE_KEY = 'thaalam-jiosaavn-genre-cache-v10';
     const GENRE_CHART_LIMIT = 21;
     const RECOMMENDATION_DEVICE_KEY = 'thaalam-recommendation-device-v1';
     let recommendationDeviceId = '';
@@ -1544,16 +1544,15 @@
             // general discovery track in the 21-card genre grid.
             const personalizedTarget = Math.round(GENRE_CHART_LIMIT * 0.95);
             const generalTarget = GENRE_CHART_LIMIT - personalizedTarget;
-            const identity = (song) =>
-              `${String(song.trackName || '').trim().toLocaleLowerCase()}|${String(song.artistName || '').trim().toLocaleLowerCase()}`;
             const picked = [];
             const seen = new Set();
             const addFrom = (items, count) => {
               if (count <= 0 || picked.length >= GENRE_CHART_LIMIT) return 0;
               let added = 0;
               for (const song of items) {
-                const key = identity(song);
-                if (!key || seen.has(key)) continue;
+                const key = recommendationTitleKey(song) ||
+                  String(song.providerTrackId || song.trackId || '');
+                if (!key || hasSimilarRecommendationTitle(recommendationTitleKey(song), seen) || seen.has(key)) continue;
                 seen.add(key);
                 picked.push(song);
                 added += 1;
@@ -1937,6 +1936,7 @@
     // Keep the full genre chart playable, while bringing familiar artists into
     // the mix and spacing repeats on both mobile and desktop.
     function personalizeGenreSongs(songs) {
+      songs = dedupeRecommendationSongs(songs);
       const history = window.getOnDemandTasteProfile?.() || [];
       if (!history.length) return songs;
 
@@ -1969,6 +1969,70 @@
         recentArtists.push(...splitArtists(song.artistName));
       }
       return mixed;
+    }
+
+    function recommendationTitleKey(song) {
+      let title = String(song?.trackName || song?.title || '');
+      // Album attribution and release/version labels often arrive as title
+      // suffixes, for example "Song (From \"Album\")" or "Song (Remastered)".
+      const versionLabel = /(?:from\b|version\b|remix\b|reprise\b|live\b|acoustic\b|remaster(?:ed)?\b|cover\b|lo[ -]?fi\b|slowed\b|sped[ -]?up\b|instrumental\b|radio edit\b)/i;
+      title = title.replace(/\s*\([^)]*\)/g, (suffix) =>
+        versionLabel.test(suffix) ? ' ' : suffix);
+      title = title.replace(/\s*\[[^\]]*\]/g, (suffix) =>
+        versionLabel.test(suffix) ? ' ' : suffix);
+      title = title.replace(/\s+-\s+(?:from\b|.*\b(?:remix|reprise|live|acoustic|remaster(?:ed)?|cover|lo[ -]?fi|slowed|sped[ -]?up|instrumental|radio edit)\b).*$/i, '');
+      return title.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+    }
+
+    function hasSimilarRecommendationTitle(titleKey, seenTitles) {
+      if (!titleKey) return false;
+      for (const existingTitle of seenTitles) {
+        if (existingTitle === titleKey) return true;
+        if (!existingTitle || /^\w+:/.test(existingTitle)) continue;
+        const shorter = titleKey.length <= existingTitle.length ? titleKey : existingTitle;
+        const longer = titleKey.length > existingTitle.length ? titleKey : existingTitle;
+        if (shorter.length >= 7 && longer.includes(shorter) && shorter.length / longer.length >= 0.55) return true;
+
+        const words = new Set(titleKey.split(/\s+/).filter(Boolean));
+        const existingWords = new Set(existingTitle.split(/\s+/).filter(Boolean));
+        const overlap = [...words].filter((word) => existingWords.has(word)).length;
+        const smallerSize = Math.min(words.size, existingWords.size);
+        const unionSize = new Set([...words, ...existingWords]).size;
+        if (smallerSize && overlap / smallerSize >= 0.8 &&
+            (overlap / unionSize >= 0.6 || (smallerSize >= 2 && smallerSize / unionSize >= 0.5))) return true;
+
+        if (Math.min(titleKey.length, existingTitle.length) >= 7) {
+          const previousRow = Array.from({ length: existingTitle.length + 1 }, (_, index) => index);
+          for (let row = 1; row <= titleKey.length; row += 1) {
+            const currentRow = [row];
+            for (let column = 1; column <= existingTitle.length; column += 1) {
+              currentRow[column] = Math.min(
+                currentRow[column - 1] + 1,
+                previousRow[column] + 1,
+                previousRow[column - 1] + (titleKey[row - 1] === existingTitle[column - 1] ? 0 : 1)
+              );
+            }
+            previousRow.splice(0, previousRow.length, ...currentRow);
+          }
+          const editRatio = 1 - previousRow[existingTitle.length] / Math.max(titleKey.length, existingTitle.length);
+          if (editRatio >= 0.78) return true;
+        }
+      }
+      return false;
+    }
+
+    function dedupeRecommendationSongs(songs, seenTitles = new Set()) {
+      const unique = [];
+      (Array.isArray(songs) ? songs : []).forEach((song) => {
+        const titleKey = recommendationTitleKey(song);
+        const fallbackKey = String(song?.providerTrackId || song?.trackId || '');
+        const key = titleKey || fallbackKey;
+        if (!key || (titleKey && hasSimilarRecommendationTitle(titleKey, seenTitles)) || seenTitles.has(key)) return;
+        seenTitles.add(key);
+        unique.push(song);
+      });
+      return unique;
     }
 
     function favouriteSongIdentity(song) {
@@ -2947,13 +3011,11 @@
                 language: song.language || '',
                 primaryGenreName: label
               };
-              // Collapse re-uploads of one recording (same title + artist) so the
-              // grid shows distinct songs instead of the same tile repeated.
-              const key = `${mapped.trackName || ''}|${mapped.artistName || ''}`
-                .toLowerCase()
-                .replace(/\s+/g, ' ')
-                .trim();
-              if (seen.has(key)) continue;
+              // Keep one recommendation per core title across artists, uploads,
+              // and album/version variants.
+              const key = recommendationTitleKey(mapped) ||
+                String(mapped.providerTrackId || mapped.trackId || '');
+              if (hasSimilarRecommendationTitle(recommendationTitleKey(mapped), seen) || seen.has(key)) continue;
               seen.add(key);
               songs.push(mapped);
               if (songs.length >= limit) break;
