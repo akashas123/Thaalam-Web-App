@@ -2124,6 +2124,7 @@ function relatedTrackToSong(track) {
     trackName: track.title || 'Unknown song',
     artistName: (track.artist || '').replace(/\s-\sTopic$/i, '').trim(),
     collectionName: track.album || '',
+    language: track.language || '',
     primaryGenreName: track.primaryGenreName || '',
     artworkUrl100: track.thumbnail || '',
     trackTimeMillis: (track.durationSeconds || parseDurationString(track.duration) || 0) * 1000,
@@ -2590,6 +2591,7 @@ async function startOnDemandSong(song, {
     song.providerTrackId = track.id;
     song.providerArtistIds = track.artistIds || song.providerArtistIds || [];
     song.providerAlbumId = track.albumId || song.providerAlbumId || '';
+    song.language = track.language || song.language || '';
     song.streamUrl = track.streamUrl;
     if (!hadProviderTrackId && song.trackKey) {
       window.saveLikedSongPlaybackIdentity?.(song);
