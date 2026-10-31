@@ -1129,6 +1129,27 @@
     const catalogSearchInput = document.getElementById('catalogSearchInput');
     const catalogSuggestions = document.getElementById('catalogSuggestions');
     const catalogClearButton = document.getElementById('catalogClearButton');
+    // Keep the suggestion panel out of the home page's nested scrolling and
+    // stacking contexts. It is positioned against the search field below.
+    document.body.appendChild(catalogSuggestions);
+    catalogSuggestions.classList.add('catalog-suggestions-floating');
+    function positionCatalogSuggestions() {
+      if (catalogSuggestions.hidden || !catalogSearchInput.isConnected) return;
+      const rect = catalogSearchForm.getBoundingClientRect();
+      const gap = 8;
+      const maxHeight = Math.min(320, Math.max(120, window.innerHeight * 0.45));
+      const below = window.innerHeight - rect.bottom - gap - 8;
+      const top = below >= Math.min(maxHeight, 180)
+        ? rect.bottom + gap
+        : Math.max(8, rect.top - Math.min(maxHeight, window.innerHeight * 0.45) - gap);
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8));
+      catalogSuggestions.style.left = `${left}px`;
+      catalogSuggestions.style.top = `${top}px`;
+      catalogSuggestions.style.width = `${Math.min(rect.width, window.innerWidth - 16)}px`;
+      catalogSuggestions.style.maxHeight = `${Math.max(100, Math.min(maxHeight, window.innerHeight - top - 8))}px`;
+    }
+    window.addEventListener('resize', positionCatalogSuggestions);
+    window.addEventListener('scroll', positionCatalogSuggestions, true);
     function setPersonalisedPicksSubtitle() {
       if (homeSubtitle) homeSubtitle.textContent = 'Personalised picks';
     }
@@ -3482,17 +3503,19 @@
       status.textContent = message;
       catalogSuggestions.appendChild(status);
       catalogSuggestions.hidden = false;
+      positionCatalogSuggestions();
       catalogSearchInput.setAttribute('aria-expanded', 'true');
     }
 
-    function renderCatalogSuggestions(songs) {
+    function renderCatalogSuggestions(songs, term) {
+      songs = filterCatalogSuggestions(songs, term).slice(0, 5);
       catalogSuggestions.replaceChildren();
       if (!songs.length) {
-        showCatalogSuggestionMessage('No matching songs found.');
+        hideCatalogSuggestions();
         return;
       }
 
-      songs.slice(0, 8).forEach((song) => {
+      songs.slice(0, 5).forEach((song) => {
         const option = document.createElement('button');
         option.type = 'button';
         option.className = 'catalog-suggestion';
@@ -3513,6 +3536,7 @@
         catalogSuggestions.appendChild(option);
       });
       catalogSuggestions.hidden = false;
+      positionCatalogSuggestions();
       catalogSearchInput.setAttribute('aria-expanded', 'true');
     }
 
@@ -3544,11 +3568,38 @@
       }
     }
 
+    function normalizeSuggestionText(value) {
+      return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+    }
+
+    function scoreCatalogSuggestion(song, term) {
+      const query = normalizeSuggestionText(term);
+      const title = normalizeSuggestionText(song.trackName);
+      const artist = normalizeSuggestionText(song.artistName);
+      if (!query || (!title && !artist)) return -1;
+      if (title === query) return 1000;
+      if (artist === query) return 950;
+      if (title.startsWith(query)) return 900 - (title.length - query.length) * 0.1;
+      if (artist.startsWith(query)) return 850 - (artist.length - query.length) * 0.1;
+      if (title.includes(query)) return 800 - title.indexOf(query);
+      if (artist.includes(query)) return 750 - artist.indexOf(query);
+
+      const words = query.split(' ').filter(Boolean);
+      const titleWords = title.split(' ');
+      const artistWords = artist.split(' ');
+      const matched = words.filter((word) =>
+        titleWords.some((candidate) => candidate.startsWith(word)) ||
+        artistWords.some((candidate) => candidate.startsWith(word)));
+      if (matched.length !== words.length) return -1;
+      return 600 + matched.length * 10 + (words.every((word) => title.includes(word)) ? 20 : 0);
+    }
+
     function filterCatalogSuggestions(songs, term) {
-      const key = term.trim().toLowerCase();
-      return songs.filter((song) =>
-        `${song.trackName || ''} ${song.artistName || ''}`.toLowerCase().includes(key)
-      );
+      return songs.map((song, index) => ({ song, index, score: scoreCatalogSuggestion(song, term) }))
+        .filter((entry) => entry.score >= 0)
+        .sort((a, b) => b.score - a.score || a.index - b.index)
+        .map((entry) => entry.song);
     }
 
     function findInstantSuggestions(term) {
@@ -3576,7 +3627,7 @@
       const score = term.length * 2 + (exact ? 1 : 0);
       if (score < suggestionRenderScore) return;
       suggestionRenderScore = score;
-      renderCatalogSuggestions(songs);
+      renderCatalogSuggestions(songs, term);
     }
 
     // The single source of search results per term: one network request whose
@@ -3636,7 +3687,6 @@
       catalogClearButton.hidden = catalogSearchInput.value.length === 0;
       const term = catalogSearchInput.value.trim();
       if (activeGenre === 'you-like') {
-        hideCatalogSuggestions();
         const query = term.toLocaleLowerCase();
         const songs = query
           ? currentFavouriteSongs.filter((song) =>
@@ -3647,9 +3697,11 @@
         renderGenreResults(songs);
         const empty = genreResults.querySelector('.genre-empty');
         if (empty) empty.textContent = query ? 'No matching songs were found.' : 'No liked songs';
+        if (term) renderCatalogSuggestions(currentFavouriteSongs, term);
+        else hideCatalogSuggestions();
         return;
       }
-      if (term.length < 2) {
+      if (!term) {
         hideCatalogSuggestions();
         if (!term && activeGenre.startsWith('search:')) loadGenre('international');
         return;
@@ -3663,7 +3715,7 @@
           suggestionCache.has(term.toLowerCase())
         );
       } else {
-        showCatalogSuggestionMessage('Finding songs...');
+        hideCatalogSuggestions();
       }
 
       if (suggestionCache.has(term.toLowerCase())) return;
@@ -4192,7 +4244,9 @@
       options[(current + direction + options.length) % options.length]?.focus();
     });
     document.addEventListener('click', (event) => {
-      if (!catalogSearchForm.contains(event.target)) hideCatalogSuggestions();
+      if (!catalogSearchForm.contains(event.target) && !catalogSuggestions.contains(event.target)) {
+        hideCatalogSuggestions();
+      }
     });
 
     function prepareGenreTabChangeShuffle() {

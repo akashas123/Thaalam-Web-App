@@ -1782,6 +1782,8 @@ body.view-rises-from-mini.view-now-playing .player-view {
   }
 
   .home-catalog-header {
+    position: relative;
+    z-index: 14;
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
@@ -1798,6 +1800,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
 
   .catalog-search {
     position: relative;
+    z-index: 15;
     display: flex;
     flex: 0 1 22rem;
     align-items: center;
@@ -1815,6 +1818,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
 
   .catalog-suggestions {
     position: absolute;
+    display: block;
     top: calc(100% + 0.65rem);
     right: 0;
     z-index: 12;
@@ -4942,6 +4946,8 @@ body.has-lyrics .lyrics-panel {
   }
 
   .home-catalog-header {
+    position: relative;
+    z-index: 14;
     display: flex;
     flex-direction: column;
     align-items: stretch;
@@ -4966,6 +4972,7 @@ body.has-lyrics .lyrics-panel {
 
   .catalog-search {
     position: relative;
+    z-index: 15;
     display: flex;
     min-height: 2.8rem;
     align-items: center;
@@ -5010,7 +5017,7 @@ body.has-lyrics .lyrics-panel {
 
   .catalog-search > button[hidden] { display: none; }
   .catalog-search svg { width: 1.1rem; height: 1.1rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
-  .catalog-suggestions { position: absolute; top: calc(100% + 0.4rem); right: 0; left: 0; z-index: 13; max-height: 45dvh; overflow-y: auto; padding: 0.35rem; border: 1px solid rgba(255,255,255,.18); border-radius: 0.85rem; background: #17191e; }
+  .catalog-suggestions { position: absolute; display: block; top: calc(100% + 0.4rem); right: 0; left: 0; z-index: 13; max-height: 45dvh; overflow-y: auto; padding: 0.35rem; border: 1px solid rgba(255,255,255,.18); border-radius: 0.85rem; background: #17191e; }
   .catalog-suggestions[hidden], .genre-tabs[hidden], .favourite-sort-control[hidden] { display: none; }
   .catalog-suggestion { display: flex; width: 100%; flex-direction: column; gap: 0.2rem; padding: 0.7rem; border: 0; border-radius: 0.55rem; background: transparent; color: #fff; text-align: left; }
   .catalog-suggestion-title { font-size: 0.86rem; font-weight: 600; }
@@ -6125,6 +6132,21 @@ img {
 }
 
 @media (max-width: 56.1875rem), (pointer: coarse) and (any-pointer: coarse) {
+  body.view-home,
+  body.view-home .home-page,
+  body.view-home .home-page * {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+
+  body.view-home::-webkit-scrollbar,
+  body.view-home .home-page::-webkit-scrollbar,
+  body.view-home .home-page *::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+
   /* Lyrics can arrive after the next track's artwork and metadata have
      already rendered. Reveal the mobile panel directly in document flow so
      its heading never fades in at the player's absolute-positioned fallback. */
@@ -7321,4 +7343,9 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
     width: 3.75rem;
     height: 3.75rem;
   }
+}
+.catalog-suggestions.catalog-suggestions-floating {
+  position: fixed;
+  right: auto;
+  z-index: 9999;
 }
