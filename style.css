@@ -6804,6 +6804,7 @@ img {
     max-width: none;
     transform: translateY(-50%);
     color: rgba(255, 255, 255, 0.55);
+    opacity: 0;
     font-size: 1.45rem;
     font-weight: 750;
     line-height: 1.35;
@@ -6811,6 +6812,11 @@ img {
     white-space: nowrap;
     overflow: visible;
     pointer-events: none;
+    transition: opacity 220ms ease;
+  }
+
+  .recent-history-date-rail.is-date-scrolling output {
+    opacity: 1;
   }
 
   #recentHistoryDateSlider {
@@ -6957,6 +6963,75 @@ img {
     font-weight: 550;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .recent-history-queue-group {
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+
+  .recent-history-queue-summary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    list-style: none;
+    cursor: pointer;
+  }
+
+  .recent-history-queue-summary::-webkit-details-marker { display: none; }
+
+  .recent-history-queue-summary-head {
+    grid-column: 1 / -1;
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.65rem;
+  }
+
+  .recent-history-queue-summary-head .recent-history-session-heading {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .recent-history-queue-summary-head .recent-history-session-start {
+    max-width: min(34rem, 58vw);
+  }
+
+  .recent-history-queue-more {
+    flex: 0 0 auto;
+    color: rgba(255, 255, 255, 0.56);
+    font-size: 0.68rem;
+    font-weight: 650;
+    white-space: nowrap;
+  }
+
+  .recent-history-queue-more::after {
+    content: '';
+    display: inline-block;
+    margin-left: 0.35rem;
+    border-top: 0.3rem solid currentColor;
+    border-right: 0.24rem solid transparent;
+    border-left: 0.24rem solid transparent;
+    vertical-align: 0.12rem;
+    transition: transform 180ms ease;
+  }
+
+  .recent-history-queue-group[open] .recent-history-queue-more::after {
+    transform: rotate(180deg);
+  }
+
+  .recent-history-queue-summary > .genre-card {
+    grid-column: 1;
+    grid-row: 2;
+    margin-top: 0.1rem;
+  }
+
+  .recent-history-queue-items {
+    padding-bottom: 0.2rem;
+  }
+
+  .recent-history-queue-items .genre-card {
+    margin-inline-start: 1.25rem;
   }
 
   .genre-results.recent-history-layout .recent-history-date:first-child {
