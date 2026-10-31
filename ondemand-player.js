@@ -36,8 +36,82 @@ const onDemandFallbackArtwork = new URL('thaalam-icon-512.png?v=1', window.locat
    just-ended element. */
 let onDemandAudio = new Audio();
 onDemandAudio.preload = 'auto';
+// Saavn's stream CDN returns permissive CORS headers. Set this before any
+// stream URL is assigned so Web Audio can spatialize while audio stays CDN-hosted.
+onDemandAudio.crossOrigin = 'anonymous';
 onDemandAudio.setAttribute('playsinline', '');
 onDemandAudio.setAttribute('webkit-playsinline', '');
+let spatialAudioContext = null;
+
+function ensureSpatialAudioContext() {
+  if (spatialAudioContext) return spatialAudioContext;
+  const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextConstructor) return null;
+
+  try {
+    const context = new AudioContextConstructor({ latencyHint: 'interactive' });
+    const source = context.createMediaElementSource(onDemandAudio);
+    const dryGain = context.createGain();
+    const wetGain = context.createGain();
+    dryGain.gain.value = 1;
+    wetGain.gain.value = 0.24;
+    source.connect(dryGain);
+    dryGain.connect(context.destination);
+
+    // Six short reflections surround and slightly elevate the listener. Keep
+    // the original stereo track on the immediate dry path; spatial echoes add
+    // depth without buffering the stream or delaying playback.
+    const reflections = [
+      { delay: 0.023, gain: 0.18, position: [-0.8, 0.35, -1] },
+      { delay: 0.031, gain: 0.16, position: [0.8, 0.35, -1] },
+      { delay: 0.045, gain: 0.145, position: [-1, 0, 0] },
+      { delay: 0.052, gain: 0.13, position: [1, 0, 0] },
+      { delay: 0.068, gain: 0.11, position: [-0.8, 0.35, 0.8] },
+      { delay: 0.082, gain: 0.095, position: [0.8, -0.35, 0.8] }
+    ];
+    reflections.forEach(({ delay, gain, position }) => {
+      const delayNode = context.createDelay(0.1);
+      const reflectionGain = context.createGain();
+      const panner = context.createPanner();
+      delayNode.delayTime.value = delay;
+      reflectionGain.gain.value = gain;
+      panner.panningModel = 'HRTF';
+      panner.distanceModel = 'linear';
+      panner.refDistance = 1;
+      panner.maxDistance = 2;
+      panner.rolloffFactor = 0;
+      if (panner.positionX) {
+        panner.positionX.value = position[0];
+        panner.positionY.value = position[1];
+        panner.positionZ.value = position[2];
+      } else {
+        panner.setPosition(...position);
+      }
+      source.connect(delayNode);
+      delayNode.connect(panner);
+      panner.connect(reflectionGain);
+      reflectionGain.connect(wetGain);
+    });
+    wetGain.connect(context.destination);
+
+    spatialAudioContext = context;
+    return context;
+  } catch (error) {
+    console.warn('Spatial sound is unavailable; using direct audio.', error);
+    return null;
+  }
+}
+
+function unlockSpatialAudioFromGesture() {
+  const context = ensureSpatialAudioContext();
+  if (context?.state === 'suspended') context.resume().catch(() => {});
+}
+
+// Unlock the context during the user's gesture, before a song-card click can
+// begin its asynchronous lookup. Playback never waits for context startup.
+document.addEventListener('pointerdown', unlockSpatialAudioFromGesture, { capture: true });
+document.addEventListener('keydown', unlockSpatialAudioFromGesture, { capture: true });
+
 // A continuously looping, inaudible stream. Mobile browsers (notably Android
 // Chrome) suspend a page's timers/JS when no audio is playing - including when
 // the screen locks - which stops on-demand track transitions. Keeping this
