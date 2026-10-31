@@ -255,6 +255,69 @@ try {
   }
 } catch { /* Keep playback history available for this visit if storage is blocked. */ }
 
+const ON_DEMAND_TASTE_PROFILE_KEY = 'thaalam-on-demand-taste-profile-v1';
+let completedAutoplayTasteTracks = [];
+let personalizedTasteProfile = [];
+let consecutiveTasteArtist = '';
+let consecutiveTasteArtistCount = 0;
+let lastTasteCompletionRequestId = -1;
+try {
+  const storedTaste = JSON.parse(localStorage.getItem(ON_DEMAND_TASTE_PROFILE_KEY) || '{}');
+  if (Array.isArray(storedTaste.completedTracks)) completedAutoplayTasteTracks = storedTaste.completedTracks.slice(0, 500);
+  if (Array.isArray(storedTaste.profile)) personalizedTasteProfile = storedTaste.profile.slice(0, 500);
+  consecutiveTasteArtist = String(storedTaste.consecutiveArtist || '');
+  consecutiveTasteArtistCount = Math.max(0, Number(storedTaste.consecutiveCount) || 0);
+} catch { /* Start with an empty taste profile if storage is unavailable. */ }
+
+function recordCompletedAutoplayTasteTrack() {
+  if (lastTasteCompletionRequestId === songRequestId) return;
+  lastTasteCompletionRequestId = songRequestId;
+  if (onDemandQueueSource !== 'autoplay' || !currentOnDemandSong?.trackName) {
+    consecutiveTasteArtist = '';
+    consecutiveTasteArtistCount = 0;
+    try {
+      localStorage.setItem(ON_DEMAND_TASTE_PROFILE_KEY, JSON.stringify({
+        completedTracks: completedAutoplayTasteTracks,
+        profile: personalizedTasteProfile,
+        consecutiveArtist: '',
+        consecutiveCount: 0
+      }));
+    } catch { /* Keep this session's taste profile in memory. */ }
+    return;
+  }
+  const song = currentOnDemandSong;
+  const artistName = String(song.artistName || '').split(/,|&|\bfeat(?:uring)?\b|\bwith\b/i)[0]
+    .trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+  if (!artistName) return;
+  consecutiveTasteArtistCount = artistName === consecutiveTasteArtist
+    ? consecutiveTasteArtistCount + 1
+    : 1;
+  consecutiveTasteArtist = artistName;
+  completedAutoplayTasteTracks = [{
+    trackName: String(song.trackName),
+    artistName: String(song.artistName || ''),
+    collectionName: String(song.collectionName || ''),
+    artworkUrl100: String(song.artworkUrl100 || ''),
+    language: String(song.language || ''),
+    primaryGenreName: String(song.primaryGenreName || ''),
+    playedAt: Date.now()
+  }, ...completedAutoplayTasteTracks].slice(0, 500);
+
+  if (consecutiveTasteArtistCount === 5) {
+    personalizedTasteProfile = completedAutoplayTasteTracks.slice();
+    window.dispatchEvent(new CustomEvent('thaalam-personalized-recommendations-update'));
+  }
+  try {
+    localStorage.setItem(ON_DEMAND_TASTE_PROFILE_KEY, JSON.stringify({
+      completedTracks: completedAutoplayTasteTracks,
+      profile: personalizedTasteProfile,
+      consecutiveArtist: consecutiveTasteArtist,
+      consecutiveCount: consecutiveTasteArtistCount
+    }));
+  } catch { /* Keep this session's taste profile in memory. */ }
+}
+window.getOnDemandTasteProfile = () => personalizedTasteProfile.map((song) => ({ ...song }));
+
 let pendingHistoryCommit = 0;
 let recentHistoryDirty = false;
 let playbackHistoryDirty = false;
@@ -1327,6 +1390,7 @@ function bindOnDemandAudioEvents(audio) {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
     syncAdaptiveDisc(audio, 'paused');
     if (autoplayTrackTransition) return;
+    recordCompletedAutoplayTasteTrack();
     if (onDemandRepeatMode === 'all' && onDemandQueueSource === 'favourites' &&
         onDemandQueue.length > 1) {
       // The queue can include recommendation tracks after the favourites
@@ -1372,6 +1436,7 @@ function resumeMobilePlaybackAfterBackground() {
     (Number.isFinite(duration) && duration > 0 &&
       onDemandAudio.currentTime >= duration - 0.35);
   if (reachedTrackEnd) {
+    recordCompletedAutoplayTasteTrack();
     autoplayTrackTransition = true;
     advanceToSimilarSong();
   } else if (onDemandAudio.paused) {

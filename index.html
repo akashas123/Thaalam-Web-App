@@ -907,7 +907,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=90"></script>
-  <script src="ondemand-player.js?v=166"></script>
+  <script src="ondemand-player.js?v=169"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=12"></script>
@@ -1181,30 +1181,37 @@
       ]
     };
 
-    function reorderDesktopGenreTabsFromHistory() {
-      if (!genreTabList) return;
-      const languageToGenre = [
-        ['international', 'english'],
-        ['hindi', 'hindi'],
-        ['malayalam', 'malayalam'],
-        ['tamil', 'tamil']
-      ];
+    const genreLanguageOrder = [
+      ['international', 'english'],
+      ['hindi', 'hindi'],
+      ['malayalam', 'malayalam'],
+      ['tamil', 'tamil']
+    ];
+
+    function getGenreOrderFromHistory() {
+      const languageToGenre = genreLanguageOrder;
       const playsByGenre = new Map(languageToGenre.map(([genre]) => [genre, 0]));
-      if (desktopNavigation.matches) {
-        (window.getOnDemandPlaybackHistory?.() || []).forEach((song) => {
-          const language = String(song?.language || '').trim().toLocaleLowerCase();
-          const match = languageToGenre.find(([, languageKey]) => language.includes(languageKey));
-          if (match) playsByGenre.set(match[0], playsByGenre.get(match[0]) + 1);
-        });
-      }
+      (window.getOnDemandPlaybackHistory?.() || []).forEach((song) => {
+        const language = String(song?.language || '').trim().toLocaleLowerCase();
+        const match = languageToGenre.find(([, languageKey]) => language.includes(languageKey));
+        if (match) playsByGenre.set(match[0], playsByGenre.get(match[0]) + 1);
+      });
 
       const originalOrder = new Map(languageToGenre.map(([genre], index) => [genre, index]));
+      return [...languageToGenre]
+        .map(([genre]) => genre)
+        .sort((first, second) =>
+          playsByGenre.get(second) - playsByGenre.get(first) ||
+          originalOrder.get(first) - originalOrder.get(second)
+        );
+    }
+
+    function reorderDesktopGenreTabsFromHistory() {
+      if (!genreTabList) return;
+      const order = getGenreOrderFromHistory();
       const genreTabsInOrder = [...genreTabs]
         .filter((tab) => Object.prototype.hasOwnProperty.call(genreFeedIds, tab.dataset.genre))
-        .sort((first, second) =>
-          playsByGenre.get(second.dataset.genre) - playsByGenre.get(first.dataset.genre) ||
-          originalOrder.get(first.dataset.genre) - originalOrder.get(second.dataset.genre)
-        );
+        .sort((first, second) => order.indexOf(first.dataset.genre) - order.indexOf(second.dataset.genre));
       const firstUtilityTab = [...genreTabs].find((tab) =>
         !Object.prototype.hasOwnProperty.call(genreFeedIds, tab.dataset.genre)
       );
@@ -1220,6 +1227,7 @@
     const genreResultCache = new Map();
     const genreResultCacheDay = new Map();
     const genreChartRequests = new Map();
+    let recommendationTasteRevision = 0;
     // Recently fetched suggestions keyed by normalized term. Repeat searches
     // and prefix refinements ("taylor" → "taylor swift") resolve instantly
     // from memory instead of re-paying the iTunes round trip.
@@ -1235,8 +1243,20 @@
     // Genre tabs use Apple's genre charts. Versioned separately from the old
     // text-search and filtered result caches.
     // v9 keeps only the first 21 chart tracks (7 columns x 3 rows).
-    const GENRE_CACHE_KEY = 'thaalam-jiosaavn-genre-cache-v5';
+    const GENRE_CACHE_KEY = 'thaalam-jiosaavn-genre-cache-v7';
     const GENRE_CHART_LIMIT = 21;
+    const RECOMMENDATION_DEVICE_KEY = 'thaalam-recommendation-device-v1';
+    let recommendationDeviceId = '';
+    try {
+      recommendationDeviceId = localStorage.getItem(RECOMMENDATION_DEVICE_KEY) || '';
+      if (!recommendationDeviceId) {
+        recommendationDeviceId = window.crypto?.randomUUID?.() ||
+          `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+        localStorage.setItem(RECOMMENDATION_DEVICE_KEY, recommendationDeviceId);
+      }
+    } catch {
+      recommendationDeviceId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    }
     // One small ranked search request feeds both the suggestion dropdown and
     // the results grid: fetch 20, rank by relevance, show the top 20.
     const SEARCH_FETCH_LIMIT = 20;
@@ -1331,6 +1351,33 @@
       return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
     }
 
+    function recommendationSeed(key) {
+      const value = `${recommendationDeviceId}|${localCalendarDayKey()}|${key}`;
+      let hash = 2166136261;
+      for (let index = 0; index < value.length; index += 1) {
+        hash ^= value.charCodeAt(index);
+        hash = Math.imul(hash, 16777619);
+      }
+      return hash >>> 0;
+    }
+
+    function seededGenreShuffle(items, seed) {
+      const shuffled = items.slice();
+      let state = seed >>> 0;
+      const random = () => {
+        state += 0x6D2B79F5;
+        let value = state;
+        value = Math.imul(value ^ (value >>> 15), value | 1);
+        value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+        return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+      };
+      for (let index = shuffled.length - 1; index > 0; index -= 1) {
+        const swapIndex = Math.floor(random() * (index + 1));
+        [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+      }
+      return shuffled;
+    }
+
     function getCachedDailyGenreChart(key) {
       const today = localCalendarDayKey();
       const memorySongs = genreResultCache.get(key);
@@ -1339,7 +1386,8 @@
       const storedEntry = getGenreCache()[key];
       const entryDay = storedEntry?.dayKey ||
         (storedEntry?.savedAt ? localCalendarDayKey(storedEntry.savedAt) : '');
-      if (entryDay !== today || !Array.isArray(storedEntry?.songs)) return null;
+      if (entryDay !== today || storedEntry?.deviceId !== recommendationDeviceId ||
+          !Array.isArray(storedEntry?.songs)) return null;
 
       const songs = storedEntry.songs.slice(0, GENRE_CHART_LIMIT);
       genreResultCache.set(key, songs);
@@ -1350,8 +1398,9 @@
     function getAnyCachedGenreChart(key) {
       const memorySongs = genreResultCache.get(key);
       if (Array.isArray(memorySongs) && memorySongs.length) return memorySongs;
-      const storedSongs = getGenreCache()[key]?.songs;
-      return Array.isArray(storedSongs) ? storedSongs.slice(0, GENRE_CHART_LIMIT) : [];
+      const storedEntry = getGenreCache()[key];
+      if (storedEntry?.deviceId !== recommendationDeviceId) return [];
+      return Array.isArray(storedEntry.songs) ? storedEntry.songs.slice(0, GENRE_CHART_LIMIT) : [];
     }
 
     function getDailyGenreFeedQueries(key) {
@@ -1359,15 +1408,14 @@
       if (pool.length <= 3) return pool;
       const [year, month, day] = localCalendarDayKey().split('-').map(Number);
       const dayNumber = Math.floor(Date.UTC(year, month - 1, day) / 86400000);
+      const shuffledPool = seededGenreShuffle(pool, recommendationSeed(key));
       const start = dayNumber % pool.length;
-      return [0, 1, 2].map((slot) =>
-        pool[(start + Math.floor(slot * pool.length / 3)) % pool.length]
-      );
+      return [0, 1, 2].map((slot) => shuffledPool[(start + slot) % pool.length]);
     }
 
     function getGenreHistoryArtistQueries() {
       const counts = new Map();
-      (window.getOnDemandPlaybackHistory?.() || []).forEach((song) => {
+      (window.getOnDemandTasteProfile?.() || []).forEach((song) => {
         const artist = String(song?.artistName || '').split(',')[0].trim();
         // Search artists from all history, then keep only tracks explicitly
         // tagged with this shelf's language in searchGenreChart().
@@ -1385,16 +1433,70 @@
       if (cachedSongs) return Promise.resolve(cachedSongs);
       if (genreChartRequests.has(key)) return genreChartRequests.get(key);
 
-      const queries = [...getDailyGenreFeedQueries(key), ...getGenreHistoryArtistQueries()];
-      const request = searchGenreChart(queries, 0, GENRE_CHART_LIMIT + 4, key)
-        .then((results) => {
-          if (!results.length) throw new Error(`No ${key} songs matched the language filter.`);
-          const songs = shuffleMobileItems(results).slice(0, GENRE_CHART_LIMIT);
+      const requestRevision = recommendationTasteRevision;
+      const generalQueries = getDailyGenreFeedQueries(key);
+      const personalizedQueries = getGenreHistoryArtistQueries();
+      const request = Promise.allSettled([
+        searchGenreChart(generalQueries, 0, GENRE_CHART_LIMIT + 4, key),
+        personalizedQueries.length
+          ? searchGenreChart(personalizedQueries, 0, GENRE_CHART_LIMIT + 4, key)
+          : Promise.resolve([])
+      ]).then((results) => {
+          if (requestRevision !== recommendationTasteRevision) {
+            if (genreChartRequests.get(key) === request) genreChartRequests.delete(key);
+            return loadDailyGenreChart(key);
+          }
+          const generalSongs = results[0].status === 'fulfilled' ? results[0].value : [];
+          const personalizedSongs = results[1].status === 'fulfilled' ? results[1].value : [];
+          if (!generalSongs.length && !personalizedSongs.length) {
+            throw new Error(`No ${key} songs matched the language filter.`);
+          }
+
+          let songs;
+          if (!personalizedQueries.length || !personalizedSongs.length) {
+            // New listeners and failed artist searches keep the general chart.
+            songs = generalSongs.slice(0, GENRE_CHART_LIMIT);
+          } else {
+            // With a taste profile, use 20 personalized tracks and 1 daily
+            // general discovery track in the 21-card genre grid.
+            const personalizedTarget = Math.round(GENRE_CHART_LIMIT * 0.95);
+            const generalTarget = GENRE_CHART_LIMIT - personalizedTarget;
+            const identity = (song) =>
+              `${String(song.trackName || '').trim().toLocaleLowerCase()}|${String(song.artistName || '').trim().toLocaleLowerCase()}`;
+            const picked = [];
+            const seen = new Set();
+            const addFrom = (items, count) => {
+              if (count <= 0 || picked.length >= GENRE_CHART_LIMIT) return 0;
+              let added = 0;
+              for (const song of items) {
+                const key = identity(song);
+                if (!key || seen.has(key)) continue;
+                seen.add(key);
+                picked.push(song);
+                added += 1;
+                if (added >= count || picked.length >= GENRE_CHART_LIMIT) break;
+              }
+              return added;
+            };
+            const personalizedPool = seededGenreShuffle(
+              personalizedSongs, recommendationSeed(`${key}:personalized`)
+            );
+            const generalPool = seededGenreShuffle(
+              generalSongs, recommendationSeed(`${key}:general`)
+            );
+            addFrom(personalizedPool, personalizedTarget);
+            addFrom(generalPool, generalTarget);
+            // If either source has too few distinct tracks, fill the grid from
+            // whichever source still has unseen songs.
+            addFrom(personalizedPool, GENRE_CHART_LIMIT - picked.length);
+            addFrom(generalPool, GENRE_CHART_LIMIT - picked.length);
+            songs = seededGenreShuffle(picked, recommendationSeed(key));
+          }
           const today = localCalendarDayKey();
           genreResultCache.set(key, songs);
           genreResultCacheDay.set(key, today);
           const cache = getGenreCache();
-          cache[key] = { savedAt: Date.now(), dayKey: today, songs };
+          cache[key] = { savedAt: Date.now(), dayKey: today, deviceId: recommendationDeviceId, songs };
           try { localStorage.setItem(GENRE_CACHE_KEY, JSON.stringify(cache)); }
           catch { /* Keep today's chart in memory if storage is unavailable. */ }
           return songs;
@@ -1752,7 +1854,7 @@
     // Keep the full genre chart playable, while bringing familiar artists into
     // the mix and spacing repeats on both mobile and desktop.
     function personalizeGenreSongs(songs) {
-      const history = window.getOnDemandPlaybackHistory?.() || [];
+      const history = window.getOnDemandTasteProfile?.() || [];
       if (!history.length) return songs;
 
       const normalize = (value) => String(value || '').trim().toLocaleLowerCase().replace(/\s+/g, ' ');
@@ -2990,7 +3092,9 @@
       mobileHomeGenresLoaded = true;
       mobileHomeGenresDay = today;
       const requestId = ++mobileHomeGenresRequest;
-      const categories = shuffleMobileItems(mobileHomeGenreRows);
+      const categories = getGenreOrderFromHistory()
+        .map((key) => mobileHomeGenreRows.find((category) => category.key === key))
+        .filter(Boolean);
       shelves.replaceChildren();
       updateMobileRecents();
       const placeholders = categories.map((category) => {
@@ -3017,10 +3121,54 @@
       updateMobileRecents();
     }
 
+    function reorderMobileGenreRowsFromHistory() {
+      if (desktopNavigation.matches) return;
+      const shelves = document.getElementById('mobileGenreShelves');
+      if (!shelves) return;
+      getGenreOrderFromHistory().forEach((key) => {
+        const category = mobileHomeGenreRows.find((item) => item.key === key);
+        const section = category && [...shelves.children].find((item) =>
+          item.getAttribute('aria-label') === `${category.title} songs`);
+        if (section) shelves.append(section);
+      });
+    }
+
     window.addEventListener('thaalam-on-demand-history-change', () => {
       updateMobileRecents();
+      reorderMobileGenreRowsFromHistory();
+    });
+
+    window.addEventListener('thaalam-personalized-recommendations-update', async () => {
+      recommendationTasteRevision += 1;
+      const revision = recommendationTasteRevision;
+      const cache = getGenreCache();
+      Object.keys(genreFeedIds).forEach((key) => {
+        genreResultCache.delete(key);
+        genreResultCacheDay.delete(key);
+        genreChartRequests.delete(key);
+        delete cache[key];
+      });
+      try { localStorage.setItem(GENRE_CACHE_KEY, JSON.stringify(cache)); }
+      catch { /* The updated charts remain available in memory. */ }
+      const results = await Promise.allSettled(Object.keys(genreFeedIds).map((key) =>
+        loadDailyGenreChart(key)
+      ));
+      if (revision !== recommendationTasteRevision) return;
       if (desktopNavigation.matches && Object.prototype.hasOwnProperty.call(genreFeedIds, activeGenre)) {
-        renderGenreResults(lastGenreResultsSongs);
+        const index = Object.keys(genreFeedIds).indexOf(activeGenre);
+        if (results[index]?.status === 'fulfilled') renderGenreResults(results[index].value);
+      }
+      if (!desktopNavigation.matches) {
+        const shelves = document.getElementById('mobileGenreShelves');
+        if (!shelves) return;
+        mobileHomeGenreRows.forEach((category) => {
+          const section = [...shelves.children].find((item) =>
+            item.getAttribute('aria-label') === `${category.title} songs`);
+          const songs = getAnyCachedGenreChart(category.key);
+          if (section && songs.length) {
+            section.replaceWith(renderMobileHomeGenreRow(category, songs));
+          }
+        });
       }
     });
 
@@ -3229,7 +3377,12 @@
       hideCatalogSuggestions();
       if (activeGenre === 'you-like') renderGenreResults(currentFavouriteSongs);
       else if (activeGenre === 'recently-played') renderGenreResults(window.getOnDemandPlaybackHistory?.() || []);
-      else loadGenre('international');
+      else {
+        activeSearchTerm = '';
+        const firstGenre = [...genreTabList.querySelectorAll('[data-genre]')]
+          .find((tab) => Object.prototype.hasOwnProperty.call(genreFeedIds, tab.dataset.genre));
+        loadGenre(firstGenre?.dataset.genre || 'international');
+      }
       catalogSearchInput.focus();
     }
 
@@ -3765,6 +3918,7 @@
 
     window.addEventListener('thaalam-on-demand-playback-history-change', () => {
       reorderDesktopGenreTabsFromHistory();
+      reorderMobileGenreRowsFromHistory();
       if (desktopNavigation.matches && activeGenre === 'recently-played') {
         renderGenreResults(window.getOnDemandPlaybackHistory?.() || []);
       }
