@@ -907,7 +907,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=90"></script>
-  <script src="ondemand-player.js?v=174"></script>
+  <script src="ondemand-player.js?v=175"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=12"></script>
@@ -1424,6 +1424,48 @@
         .sort((first, second) => second[1] - first[1])
         .slice(0, 5)
         .map(([artist]) => artist);
+    }
+
+    function recommendationCardKey(card) {
+      const song = card.__onDemandSong || {};
+      return String(song.providerTrackId || song.trackId ||
+        `${song.trackName || ''}|${song.artistName || ''}`).toLocaleLowerCase();
+    }
+
+    function captureRecommendationCardPositions(container, selector) {
+      return new Map([...container.querySelectorAll(selector)].map((card) => {
+        const rect = card.getBoundingClientRect();
+        return [recommendationCardKey(card), { left: rect.left, top: rect.top }];
+      }));
+    }
+
+    function animateRecommendationCards(container, selector, previousPositions) {
+      if (!previousPositions?.size ||
+          window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      requestAnimationFrame(() => {
+        container.querySelectorAll(selector).forEach((card) => {
+          const previous = previousPositions.get(recommendationCardKey(card));
+          const rect = card.getBoundingClientRect();
+          if (!previous) {
+            card.animate(
+              [{ opacity: 0, transform: 'translateX(-0.75rem)' }, { opacity: 1, transform: 'translateX(0)' }],
+              { duration: 240, easing: 'cubic-bezier(.2,.7,.25,1)' }
+            );
+            return;
+          }
+          const shiftX = previous.left - rect.left;
+          const shiftY = previous.top - rect.top;
+          if (Math.abs(shiftX) > 1 || Math.abs(shiftY) > 1) {
+            card.animate(
+              [
+                { transform: `translate(${shiftX}px, ${shiftY}px)` },
+                { transform: 'translate(0, 0)' }
+              ],
+              { duration: 280, easing: 'cubic-bezier(.2,.7,.25,1)' }
+            );
+          }
+        });
+      });
     }
 
     function loadDailyGenreChart(key) {
@@ -3160,7 +3202,11 @@
       if (revision !== recommendationTasteRevision) return;
       if (desktopNavigation.matches && Object.prototype.hasOwnProperty.call(genreFeedIds, activeGenre)) {
         const index = Object.keys(genreFeedIds).indexOf(activeGenre);
-        if (results[index]?.status === 'fulfilled') renderGenreResults(results[index].value);
+        if (results[index]?.status === 'fulfilled') {
+          const previousPositions = captureRecommendationCardPositions(genreResults, '.genre-card');
+          renderGenreResults(results[index].value);
+          animateRecommendationCards(genreResults, '.genre-card', previousPositions);
+        }
       }
       if (!desktopNavigation.matches) {
         const shelves = document.getElementById('mobileGenreShelves');
@@ -3170,7 +3216,10 @@
             item.getAttribute('aria-label') === `${category.title} songs`);
           const songs = getAnyCachedGenreChart(category.key);
           if (section && songs.length) {
-            section.replaceWith(renderMobileHomeGenreRow(category, songs));
+            const previousPositions = captureRecommendationCardPositions(section, '.mobile-genre-track');
+            const updatedSection = renderMobileHomeGenreRow(category, songs);
+            section.replaceWith(updatedSection);
+            animateRecommendationCards(updatedSection, '.mobile-genre-track', previousPositions);
           }
         });
       }

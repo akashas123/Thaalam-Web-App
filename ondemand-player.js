@@ -264,48 +264,62 @@ try {
   if (Array.isArray(storedTaste.profile)) personalizedTasteProfile = storedTaste.profile.slice(0, 500);
 } catch { /* Start with an empty taste profile if storage is unavailable. */ }
 
+function scheduleTasteProfileWork(callback) {
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(callback, { timeout: 1500 });
+  } else {
+    window.setTimeout(callback, 0);
+  }
+}
+
 function recordCompletedTasteTrack() {
   if (lastTasteCompletionRequestId === songRequestId) return;
   lastTasteCompletionRequestId = songRequestId;
   if (!currentOnDemandSong?.trackName) return;
-  const song = currentOnDemandSong;
-  const splitArtists = (artistName) => [...new Set(String(artistName || '')
-    .split(/,|&|\bfeat(?:uring)?\b|\bwith\b|\bx\b|\b×\b/i)
-    .map((artist) => artist.trim().toLocaleLowerCase().replace(/\s+/g, ' '))
-    .filter(Boolean))];
-  const completedArtists = splitArtists(song.artistName);
-  completedTasteTracks = [{
-    trackName: String(song.trackName),
-    artistName: String(song.artistName || ''),
-    collectionName: String(song.collectionName || ''),
-    artworkUrl100: String(song.artworkUrl100 || ''),
-    language: String(song.language || ''),
-    primaryGenreName: String(song.primaryGenreName || ''),
-    playedAt: Date.now()
-  }, ...completedTasteTracks].slice(0, 500);
-  // Count completed plays cumulatively per artist, including interleaved
-  // listening. Refresh at each five-play milestone, while each snapshot still
-  // contains the full completed history from every artist.
-  const playsByArtist = new Map();
-  completedTasteTracks.forEach((completedSong) => {
-    splitArtists(completedSong.artistName).forEach((artist) => {
-      playsByArtist.set(artist, (playsByArtist.get(artist) || 0) + 1);
+  // Capture the finished song now; the player may advance before background
+  // taste processing runs.
+  const song = { ...currentOnDemandSong };
+  scheduleTasteProfileWork(() => {
+    const splitArtists = (artistName) => [...new Set(String(artistName || '')
+      .split(/,|&|\bfeat(?:uring)?\b|\bwith\b|\bx\b|\u00d7/i)
+      .map((artist) => artist.trim().toLocaleLowerCase().replace(/\s+/g, ' '))
+      .filter(Boolean))];
+    const completedArtists = splitArtists(song.artistName);
+    completedTasteTracks = [{
+      trackName: String(song.trackName),
+      artistName: String(song.artistName || ''),
+      collectionName: String(song.collectionName || ''),
+      artworkUrl100: String(song.artworkUrl100 || ''),
+      language: String(song.language || ''),
+      primaryGenreName: String(song.primaryGenreName || ''),
+      playedAt: Date.now()
+    }, ...completedTasteTracks].slice(0, 500);
+    // Count completed plays cumulatively per artist, including interleaved
+    // listening. Refresh at each five-play milestone, while each snapshot still
+    // contains the full completed history from every artist.
+    const playsByArtist = new Map();
+    completedTasteTracks.forEach((completedSong) => {
+      splitArtists(completedSong.artistName).forEach((artist) => {
+        playsByArtist.set(artist, (playsByArtist.get(artist) || 0) + 1);
+      });
     });
+    const shouldRefreshProfile = completedArtists.some((artist) => {
+      const plays = playsByArtist.get(artist) || 0;
+      return plays >= 5 && plays % 5 === 0;
+    });
+    if (shouldRefreshProfile) personalizedTasteProfile = completedTasteTracks.slice();
+    try {
+      localStorage.setItem(ON_DEMAND_TASTE_PROFILE_KEY, JSON.stringify({
+        completedTracks: completedTasteTracks,
+        profile: personalizedTasteProfile
+      }));
+    } catch { /* Keep this session's taste profile in memory. */ }
+    if (shouldRefreshProfile) {
+      scheduleTasteProfileWork(() => {
+        window.dispatchEvent(new CustomEvent('thaalam-personalized-recommendations-update'));
+      });
+    }
   });
-  const shouldRefreshProfile = completedArtists.some((artist) => {
-    const plays = playsByArtist.get(artist) || 0;
-    return plays >= 5 && plays % 5 === 0;
-  });
-  if (shouldRefreshProfile) personalizedTasteProfile = completedTasteTracks.slice();
-  try {
-    localStorage.setItem(ON_DEMAND_TASTE_PROFILE_KEY, JSON.stringify({
-      completedTracks: completedTasteTracks,
-      profile: personalizedTasteProfile
-    }));
-  } catch { /* Keep this session's taste profile in memory. */ }
-  if (shouldRefreshProfile) {
-    window.dispatchEvent(new CustomEvent('thaalam-personalized-recommendations-update'));
-  }
 }
 window.getOnDemandTasteProfile = () => personalizedTasteProfile.map((song) => ({ ...song }));
 
