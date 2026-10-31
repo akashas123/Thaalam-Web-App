@@ -907,7 +907,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=90"></script>
-  <script src="ondemand-player.js?v=173"></script>
+  <script src="ondemand-player.js?v=174"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=12"></script>
@@ -1412,11 +1412,13 @@
     function getGenreHistoryArtistQueries() {
       const counts = new Map();
       (window.getOnDemandTasteProfile?.() || []).forEach((song) => {
-        const artist = String(song?.artistName || '').split(',')[0].trim();
+        const artists = [...new Set(String(song?.artistName || '')
+          .split(/,|&|\bfeat(?:uring)?\b|\bwith\b|\bx\b|\b×\b/i)
+          .map((artist) => artist.trim())
+          .filter(Boolean))];
         // Search artists from all history, then keep only tracks explicitly
         // tagged with this shelf's language in searchGenreChart().
-        if (!artist) return;
-        counts.set(artist, (counts.get(artist) || 0) + 1);
+        artists.forEach((artist) => counts.set(artist, (counts.get(artist) || 0) + 1));
       });
       return [...counts.entries()]
         .sort((first, second) => second[1] - first[1])
@@ -1854,26 +1856,32 @@
       if (!history.length) return songs;
 
       const normalize = (value) => String(value || '').trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+      const splitArtists = (artistName) => [...new Set(String(artistName || '')
+        .split(/,|&|\bfeat(?:uring)?\b|\bwith\b|\bx\b|\b×\b/i)
+        .map(normalize)
+        .filter(Boolean))];
       const artistPlays = new Map();
       history.forEach((song) => {
-        const artist = normalize(song.artistName);
-        if (artist) artistPlays.set(artist, (artistPlays.get(artist) || 0) + 1);
+        splitArtists(song.artistName).forEach((artist) => {
+          artistPlays.set(artist, (artistPlays.get(artist) || 0) + 1);
+        });
       });
 
       const ranked = songs.map((song, index) => ({ song, index,
-        affinity: artistPlays.get(normalize(song.artistName)) || 0
+        affinity: splitArtists(song.artistName).reduce((total, artist) =>
+          total + (artistPlays.get(artist) || 0), 0)
       })).sort((first, second) => second.affinity - first.affinity || first.index - second.index);
       const mixed = [];
       const recentArtists = [];
       while (ranked.length) {
         let index = ranked.findIndex(({ song }) => {
-          const artist = normalize(song.artistName);
-          return !artist || !recentArtists.slice(-2).includes(artist);
+          const artists = splitArtists(song.artistName);
+          return !artists.length || !artists.some((artist) => recentArtists.slice(-2).includes(artist));
         });
         if (index < 0) index = 0;
         const [{ song }] = ranked.splice(index, 1);
         mixed.push(song);
-        recentArtists.push(normalize(song.artistName));
+        recentArtists.push(...splitArtists(song.artistName));
       }
       return mixed;
     }

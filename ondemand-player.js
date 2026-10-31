@@ -269,10 +269,11 @@ function recordCompletedTasteTrack() {
   lastTasteCompletionRequestId = songRequestId;
   if (!currentOnDemandSong?.trackName) return;
   const song = currentOnDemandSong;
-  const primaryArtist = (artistName) => String(artistName || '')
-    .split(/,|&|\bfeat(?:uring)?\b|\bwith\b/i)[0]
-    .trim().toLocaleLowerCase().replace(/\s+/g, ' ');
-  const completedArtist = primaryArtist(song.artistName);
+  const splitArtists = (artistName) => [...new Set(String(artistName || '')
+    .split(/,|&|\bfeat(?:uring)?\b|\bwith\b|\bx\b|\b×\b/i)
+    .map((artist) => artist.trim().toLocaleLowerCase().replace(/\s+/g, ' '))
+    .filter(Boolean))];
+  const completedArtists = splitArtists(song.artistName);
   completedTasteTracks = [{
     trackName: String(song.trackName),
     artistName: String(song.artistName || ''),
@@ -285,11 +286,16 @@ function recordCompletedTasteTrack() {
   // Count completed plays cumulatively per artist, including interleaved
   // listening. Refresh at each five-play milestone, while each snapshot still
   // contains the full completed history from every artist.
-  const completedArtistPlays = completedArtist
-    ? completedTasteTracks.reduce((count, completedSong) =>
-      count + (primaryArtist(completedSong.artistName) === completedArtist ? 1 : 0), 0)
-    : 0;
-  const shouldRefreshProfile = completedArtistPlays >= 5 && completedArtistPlays % 5 === 0;
+  const playsByArtist = new Map();
+  completedTasteTracks.forEach((completedSong) => {
+    splitArtists(completedSong.artistName).forEach((artist) => {
+      playsByArtist.set(artist, (playsByArtist.get(artist) || 0) + 1);
+    });
+  });
+  const shouldRefreshProfile = completedArtists.some((artist) => {
+    const plays = playsByArtist.get(artist) || 0;
+    return plays >= 5 && plays % 5 === 0;
+  });
   if (shouldRefreshProfile) personalizedTasteProfile = completedTasteTracks.slice();
   try {
     localStorage.setItem(ON_DEMAND_TASTE_PROFILE_KEY, JSON.stringify({
