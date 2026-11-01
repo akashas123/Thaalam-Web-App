@@ -906,12 +906,12 @@
   </aside>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
-  <script src="script.js?v=91"></script>
+  <script src="script.js?v=92"></script>
   <script src="ondemand-player.js?v=180"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=12"></script>
-  <script src="player-controls.js?v=56"></script>
+  <script src="player-controls.js?v=59"></script>
   <script src="lyrics.js?v=56"></script>
   <script src="/google-auth-config.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -1823,14 +1823,40 @@
             .replace(/\d+x\d+bb\./, '600x600bb.')
         : 'album-placeholder.svg?v=3';
       setCatalogDialogArtworkTint(artworkUrl, requestId);
-      const releaseDate = song.releaseDate
-        ? new Date(song.releaseDate).toLocaleDateString()
-        : 'N/A';
+      const cachedMetadata = window.getCachedCatalogSongInfo?.(
+        song.trackName,
+        artistName
+      ) || {};
+      const formatReleaseDate = (value) => {
+        const rawDate = String(value || '').trim();
+        if (!rawDate || /^\d{4}$/.test(rawDate)) return 'N/A';
+        const isoDate = rawDate.match(/^(\d{4})-(\d{2})-(\d{2})(?:T|$)/);
+        const date = isoDate
+          ? new Date(Date.UTC(Number(isoDate[1]), Number(isoDate[2]) - 1, Number(isoDate[3])))
+          : new Date(rawDate);
+        return Number.isNaN(date.getTime())
+          ? 'N/A'
+          : new Intl.DateTimeFormat(undefined, {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+              timeZone: 'UTC'
+            }).format(date);
+      };
+      let releaseDate = formatReleaseDate(cachedMetadata.releaseDate || song.releaseDate);
+      let genre = cachedMetadata.genre || '';
+      let album = song.collectionName || cachedMetadata.album || '';
       const duration = song.trackTimeMillis
         ? `${Math.floor(song.trackTimeMillis / 60000)}:${String(
             Math.floor(song.trackTimeMillis / 1000) % 60
           ).padStart(2, '0')}`
         : 'N/A';
+      const renderDetails = (genre) => [
+        `Album: ${album || 'N/A'}`,
+        `Release date: ${releaseDate}`,
+        `Genre: ${genre || 'N/A'}`,
+        `Duration: ${duration}`
+      ].join('\n');
 
       catalogSongInfoArt.src = artworkUrl;
       catalogSongInfoArt.alt = `${song.trackName || 'Song'} album artwork`;
@@ -1839,12 +1865,7 @@
       };
       catalogSongInfoTrack.textContent = song.trackName || 'Unknown song';
       catalogSongInfoArtist.textContent = artistName;
-      catalogSongInfoDetails.textContent = [
-        `Album: ${song.collectionName || 'N/A'}`,
-        `Release date: ${releaseDate}`,
-        `Genre: ${song.primaryGenreName || 'N/A'}`,
-        `Duration: ${duration}`
-      ].join('\n');
+      catalogSongInfoDetails.textContent = renderDetails(genre);
       catalogArtistPortrait.hidden = true;
       catalogArtistPortrait.removeAttribute('src');
       catalogArtistBackground.hidden = false;
@@ -1862,6 +1883,25 @@
             easing: 'cubic-bezier(0, 0, 0.2, 1)'
           }
         );
+      }
+
+      if ((!genre || releaseDate === 'N/A') &&
+          typeof window.lookupCatalogSongMetadata === 'function') {
+        void window.lookupCatalogSongMetadata(song.trackName, artistName)
+          .then((metadata) => {
+            if (requestId === catalogSongInfoRequestId) {
+              const resolvedReleaseDate = formatReleaseDate(metadata.releaseDate);
+              if (resolvedReleaseDate !== 'N/A') releaseDate = resolvedReleaseDate;
+              if (metadata.genre) genre = metadata.genre;
+              if (metadata.album) album = metadata.album;
+              catalogSongInfoDetails.textContent = renderDetails(genre);
+            }
+          })
+          .catch((error) => {
+            if (requestId === catalogSongInfoRequestId) {
+              console.warn('Could not look up song metadata.', error);
+            }
+          });
       }
 
       try {
@@ -2472,6 +2512,7 @@
         : mobileShuffle;
       if (shuffle && desktopNavigation.matches) desktopGenreShufflePending = false;
       const genreSongs = isGenreChart ? personalizeGenreSongs(songs) : songs;
+      if (isGenreChart) window.prefetchCatalogSongInfo?.(genreSongs);
       const orderedSongs = activeGenre === 'you-like'
         ? sortFavouriteSongs(songs)
         : recentHistoryLayout
@@ -2976,8 +3017,7 @@
           streamUrl: song.streamUrl,
           trackTimeMillis: song.durationSeconds ? song.durationSeconds * 1000 : 0,
           language: song.language || '',
-          isNewRelease: true,
-          primaryGenreName: `New Releases - ${language}`
+          isNewRelease: true
         })));
     }
 
@@ -2992,7 +3032,6 @@
       // big English artists). Fan the queries out, then merge by rank so the
       // grid mixes artists instead of showing one query's block first.
       const queries = Array.isArray(genreId) ? genreId : [genreId];
-      const label = Array.isArray(genreId) ? genreId.join(' / ') : genreId;
       const perQuery = Math.min(25, limit + 4);
       return Promise.all(queries.map((query) => {
         const url = new URL('/api/music-search', window.location.origin);
@@ -3034,8 +3073,7 @@
                 trackViewUrl: song.permalink,
                 streamUrl: song.streamUrl,
                 trackTimeMillis: song.durationSeconds ? song.durationSeconds * 1000 : 0,
-                language: song.language || '',
-                primaryGenreName: label
+                language: song.language || ''
               };
               // Keep one recommendation per core title across artists, uploads,
               // and album/version variants.
@@ -3118,6 +3156,9 @@
     function renderMobileHomeGenreRow(category, songs, { shuffle = true, all = false } = {}) {
       if (!songs.length) return renderMobileGenrePlaceholders(category);
       songs = window.filterUnavailableOnDemandSongs?.(songs) || songs;
+      if (category.key && Object.prototype.hasOwnProperty.call(genreFeedIds, category.key)) {
+        window.prefetchCatalogSongInfo?.(songs);
+      }
       const section = document.createElement('section');
       section.className = 'mobile-genre-row';
       section.setAttribute('aria-label', `${category.title} songs`);

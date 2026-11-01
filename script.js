@@ -452,6 +452,11 @@ bindMiniPlayerProxy(miniNextButton, 'onDemandNextButton');
 bindMiniPlayerProxy(miniShuffleButton, 'onDemandShuffleButton');
 bindMiniPlayerProxy(miniRepeatButton, 'onDemandRepeatButton');
 miniInfoButton?.addEventListener('click', () => {
+  if (document.body.classList.contains('view-now-playing')) {
+    window.openCurrentSongInfo?.();
+    return;
+  }
+
   const onDemand = Boolean(window.onDemandPlaybackActive);
   const source = onDemand
     ? window.getCurrentOnDemandSong?.()
@@ -1003,11 +1008,14 @@ window.showPlayerPauseIcon = showPauseIcon;
 window.togglePlay = togglePlay;
 
 document.addEventListener('keydown', (event) => {
-  if (event.repeat || event.defaultPrevented || !miniPlayer || miniPlayer.hidden ||
-      miniPlayer.getClientRects().length === 0) return;
+  const nowPlayingViewVisible = document.body.classList.contains('view-now-playing');
+  const miniPlayerVisible = miniPlayer && !miniPlayer.hidden &&
+    miniPlayer.getClientRects().length > 0;
+  if (event.repeat || event.defaultPrevented ||
+      (!nowPlayingViewVisible && !miniPlayerVisible)) return;
   const target = event.target;
   if (target instanceof Element && target.closest(
-    'input, textarea, select, button, a, [contenteditable="true"], [role="button"], [role="textbox"], [role="slider"]'
+    'input, textarea, select, [contenteditable="true"], [role="textbox"], [role="slider"]'
   )) return;
 
   const key = event.code === 'Space' ? 'space' : event.key.toLowerCase();
@@ -1352,17 +1360,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if ('serviceWorker' in navigator) {
-    let hadServiceWorkerController = Boolean(navigator.serviceWorker.controller);
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      // skipWaiting() + clients.claim() moves every open PWA client to the new
-      // worker. Reload each controlled client once so it fetches the matching
-      // HTML and assets; this also works for later updates in the same tab.
-      if (!hadServiceWorkerController) {
-        hadServiceWorkerController = true;
-        return;
-      }
-      window.location.reload();
-    });
     navigator.serviceWorker.register('./sw.js')
       .then((registration) => {
         // Check for deployed updates while the app is in the foreground. A

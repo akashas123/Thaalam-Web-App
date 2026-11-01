@@ -45,12 +45,18 @@ let sleepTimerInterval = 0;
 let sleepTimerDuration = 0;
 let currentRatingTrackKey = '';
 let feedbackTimeout = 0;
+let songInfoMetadataRequestId = 0;
 
 let likeFeedbackShown = false;
 let dislikeFeedbackShown = false;
 
 const prefetchingSongInfo =
   new Set();
+const queuedCatalogSongInfo =
+  new Set();
+const catalogSongInfoQueue = [];
+let catalogSongInfoQueueActive = 0;
+let catalogSongInfoQueueScheduled = false;
 
 const RATING_STORAGE_KEY =
   'thaalam24x7-ratings';
@@ -1161,7 +1167,11 @@ function updateSongInfo() {
     })
   );
   const album = song.album || cached?.album || cachedDetails.album || '';
-  const releaseDate = cachedDetails['release date'] || song.releaseDate || '';
+  const cachedReleaseDate = formatReleaseDate(cachedDetails['release date']);
+  const releaseDate = cachedReleaseDate !== 'N/A'
+    ? cachedDetails['release date']
+    : song.releaseDate;
+  const cachedGenre = getUsableSongGenre(cachedDetails.genre, song.artist);
 
   showSongInfo(
     cached?.track || song.title,
@@ -1169,9 +1179,68 @@ function updateSongInfo() {
     formatSongInfoDetails(
       album,
       formatReleaseDate(releaseDate),
-      cachedDetails.genre
+      cachedGenre !== 'N/A'
+        ? cachedGenre
+        : getUsableSongGenre(song.primaryGenreName, song.artist)
     )
   );
+
+  const cacheKey = getTrackRatingKey(song);
+  const requestId = ++songInfoMetadataRequestId;
+  if (cacheKey && typeof window.lookupCatalogSongMetadata === 'function') {
+    void window.lookupCatalogSongMetadata(song.title, song.artist)
+      .then((metadata) => {
+        const activeOnDemand = Boolean(window.onDemandPlaybackActive) ||
+          Boolean(document.body?.classList?.contains('on-demand-active'));
+        const activeOnDemandSong = activeOnDemand
+          ? window.getCurrentOnDemandSong?.()
+          : null;
+        const activeSong = activeOnDemand && activeOnDemandSong?.trackName
+          ? {
+            title: activeOnDemandSong.trackName,
+            artist: activeOnDemandSong.artistName,
+            youtubeVideoId: activeOnDemandSong.youtubeVideoId
+          }
+          : window.currentNowPlayingSong;
+        if (requestId !== songInfoMetadataRequestId || !songInfoDialog?.open ||
+            getTrackRatingKey(activeSong) !== cacheKey) return;
+
+        const currentInfo = getStoredSongInfo(cacheKey) || cached || {};
+        const currentDetails = Object.fromEntries(
+          String(currentInfo.details || '').split('\n').map((line) => {
+            const separator = line.indexOf(':');
+            return separator < 0
+              ? ['', '']
+              : [line.slice(0, separator).trim().toLowerCase(), line.slice(separator + 1).trim()];
+          })
+        );
+        const releaseDateFromLookup = formatReleaseDate(metadata.releaseDate);
+        const savedReleaseDate = formatReleaseDate(currentDetails['release date']);
+        const details = formatSongInfoDetails(
+          metadata.album || song.album || currentInfo.album || currentDetails.album,
+          releaseDateFromLookup !== 'N/A'
+            ? releaseDateFromLookup
+            : savedReleaseDate !== 'N/A'
+              ? currentDetails['release date']
+              : song.releaseDate,
+          getUsableSongGenre(
+            metadata.genre || currentDetails.genre || song.primaryGenreName,
+            song.artist
+          )
+        );
+        saveStoredSongInfo(cacheKey, {
+          track: song.title,
+          artist: song.artist,
+          album: metadata.album || song.album || currentInfo.album || '',
+          artworkUrl100: song.art || currentInfo.artworkUrl100 || '',
+          details
+        });
+        showSongInfo(song.title, song.artist, details);
+      })
+      .catch((error) => {
+        console.warn('Could not refresh now-playing song metadata.', error);
+      });
+  }
 }
 
 function formatReleaseDate(value) {
@@ -1200,6 +1269,28 @@ function formatSongInfoDetails(album, releaseDate = 'N/A', genre = 'N/A') {
   ].join('\n');
 }
 
+function getUsableSongGenre(value, artist = '') {
+  const genre = String(value || '').trim();
+  if (!genre || genre.length > 48 ||
+      /^(?:new releases|international|hindi|malayalam|tamil)(?:$|[\s:/-])/i.test(genre)) return 'N/A';
+
+  const normalize = (text) => text
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+  const genreParts = genre.split(/[,;|/]/).map(normalize).filter(Boolean);
+  const artistParts = String(artist)
+    .split(/,|&|\bfeat(?:uring)?\b|\bwith\b|\bx\b|\u00d7|[/;]/i)
+    .map(normalize)
+    .filter(Boolean);
+
+  if (genreParts.length > 2 || genreParts.some((part) => artistParts.includes(part))) {
+    return 'N/A';
+  }
+  return genre;
+}
+
 window.openCurrentSongInfo = () => {
   updateSongInfo();
   openDialog(songInfoDialog);
@@ -1216,16 +1307,19 @@ async function prefetchSongInfo(song) {
   const cachedHasReleaseDate = Boolean(
     cachedReleaseDate && cachedReleaseDate !== 'N/A' && formatReleaseDate(cachedReleaseDate) !== 'N/A'
   );
-  const cachedHasGenre = /^Genre:/mi.test(cached?.details || '');
-  if (cached?.track && cached?.artist && cachedHasReleaseDate &&
-      cachedHasGenre && cached?.artworkUrl100) return;
+  const cachedGenre = cached?.details?.match(/^Genre:\s*(.*)$/mi)?.[1]?.trim();
+  const cachedHasGenre = getUsableSongGenre(cachedGenre, song.artist) !== 'N/A';
+  const cacheFresh = cached?.metadataCheckedAt &&
+    Date.now() - cached.metadataCheckedAt < 7 * 24 * 60 * 60 * 1000;
+  if (cached?.track && cached?.artist && cached?.artworkUrl100 &&
+      (cacheFresh || (cachedHasReleaseDate && cachedHasGenre))) return;
   if (prefetchingSongInfo.has(cacheKey)) return;
 
   prefetchingSongInfo.add(cacheKey);
   const fallbackDetails = formatSongInfoDetails(
     song.album,
     formatReleaseDate(song.releaseDate),
-    song.primaryGenreName || 'N/A'
+    getUsableSongGenre(song.primaryGenreName, song.artist)
   );
 
   try {
@@ -1248,7 +1342,7 @@ async function prefetchSongInfo(song) {
     ) || [];
     const match = exactTitleMatches.find((recording) =>
       normalize(recording.artistName).includes(requestedArtist)
-    ) || exactTitleMatches[0];
+    );
 
     let entry = {
       track: song.title,
@@ -1262,18 +1356,26 @@ async function prefetchSongInfo(song) {
         track: match.trackName || song.title,
         artist: match.artistName || song.artist,
         album: match.collectionName || song.album || '',
+        releaseDate: match.releaseDate || song.releaseDate || '',
+        primaryGenreName: getUsableSongGenre(match.primaryGenreName, song.artist),
         artworkUrl100: match.artworkUrl100
           ?.replace(/^http:/, 'https:')
           .replace(/\d+x\d+bb\./, '600x600bb.') || song.art || '',
         details: formatSongInfoDetails(
           match.collectionName || song.album,
           formatReleaseDate(match.releaseDate || song.releaseDate),
-          match.primaryGenreName || 'N/A'
+          getUsableSongGenre(match.primaryGenreName, song.artist)
         )
       };
+    } else {
+      entry.releaseDate = song.releaseDate || '';
+      entry.primaryGenreName = getUsableSongGenre(song.primaryGenreName, song.artist);
     }
 
-    saveStoredSongInfo(cacheKey, entry);
+    saveStoredSongInfo(cacheKey, {
+      ...entry,
+      metadataCheckedAt: Date.now()
+    });
   } catch {
     saveStoredSongInfo(cacheKey, {
       track: song.title,
@@ -1303,6 +1405,71 @@ async function prefetchSongInfo(song) {
     updateSongInfo();
   }
 }
+
+function scheduleCatalogSongInfoQueue() {
+  if (catalogSongInfoQueueScheduled || !catalogSongInfoQueue.length) return;
+  catalogSongInfoQueueScheduled = true;
+  const start = () => {
+    catalogSongInfoQueueScheduled = false;
+    while (catalogSongInfoQueueActive < 2 && catalogSongInfoQueue.length) {
+      const { key, song } = catalogSongInfoQueue.shift();
+      catalogSongInfoQueueActive += 1;
+      void prefetchSongInfo(song)
+        .catch((error) => console.warn('Could not prefetch catalog song metadata.', error))
+        .finally(() => {
+          catalogSongInfoQueueActive -= 1;
+          queuedCatalogSongInfo.delete(key);
+          scheduleCatalogSongInfoQueue();
+        });
+    }
+  };
+  if (typeof window.requestIdleCallback === 'function') {
+    window.requestIdleCallback(start, { timeout: 1500 });
+  } else {
+    window.setTimeout(start, 0);
+  }
+}
+
+window.prefetchCatalogSongInfo = (songs) => {
+  const songList = Array.isArray(songs) ? songs : [songs];
+  songList.forEach((item) => {
+    if (!item?.trackName || !item?.artistName) return;
+    const song = {
+      title: item.trackName,
+      artist: item.artistName,
+      album: item.collectionName || '',
+      releaseDate: item.releaseDate || '',
+      primaryGenreName: item.primaryGenreName || '',
+      art: item.artworkUrl100 || '',
+      youtubeVideoId: item.youtubeVideoId || ''
+    };
+    const key = getTrackRatingKey(song);
+    if (!key || queuedCatalogSongInfo.has(key)) return;
+    queuedCatalogSongInfo.add(key);
+    catalogSongInfoQueue.push({ key, song });
+  });
+  scheduleCatalogSongInfoQueue();
+};
+
+window.getCachedCatalogSongInfo = (title, artist) => {
+  const cached = getStoredSongInfo(getTrackRatingKey({ title, artist }));
+  if (!cached) return null;
+  const cachedDetails = Object.fromEntries(
+    String(cached.details || '').split('\n').map((line) => {
+      const separator = line.indexOf(':');
+      return separator < 0
+        ? ['', '']
+        : [line.slice(0, separator).trim().toLowerCase(), line.slice(separator + 1).trim()];
+    })
+  );
+  const releaseDate = cached.releaseDate || cachedDetails['release date'] || '';
+  const genre = cached.primaryGenreName || cachedDetails.genre || '';
+  return {
+    album: cached.album || cachedDetails.album || '',
+    releaseDate: formatReleaseDate(releaseDate) === 'N/A' ? '' : releaseDate,
+    genre: getUsableSongGenre(genre, artist) === 'N/A' ? '' : genre
+  };
+};
 
 window.addEventListener('thaalam:nowplaying', (event) => {
   const song = event.detail?.now_playing?.song;
@@ -1367,6 +1534,49 @@ async function searchAppleMusicMetadata(artist, title) {
     }))
   };
 }
+
+window.lookupCatalogSongMetadata = async (title, artist) => {
+  if (!title || !artist) return { album: '', genre: '', releaseDate: '' };
+
+  const musicData = await searchAppleMusicMetadata(artist, title);
+  const normalize = (value) => String(value || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+  const requestedTitle = normalize(title);
+  const primaryArtist = String(artist)
+    .split(/,|&|\bfeat(?:uring)?\b|\bwith\b|\bx\b|\u00d7/i)[0]
+    .trim();
+  const requestedArtist = normalize(primaryArtist);
+  const match = musicData.results?.find((track) =>
+    normalize(track.trackName) === requestedTitle &&
+    normalize(track.artistName).includes(requestedArtist)
+  );
+  const genre = match?.primaryGenreName || '';
+  const metadata = {
+    album: match?.collectionName || '',
+    genre: getUsableSongGenre(genre, artist) === 'N/A' ? '' : genre,
+    releaseDate: match?.releaseDate || ''
+  };
+  if (match) {
+    const cacheKey = getTrackRatingKey({ title, artist });
+    saveStoredSongInfo(cacheKey, {
+      track: match.trackName || title,
+      artist: match.artistName || artist,
+      album: metadata.album,
+      releaseDate: metadata.releaseDate,
+      primaryGenreName: metadata.genre,
+      metadataCheckedAt: Date.now(),
+      details: formatSongInfoDetails(
+        metadata.album,
+        formatReleaseDate(metadata.releaseDate),
+        metadata.genre || 'N/A'
+      )
+    });
+  }
+  return metadata;
+};
 
 window.lookupAlbumArtwork = async function (title, artist) {
   const cleanArtist = String(artist || '').replace(/\s-\sTopic$/i, '').trim();
