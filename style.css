@@ -4154,6 +4154,11 @@ body.on-demand-active #onDemandNextButton svg {
   white-space: pre-line;
 }
 
+.song-info-copyright-symbol {
+  font-size: 0.72em;
+  vertical-align: 0.08em;
+}
+
 .song-info-link {
   display: inline-block;
 

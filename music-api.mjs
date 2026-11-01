@@ -266,6 +266,7 @@ function mapProviderSong(raw) {
     (separator !== -1 ? subtitle.slice(0, separator) : subtitle);
 
   const durationSeconds = Math.max(0, Math.floor(Number(info.duration) || 0));
+  const year = String(raw.year || info.year || '').trim();
   const language = sanitizeText(raw.language || info.language);
   const thumbnail = String(raw.image || '')
     .replace(/^http:/, 'https:')
@@ -279,6 +280,7 @@ function mapProviderSong(raw) {
     artistIds,
     album,
     albumId: String(info.album_id || ''),
+    year,
     language,
     duration: formatDuration(durationSeconds),
     durationSeconds,
@@ -406,6 +408,7 @@ export async function handleAlbum(request, env = {}) {
         trackName: mapped.title,
         artistName: mapped.artist,
         collectionName: mapped.album || album?.title || '',
+        releaseDate: mapped.year || album?.year || '',
         artworkUrl100: mapped.thumbnail || album?.thumbnail || '',
         trackViewUrl: mapped.permalink,
         streamUrl: mapped.streamUrl,
@@ -578,5 +581,4 @@ export async function handleAutoplay(request, env = {}) {
     { headers: { 'Cache-Control': 'no-store' } }
   );
 }
-
 
