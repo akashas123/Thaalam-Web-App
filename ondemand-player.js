@@ -1,6 +1,6 @@
 /* On-demand playback for Thaalam: searches JioSaavn through the same-origin
-   /api/music-* routes and streams the resolved CDN audio through a plain
-   HTML5 <audio> element (no YouTube IFrame involved). */
+   /api/music-* routes and plays the resolved CDN streams directly with HTML5
+   audio elements (no server-side audio routing). */
 const onDemandArtwork = document.getElementById('albumArtImg');
 const onDemandStation = document.getElementById('stationName');
 const onDemandTrack = document.getElementById('nowPlaying');
@@ -36,13 +36,194 @@ const onDemandFallbackArtwork = new URL('thaalam-icon-512.png?v=1', window.locat
    just-ended element. */
 let onDemandAudio = new Audio();
 onDemandAudio.preload = 'auto';
+onDemandAudio.crossOrigin = 'anonymous';
 onDemandAudio.setAttribute('playsinline', '');
 onDemandAudio.setAttribute('webkit-playsinline', '');
 let standbyOnDemandAudio = new Audio();
 standbyOnDemandAudio.preload = 'auto';
+standbyOnDemandAudio.crossOrigin = 'anonymous';
 standbyOnDemandAudio.setAttribute('playsinline', '');
 standbyOnDemandAudio.setAttribute('webkit-playsinline', '');
 let upcomingAudioPrefetchToken = 0;
+const onDemandAudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+const onDemandAudioNodes = new WeakMap();
+let onDemandAudioContext = null;
+let onDemandAudioGraphUnavailable = false;
+let onDemandMasterVolume = 0.5;
+let onDemandMuted = false;
+const ON_DEMAND_CROSSFADE_SECONDS = 8;
+let activeOnDemandCrossfade = null;
+let onDemandCrossfadeTransitionStarted = false;
+
+function applyOnDemandAudioOutput(audio) {
+  const node = onDemandAudioNodes.get(audio);
+  if (node && onDemandAudioContext) {
+    const now = onDemandAudioContext.currentTime;
+    const gain = node.gain.gain;
+    const level = onDemandMuted ? 0 : onDemandMasterVolume;
+    if (activeOnDemandCrossfade &&
+        (audio === activeOnDemandCrossfade.outgoingAudio ||
+         audio === activeOnDemandCrossfade.incomingAudio)) {
+      const { outgoingAudio, incomingAudio, startedAt, endsAt } = activeOnDemandCrossfade;
+      const progress = Math.max(0, Math.min(1, (now - startedAt) / (endsAt - startedAt)));
+      const remaining = Math.max(0, endsAt - now);
+      gain.cancelScheduledValues(now);
+      if (remaining > 0.02) {
+        const curve = new Float32Array(65);
+        for (let index = 0; index < curve.length; index += 1) {
+          const point = progress + (1 - progress) * index / (curve.length - 1);
+          curve[index] = level * (audio === outgoingAudio
+            ? Math.cos(point * Math.PI / 2)
+            : Math.sin(point * Math.PI / 2));
+        }
+        gain.setValueCurveAtTime(curve, now, remaining);
+      } else {
+        gain.setValueAtTime(audio === outgoingAudio ? 0 : level, now);
+      }
+    } else {
+      gain.cancelScheduledValues(now);
+      gain.setTargetAtTime(
+        audio === onDemandAudio && !onDemandMuted ? onDemandMasterVolume : 0,
+        now,
+        0.02
+      );
+    }
+    audio.volume = 1;
+    audio.muted = false;
+    return;
+  }
+  audio.volume = onDemandMasterVolume;
+  audio.muted = onDemandMuted;
+}
+
+function getOnDemandAudioNode(audio) {
+  if (!onDemandAudioContextConstructor || onDemandAudioGraphUnavailable) return null;
+  const cached = onDemandAudioNodes.get(audio);
+  if (cached) return cached;
+
+  try {
+    onDemandAudioContext ||= new onDemandAudioContextConstructor({ latencyHint: 'playback' });
+    const source = onDemandAudioContext.createMediaElementSource(audio);
+    const gain = onDemandAudioContext.createGain();
+    source.connect(gain);
+    gain.connect(onDemandAudioContext.destination);
+    const node = { gain };
+    onDemandAudioNodes.set(audio, node);
+    applyOnDemandAudioOutput(audio);
+    return node;
+  } catch (error) {
+    onDemandAudioGraphUnavailable = true;
+    console.error('Web Audio crossfade is unavailable; using native audio playback.', error);
+    return null;
+  }
+}
+
+function prepareOnDemandAudioGraph() {
+  return Boolean(
+    getOnDemandAudioNode(onDemandAudio) &&
+    getOnDemandAudioNode(standbyOnDemandAudio)
+  );
+}
+
+function resumeOnDemandAudioContext() {
+  if (!onDemandAudioContext || onDemandAudioContext.state === 'running') return;
+  void onDemandAudioContext.resume().catch((error) => {
+    console.error('Could not resume the on-demand audio context.', error);
+  });
+}
+
+function scheduleOnDemandCrossfade(outgoingAudio, incomingAudio) {
+  if (!onDemandAudioContext || onDemandAudioContext.state !== 'running' ||
+      !onDemandAudioNodes.has(outgoingAudio) || !onDemandAudioNodes.has(incomingAudio)) {
+    return false;
+  }
+  const remaining = Number(outgoingAudio.duration) - outgoingAudio.currentTime;
+  const duration = Math.max(0.1, Math.min(
+    ON_DEMAND_CROSSFADE_SECONDS,
+    Number.isFinite(remaining) && remaining > 0 ? remaining : ON_DEMAND_CROSSFADE_SECONDS
+  ));
+  const startedAt = onDemandAudioContext.currentTime;
+  const endsAt = startedAt + duration;
+  activeOnDemandCrossfade = { outgoingAudio, incomingAudio, startedAt, endsAt };
+
+  const fadeOut = new Float32Array(129);
+  const fadeIn = new Float32Array(129);
+  for (let index = 0; index < fadeOut.length; index += 1) {
+    const progress = index / (fadeOut.length - 1);
+    const level = onDemandMuted ? 0 : onDemandMasterVolume;
+    fadeOut[index] = level * Math.cos(progress * Math.PI / 2);
+    fadeIn[index] = level * Math.sin(progress * Math.PI / 2);
+  }
+
+  const outgoingGain = onDemandAudioNodes.get(outgoingAudio).gain.gain;
+  const incomingGain = onDemandAudioNodes.get(incomingAudio).gain.gain;
+  [outgoingGain, incomingGain].forEach((gain) => {
+    gain.cancelScheduledValues(startedAt);
+    gain.setValueAtTime(gain.value, startedAt);
+  });
+  outgoingGain.setValueCurveAtTime(fadeOut, startedAt, duration);
+  incomingGain.setValueCurveAtTime(fadeIn, startedAt, duration);
+  return true;
+}
+
+function finishOnDemandCrossfade(outgoingAudio) {
+  if (!activeOnDemandCrossfade ||
+      activeOnDemandCrossfade.outgoingAudio !== outgoingAudio) return false;
+  activeOnDemandCrossfade = null;
+  outgoingAudio.pause();
+  outgoingAudio.removeAttribute('src');
+  outgoingAudio.load();
+  applyOnDemandAudioOutput(onDemandAudio);
+  applyOnDemandAudioOutput(standbyOnDemandAudio);
+  void prefetchNextOnDemandAudio();
+  return true;
+}
+
+function cancelOnDemandCrossfade() {
+  if (!activeOnDemandCrossfade) return;
+  const outgoingAudio = activeOnDemandCrossfade.outgoingAudio;
+  activeOnDemandCrossfade = null;
+  outgoingAudio.pause();
+  outgoingAudio.removeAttribute('src');
+  outgoingAudio.load();
+  applyOnDemandAudioOutput(onDemandAudio);
+  applyOnDemandAudioOutput(standbyOnDemandAudio);
+}
+
+function maybeStartOnDemandCrossfade(audio) {
+  const duration = Number(audio.duration);
+  const remaining = duration - audio.currentTime;
+  if (audio !== onDemandAudio || onDemandRepeatMode === 'one' ||
+      onDemandCrossfadeTransitionStarted || activeOnDemandCrossfade ||
+      !Number.isFinite(duration) || remaining <= 0 ||
+      remaining > ON_DEMAND_CROSSFADE_SECONDS ||
+      !onDemandAudioContext || onDemandAudioContext.state !== 'running' ||
+      !onDemandAudioNodes.has(audio) ||
+      standbyOnDemandAudio.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) return;
+
+  const queuedNext = onDemandQueue[onDemandQueueIndex + 1];
+  const isWrappingFavouriteQueue = onDemandRepeatMode === 'all' &&
+    onDemandQueueSource === 'favourites' &&
+    onDemandQueueIndex === onDemandQueue.length - 1 &&
+    onDemandQueue.length > 1;
+  const repeatQueueNext = isWrappingFavouriteQueue
+    ? onDemandQueue[getNextDifferentQueueIndex()]
+    : null;
+  const nextRelated = queuedNext || repeatQueueNext
+    ? null
+    : relatedTrackCache[relatedTrackCursor];
+  const nextStreamUrl = repeatQueueNext?.streamUrl ||
+    queuedNext?.streamUrl ||
+    nextRelated?.streamUrl ||
+    '';
+  if (!nextStreamUrl || standbyOnDemandAudio.getAttribute('src') !== nextStreamUrl) return;
+
+  onDemandCrossfadeTransitionStarted = true;
+  recordCompletedTasteTrack();
+  autoplayTrackTransition = true;
+  advanceToSimilarSong({ crossfade: true });
+}
+
 // A continuously looping, inaudible stream. Mobile browsers (notably Android
 // Chrome) suspend a page's timers/JS when no audio is playing - including when
 // the screen locks - which stops on-demand track transitions. Keeping this
@@ -709,8 +890,16 @@ function prepareLikedQueue(queue, selectedIndex) {
 }
 
 async function prefetchNextOnDemandAudio() {
+  if (activeOnDemandCrossfade) return;
   const token = ++upcomingAudioPrefetchToken;
-  const nextQueuedSong = onDemandQueueIndex >= 0
+  const isWrappingFavouriteQueue = onDemandRepeatMode === 'all' &&
+    onDemandQueueSource === 'favourites' &&
+    onDemandQueueIndex === onDemandQueue.length - 1 &&
+    onDemandQueue.length > 1;
+  const repeatQueueIndex = isWrappingFavouriteQueue ? getNextDifferentQueueIndex() : -1;
+  const nextQueuedSong = repeatQueueIndex >= 0
+    ? onDemandQueue[repeatQueueIndex]
+    : onDemandQueueIndex >= 0
     ? onDemandQueue[onDemandQueueIndex + 1]
     : null;
   let candidate = null;
@@ -755,27 +944,41 @@ async function prefetchNextOnDemandAudio() {
   standbyOnDemandAudio.pause();
   standbyOnDemandAudio.removeAttribute('src');
   standbyOnDemandAudio.load();
-  standbyOnDemandAudio.volume = onDemandAudio.volume;
-  standbyOnDemandAudio.muted = onDemandAudio.muted;
+  applyOnDemandAudioOutput(standbyOnDemandAudio);
   standbyOnDemandAudio.src = candidate.streamUrl;
   standbyOnDemandAudio.load();
 }
 
-function promoteStandbyOnDemandAudio(streamUrl) {
+function promoteStandbyOnDemandAudio(streamUrl, { crossfade = false } = {}) {
   if (standbyOnDemandAudio.getAttribute('src') !== streamUrl) return false;
 
   upcomingAudioPrefetchToken += 1;
   syncOnDemandVolumeToStored();
-  standbyOnDemandAudio.volume = onDemandAudio.volume;
-  standbyOnDemandAudio.muted = onDemandAudio.muted;
   const previousAudio = onDemandAudio;
+  const incomingAudio = standbyOnDemandAudio;
+  if (crossfade && (
+      !onDemandAudioContext ||
+      incomingAudio.readyState < HTMLMediaElement.HAVE_FUTURE_DATA ||
+      !scheduleOnDemandCrossfade(previousAudio, incomingAudio)
+    )) return false;
+
   onDemandAudio = standbyOnDemandAudio;
   standbyOnDemandAudio = previousAudio;
-  standbyOnDemandAudio.pause();
-  standbyOnDemandAudio.removeAttribute('src');
-  standbyOnDemandAudio.load();
+  if (!crossfade) {
+    if (activeOnDemandCrossfade) {
+      activeOnDemandCrossfade.outgoingAudio.pause();
+      activeOnDemandCrossfade.outgoingAudio.removeAttribute('src');
+      activeOnDemandCrossfade.outgoingAudio.load();
+      activeOnDemandCrossfade = null;
+    }
+    standbyOnDemandAudio.pause();
+    standbyOnDemandAudio.removeAttribute('src');
+    standbyOnDemandAudio.load();
+  }
+  applyOnDemandAudioOutput(onDemandAudio);
+  if (crossfade) applyOnDemandAudioOutput(standbyOnDemandAudio);
   setOnDemandAudioReady(false);
-  return true;
+  return { crossfading: crossfade };
 }
 
 window.resolveLikedSongIdentity = async (song) => {
@@ -1252,12 +1455,14 @@ function syncOnDemandVolumeToStored() {
       ? window.getStoredVolumeLevel()
       : NaN;
     if (Number.isFinite(storedLevel)) {
-      onDemandAudio.volume = Math.max(0, Math.min(100, Math.round(storedLevel))) / 100;
+      onDemandMasterVolume = Math.max(0, Math.min(100, Math.round(storedLevel))) / 100;
     }
     try {
-      onDemandAudio.muted = localStorage.getItem('thaalam-muted-v1') === '1';
+      onDemandMuted = localStorage.getItem('thaalam-muted-v1') === '1';
     } catch (_) { /* storage unavailable; leave mute state alone */ }
   } catch (_) { /* storage unavailable; default to audible */ }
+  applyOnDemandAudioOutput(onDemandAudio);
+  applyOnDemandAudioOutput(standbyOnDemandAudio);
 }
 
 /* Applies the seek/auto-play intent recorded by loadTrack() once the element
@@ -1278,6 +1483,7 @@ function applyPendingMediaIntent() {
   }
   if (pendingShouldPlay) {
     pendingShouldPlay = false;
+    resumeOnDemandAudioContext();
     const playPromise = onDemandAudio.play();
     if (playPromise) {
       playPromise.catch((error) => {
@@ -1391,12 +1597,25 @@ function pauseAdaptiveDiscAtCurrentAngle() {
   badge.classList.toggle('is-disc-seeking', isScrubbing);
 }
 
+function finishOnDemandTrack(audio) {
+  if (audio !== onDemandAudio || !window.onDemandPlaybackActive ||
+      autoplayTrackTransition) return;
+  syncAdaptiveDisc(audio, 'paused');
+  recordCompletedTasteTrack();
+  autoplayTrackTransition = true;
+  if (onDemandRepeatMode === 'all' && onDemandQueueSource === 'favourites' &&
+      onDemandQueue.length > 1) {
+    if (playNextRepeatAllQueueSong()) return;
+  }
+  onDemandModeLabel.textContent = 'ON DEMAND';
+  advanceToSimilarSong();
+}
+
 function bindOnDemandAudioEvents(audio) {
   audio.addEventListener('timeupdate', () => {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
-    if (!audio.paused && !audio.ended && audio.currentTime >= 0.05) {
-      adaptiveDiscHasPlayedPastStart = true;
-    }
+    if (!audio.paused && !audio.ended) maybeStartOnDemandCrossfade(audio);
+    if (!audio.paused && !audio.ended && audio.currentTime >= 0.05) adaptiveDiscHasPlayedPastStart = true;
     syncAdaptiveDisc(audio, isScrubbing || audio.seeking
       ? 'seeking'
       : (!audio.paused && !audio.ended ? 'playing' : 'paused'));
@@ -1424,6 +1643,7 @@ function bindOnDemandAudioEvents(audio) {
     syncAdaptiveDisc(audio, 'playing');
     setOnDemandAudioReady(true);
     autoplayTrackTransition = false;
+    onDemandCrossfadeTransitionStarted = false;
     logOnDemand('playing', audio.currentTime.toFixed(1), 's');
     refreshOnDemandMediaSessionMetadata();
     updateOnDemandMediaSessionPositionState();
@@ -1435,14 +1655,24 @@ function bindOnDemandAudioEvents(audio) {
     setOnDemandPlaying(true);
     void acquireOnDemandWakeLock();
     if (window.onDemandPlaybackActive) startOnDemandSilentLoop();
-
+    resumeOnDemandAudioContext();
   });
   audio.addEventListener('pause', () => {
+    if (activeOnDemandCrossfade?.outgoingAudio === audio && audio.ended) {
+      finishOnDemandCrossfade(audio);
+      return;
+    }
   // Fires for track swaps, src teardown and listener-initiated pauses alike.
   // By the time a queued pause event lands, returnToLive() has usually already
   // cleared the active flag — this guard keeps teardown from repainting state.
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive ||
         audio.ended || autoplayTrackTransition) return;
+    if (activeOnDemandCrossfade?.incomingAudio === audio) {
+      activeOnDemandCrossfade.outgoingAudio.pause();
+      void onDemandAudioContext?.suspend().catch((error) => {
+        console.warn('Could not suspend the audio context while paused.', error);
+      });
+    }
     // Preserve the displayed angle: a scrub preview can be ahead of the media
     // element until its seek finishes, so pausing must not snap it backward.
     pauseAdaptiveDiscAtCurrentAngle();
@@ -1462,19 +1692,12 @@ function bindOnDemandAudioEvents(audio) {
     });
   }
   audio.addEventListener('ended', () => {
-    if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
-    syncAdaptiveDisc(audio, 'paused');
-    if (autoplayTrackTransition) return;
-    recordCompletedTasteTrack();
-    if (onDemandRepeatMode === 'all' && onDemandQueueSource === 'favourites' &&
-        onDemandQueue.length > 1) {
-      // The queue can include recommendation tracks after the favourites
-      // segment, so find the current song in the full queue and advance once.
-      if (playNextRepeatAllQueueSong()) return;
+    if (activeOnDemandCrossfade?.outgoingAudio === audio) {
+      finishOnDemandCrossfade(audio);
+      return;
     }
-    autoplayTrackTransition = true;
-    onDemandModeLabel.textContent = 'ON DEMAND';
-    advanceToSimilarSong();
+    if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
+    finishOnDemandTrack(audio);
   });
   audio.addEventListener('error', () => {
     if (audio !== onDemandAudio) return;
@@ -1506,15 +1729,14 @@ function resumeMobilePlaybackAfterBackground() {
   if (!mobilePlaybackWasActiveBeforeHide) return;
   mobilePlaybackWasActiveBeforeHide = false;
   if (!window.onDemandPlaybackActive) return;
+  resumeOnDemandAudioContext();
 
   const duration = Number(onDemandAudio.duration);
   const reachedTrackEnd = onDemandAudio.ended ||
     (Number.isFinite(duration) && duration > 0 &&
       onDemandAudio.currentTime >= duration - 0.35);
   if (reachedTrackEnd) {
-    recordCompletedTasteTrack();
-    autoplayTrackTransition = true;
-    advanceToSimilarSong();
+    finishOnDemandTrack(onDemandAudio);
   } else if (onDemandAudio.paused) {
     const playPromise = onDemandAudio.play();
     if (playPromise) {
@@ -1684,15 +1906,19 @@ async function handlePlaybackError() {
    metadata is known (or shortly after), so callers can update state without
    waiting for the whole song to buffer; media errors are handled separately
    by the 'error' listener above. */
-async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = true) {
+async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = true, { crossfade = false } = {}) {
   if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
+  if (!crossfade && activeOnDemandCrossfade) cancelOnDemandCrossfade();
+  prepareOnDemandAudioGraph();
   requestedTrackId = candidate.id || '';
   requestedStreamUrl = candidate.streamUrl || '';
   const playbackUrl = requestedStreamUrl;
-  if (startSeconds === 0) promoteStandbyOnDemandAudio(playbackUrl);
+  const promotedStandby = startSeconds === 0
+    ? promoteStandbyOnDemandAudio(playbackUrl, { crossfade })
+    : false;
   // Start from the beginning unless this is a saved-position resume.
-  let effectiveStartSeconds = Math.max(0, Number(startSeconds) || 0);
-  pendingStartSeconds = effectiveStartSeconds;
+  const effectiveStartSeconds = Math.max(0, Number(startSeconds) || 0);
+  pendingStartSeconds = promotedStandby?.crossfading ? -1 : effectiveStartSeconds;
   pendingShouldPlay = shouldPlay;
   syncOnDemandVolumeToStored();
 
@@ -1705,6 +1931,7 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
   if (alreadyLoaded) {
     setOnDemandAudioReady(true);
     applyPendingMediaIntent();
+    void prefetchNextOnDemandAudio();
     return;
   }
 
@@ -1730,8 +1957,10 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
     onDemandAudio.addEventListener('error', finish, { once: true });
   });
 
-  if (!sameSource) onDemandAudio.src = playbackUrl;
-  onDemandAudio.load();
+  if (!sameSource || onDemandAudio.error) {
+    onDemandAudio.src = playbackUrl;
+    onDemandAudio.load();
+  }
 
   // Request playback as soon as the next source is installed. Waiting until
   // loadedmetadata to call play() can leave mobile browsers silent in the
@@ -1741,6 +1970,7 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
   // pending seek when metadata arrives.
   if (shouldPlay) {
     pendingShouldPlay = false;
+    resumeOnDemandAudioContext();
     const playPromise = onDemandAudio.play();
     if (playPromise) {
       playPromise.catch((error) => {
@@ -1899,7 +2129,7 @@ function getNextDifferentQueueIndex() {
   return -1;
 }
 
-function playNextRepeatAllQueueSong() {
+function playNextRepeatAllQueueSong({ crossfade = false } = {}) {
   const nextIndex = getNextDifferentQueueIndex();
   const nextSong = onDemandQueue[nextIndex];
   if (!nextSong) return false;
@@ -1912,7 +2142,8 @@ function playNextRepeatAllQueueSong() {
   void startOnDemandSong(nextSong, {
     preserveQueue: true,
     openNowPlaying: false,
-    recordRecent: false
+    recordRecent: false,
+    crossfade
   });
   return true;
 }
@@ -2050,18 +2281,18 @@ function updateTransportButtonState() {
   }
 }
 
-function skipOnDemandSong(offset, manual = true) {
+function skipOnDemandSong(offset, manual = true, { crossfade = false } = {}) {
   if (manual) autoplayTrackTransition = false;
   if (offset > 0 && onDemandRepeatMode === 'all' &&
       onDemandQueueSource === 'favourites' && onDemandQueue.length > 1 &&
       onDemandQueueIndex === onDemandQueue.length - 1) {
-    playNextRepeatAllQueueSong();
+    playNextRepeatAllQueueSong({ crossfade });
     return;
   }
   if (offset > 0 && manual) {
     const shuffledTrack = takeShuffledAutoplayTrack();
     if (shuffledTrack) {
-      playRelatedTrack(shuffledTrack);
+      playRelatedTrack(shuffledTrack, { crossfade });
       return;
     }
   }
@@ -2077,7 +2308,7 @@ function skipOnDemandSong(offset, manual = true) {
     }
 
     relatedTrackCursor += 1;
-    playRelatedTrack(nextRelated);
+    playRelatedTrack(nextRelated, { crossfade });
     return;
   }
 
@@ -2097,6 +2328,7 @@ function skipOnDemandSong(offset, manual = true) {
     preserveQueue: true,
     openNowPlaying: false,
     recordRecent: false,
+    crossfade
   });
 }
 
@@ -2248,7 +2480,7 @@ function prefetchUpcomingTrackArtwork() {
 }
 
 /* Called when a track ends. Plays the next prefetched queue item. */
-function advanceToSimilarSong() {
+function advanceToSimilarSong({ crossfade = false } = {}) {
   if (!window.onDemandPlaybackActive) return;
 
   if (onDemandRepeatMode === 'one' && onDemandAudio?.getAttribute('src')) {
@@ -2260,13 +2492,13 @@ function advanceToSimilarSong() {
   }
 
   if (onDemandQueueIndex >= 0 && onDemandQueueIndex < onDemandQueue.length - 1) {
-    skipOnDemandSong(1, false);
+    skipOnDemandSong(1, false, { crossfade });
     return;
   }
 
   if (onDemandRepeatMode === 'all' && onDemandQueueSource === 'favourites' &&
       onDemandQueue.length > 1) {
-    playNextRepeatAllQueueSong();
+    playNextRepeatAllQueueSong({ crossfade });
     return;
   }
 
@@ -2275,7 +2507,7 @@ function advanceToSimilarSong() {
   // every track in the current recommendation batch.
   const shuffledTrack = takeShuffledAutoplayTrack();
   if (shuffledTrack) {
-    playRelatedTrack(shuffledTrack);
+    playRelatedTrack(shuffledTrack, { crossfade });
     return;
   }
 
@@ -2283,13 +2515,13 @@ function advanceToSimilarSong() {
   const nextTrack = relatedTrackCache[relatedTrackCursor];
   if (nextTrack) {
     relatedTrackCursor += 1;
-    playRelatedTrack(nextTrack);
+    playRelatedTrack(nextTrack, { crossfade });
     return;
   }
 
   if (onDemandRepeatMode === 'all' && onDemandQueue.length > 1 &&
       !isFetchingRelated && !autoplayPrefetchFailed) {
-    if (playNextRepeatAllQueueSong()) return;
+    if (playNextRepeatAllQueueSong({ crossfade })) return;
   }
 
   // The prefetch has not landed yet (or returned no eligible tracks). Wait for
@@ -2490,16 +2722,20 @@ updateOnDemandModeControls();
 
 /* Starts a track that came from the queue list. It already has a resolved
    stream, so it skips the search round-trip that startOnDemandSong performs. */
-async function playRelatedTrack(track) {
+async function playRelatedTrack(track, { crossfade = false } = {}) {
   if (!track?.id || !track.streamUrl) return;
   const song = relatedTrackToSong(track);
   const requestId = ++songRequestId;
+  autoplayTrackTransition = crossfade;
   setOnDemandAudioReady(false);
   // Detach the ended/near-ended source before publishing the next song's
   // metadata, so its final timeupdate cannot repaint the new song's progress.
-  onDemandAudio.pause();
-  onDemandAudio.removeAttribute('src');
-  onDemandAudio.load();
+  if (!crossfade) {
+    cancelOnDemandCrossfade();
+    onDemandAudio.pause();
+    onDemandAudio.removeAttribute('src');
+    onDemandAudio.load();
+  }
   const artworkPromise = prefetchTrackArtwork(track);
 
   const existingQueueIndex = onDemandQueue.findIndex((queuedSong) =>
@@ -2542,7 +2778,13 @@ async function playRelatedTrack(track) {
     updateOnDemandMetadata(song, track);
   });
   prefetchUpcomingTrackArtwork();
-  await loadTrack(trackCandidates[0] || { id: track.id, streamUrl: track.streamUrl }, requestId);
+  await loadTrack(
+    trackCandidates[0] || { id: track.id, streamUrl: track.streamUrl },
+    requestId,
+    0,
+    true,
+    { crossfade }
+  );
   if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
   updatePlaybackProgress();
   rememberOnDemandPlayback(song);
@@ -2554,14 +2796,20 @@ async function playRelatedTrack(track) {
 async function startOnDemandSong(song, {
   preserveQueue = false,
   openNowPlaying = true,
-  recordRecent = !preserveQueue
+  recordRecent = !preserveQueue,
+  crossfade = false
 } = {}) {
   if (!song?.trackName) return;
-  autoplayTrackTransition = false;
+  prepareOnDemandAudioGraph();
+  resumeOnDemandAudioContext();
   setOnDemandAudioReady(false);
-  onDemandAudio.pause();
-  onDemandAudio.removeAttribute('src');
-  onDemandAudio.load();
+  autoplayTrackTransition = crossfade;
+  if (!crossfade) {
+    cancelOnDemandCrossfade();
+    onDemandAudio.pause();
+    onDemandAudio.removeAttribute('src');
+    onDemandAudio.load();
+  }
   // Ratings-backed favourites may contain partial or older metadata. Keep the
   // player input shape consistent before artwork lookup, search, and queueing.
   song = {
@@ -2687,7 +2935,13 @@ async function startOnDemandSong(song, {
     setCurrentOnDemandTrack(song, track.id);
     persistCurrentOnDemandSession();
     updateOnDemandMetadata(song, track);
-    await loadTrack(trackCandidates[0] || { id: track.id, streamUrl: track.streamUrl }, requestId);
+    await loadTrack(
+      trackCandidates[0] || { id: track.id, streamUrl: track.streamUrl },
+      requestId,
+      0,
+      true,
+      { crossfade }
+    );
     if (requestId !== songRequestId || !window.onDemandPlaybackActive) return;
     updatePlaybackProgress();
     rememberOnDemandPlayback(song);
@@ -2790,14 +3044,26 @@ function toggleOnDemandPlayback(shouldPlay) {
   if (shouldPlay === false || (shouldPlay !== true && isPlaying)) {
     pendingShouldPlay = false;
     onDemandAudio.pause();
-  } else {
-    const playPromise = onDemandAudio.play();
-    if (playPromise) {
-      playPromise.catch((error) => {
-        logOnDemand('toggle play() rejected:', error?.name || error);
-        if (window.onDemandPlaybackActive) setOnDemandPlaying(false);
-      });
+    if (activeOnDemandCrossfade) {
+      activeOnDemandCrossfade.outgoingAudio.pause();
+      if (onDemandAudioContext?.state === 'running') {
+        void onDemandAudioContext.suspend().catch((error) => {
+          console.warn('Could not suspend the audio context while paused.', error);
+        });
+      }
     }
+  } else {
+    resumeOnDemandAudioContext();
+    [onDemandAudio, ...(activeOnDemandCrossfade ? [activeOnDemandCrossfade.outgoingAudio] : [])]
+      .forEach((audio) => {
+        const playPromise = audio.play();
+        if (playPromise) {
+          playPromise.catch((error) => {
+            logOnDemand('toggle play() rejected:', error?.name || error);
+            if (window.onDemandPlaybackActive) setOnDemandPlaying(false);
+          });
+        }
+      });
   }
 }
 
@@ -2952,6 +3218,8 @@ function returnToLive() {
   pendingShouldPlay = false;
   autoplayTrackTransition = false;
   pendingStartSeconds = -1;
+  cancelOnDemandCrossfade();
+  onDemandCrossfadeTransitionStarted = false;
   onDemandAudio.pause();
   setOnDemandPlaying(false);
   // Keep the last on-demand track, its playhead and queue so the mode pill can
@@ -3030,14 +3298,18 @@ window.recordOnDemandLikedRecent = (song) => {
 /* Mute/unmute the on-demand audio element. */
 window.setOnDemandMuted = (muted) => {
   try {
-    onDemandAudio.muted = Boolean(muted);
+    onDemandMuted = Boolean(muted);
+    applyOnDemandAudioOutput(onDemandAudio);
+    applyOnDemandAudioOutput(standbyOnDemandAudio);
   } catch (_) { /* element not controllable yet */ }
 };
 
 /* Set the on-demand player's volume LEVEL (0-100). */
 window.setOnDemandVolume = (level) => {
   try {
-    onDemandAudio.volume = Math.max(0, Math.min(100, Math.round(Number(level) || 0))) / 100;
+    onDemandMasterVolume = Math.max(0, Math.min(100, Math.round(Number(level) || 0))) / 100;
+    applyOnDemandAudioOutput(onDemandAudio);
+    applyOnDemandAudioOutput(standbyOnDemandAudio);
   } catch (_) { /* element not controllable yet */ }
 };
 
