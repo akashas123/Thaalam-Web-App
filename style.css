@@ -2306,6 +2306,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
   }
 
   .genre-card-art-frame {
+    position: relative;
     display: block;
     width: 100%;
     aspect-ratio: 1;
@@ -2315,6 +2316,27 @@ body.view-rises-from-mini.view-now-playing .player-view {
     background: rgba(255, 255, 255, 0.08) url("album-placeholder.svg?v=3") center / cover no-repeat;
     box-shadow: 0 0.75rem 1.5rem rgba(0, 0, 0, 0.2);
     transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  }
+
+  .new-release-badge {
+    position: absolute;
+    top: 0.45rem;
+    right: 0.45rem;
+    z-index: 1;
+    padding: 0.16rem 0.38rem;
+    border: 1px solid rgba(255, 255, 255, 0.72);
+    border-radius: 0.25rem;
+    background: rgba(16, 18, 20, 0.68);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+    color: #fff;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    font-size: 0.58rem;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: 0.025em;
+    text-transform: uppercase;
+    pointer-events: none;
   }
 
   .genre-card-art {
@@ -4721,7 +4743,7 @@ body.has-lyrics .lyrics-panel {
   .mobile-recents-row .mobile-genre-track-art.is-liked-folder-recent svg { width: 1.6rem; height: 1.6rem; fill: #fff; }
   .mobile-recents-row .mobile-genre-track.is-liked-folder-recent .mobile-genre-track-artist { display: none; }
   .mobile-genre-track { width: 8.5rem; flex: 0 0 8.5rem; }
-  .mobile-genre-track-art { display: block; width: 8.5rem; min-width: 8.5rem; height: 8.5rem; min-height: 8.5rem; aspect-ratio: 1 / 1; flex: 0 0 8.5rem; overflow: hidden; border: 0; border-radius: 0.55rem; background: #111 url('album-placeholder.svg?v=3') center / cover no-repeat; }
+  .mobile-genre-track-art { position: relative; display: block; width: 8.5rem; min-width: 8.5rem; height: 8.5rem; min-height: 8.5rem; aspect-ratio: 1 / 1; flex: 0 0 8.5rem; overflow: hidden; border: 0; border-radius: 0.55rem; background: #111 url('album-placeholder.svg?v=3') center / cover no-repeat; }
   .mobile-genre-track-art img { display: block; width: 100%; height: 100%; aspect-ratio: 1 / 1; object-fit: cover; opacity: 0; transition: opacity 0.16s ease; }
   .mobile-genre-track-art.has-artwork img { opacity: 1; }
   .mobile-genre-loading-art { width: 8rem; height: 8rem; border-radius: 0.55rem; background: #111 url('album-placeholder.svg?v=3') center / cover no-repeat; }

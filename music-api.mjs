@@ -11,6 +11,7 @@ const UPSTREAM_REQUEST_HEADERS = {
   accept: 'application/json, text/plain, */*'
 };
 const SONG_ID_PATTERN = /^[A-Za-z0-9_-]{4,32}$/;
+const RELEASE_LANGUAGES = new Set(['english', 'hindi', 'malayalam', 'tamil']);
 
 /* ------------------------------------------------------------------ *
  * DES-ECB decryption (key 38346591) for encrypted_media_url.
@@ -288,6 +289,113 @@ function mapProviderSong(raw) {
     streamUrl,
     permalink: String(raw.perma_url || '')
   };
+}
+
+function extractNewReleaseSongs(html) {
+  const marker = /"browse_list"\s*:\s*\[/;
+  const match = marker.exec(html);
+  if (!match) throw new Error('The Saavn releases page did not include a song list.');
+
+  const listStart = match.index + match[0].lastIndexOf('[');
+  let listEnd = listStart;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (; listEnd < html.length; listEnd += 1) {
+    const character = html[listEnd];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === '"') inString = false;
+      continue;
+    }
+    if (character === '"') inString = true;
+    else if (character === '[') depth += 1;
+    else if (character === ']') {
+      depth -= 1;
+      if (depth === 0) {
+        listEnd += 1;
+        break;
+      }
+    }
+  }
+  if (depth !== 0) throw new Error('The Saavn releases list was incomplete.');
+
+  const songs = JSON.parse(html.slice(listStart, listEnd));
+  if (!Array.isArray(songs)) throw new Error('The Saavn releases list was invalid.');
+  return songs;
+}
+
+function mapProviderReleaseSong(raw) {
+  if (!raw || typeof raw !== 'object' || raw.type !== 'song') return null;
+  const id = String(raw.id || '');
+  const title = sanitizeText(raw.title?.text);
+  const subtitleArtists = (Array.isArray(raw.subtitle) ? raw.subtitle : [])
+    .map((item) => sanitizeText(item?.text))
+    .filter(Boolean);
+  const artist = subtitleArtists.join(', ') || (Array.isArray(raw.artists) ? raw.artists : [])
+    .map((item) => sanitizeText(item?.name))
+    .filter(Boolean)
+    .join(', ');
+  const durationSeconds = Math.max(0, Math.floor(Number(raw.duration) || 0));
+  const image = Array.isArray(raw.image) ? raw.image[0] : raw.image;
+  const thumbnail = String(image || '')
+    .replace(/^http:/, 'https:')
+    .replace(/150x150|50x50/, '500x500');
+  const streamUrl = decryptMediaUrl(raw.encrypted_media_url);
+  if (!SONG_ID_PATTERN.test(id) || !title || !artist || !streamUrl) return null;
+
+  return {
+    id,
+    title,
+    artist,
+    album: sanitizeText(raw.album?.text),
+    year: String(raw.year || '').trim(),
+    language: sanitizeText(raw.language),
+    duration: formatDuration(durationSeconds),
+    durationSeconds,
+    thumbnail,
+    streamUrl,
+    permalink: String(raw.perma_url || '')
+  };
+}
+
+/* GET /api/music-releases?language=<english|hindi|malayalam|tamil>
+   Returns playable tracks from Saavn's own language-specific New Releases page. */
+export async function handleNewReleases(request) {
+  const url = new URL(request.url);
+  const language = (url.searchParams.get('language') || '').trim().toLowerCase();
+  if (!RELEASE_LANGUAGES.has(language)) {
+    return Response.json({ error: 'Choose a supported release language.' }, { status: 400 });
+  }
+
+  try {
+    const response = await fetch(`https://www.jiosaavn.com/new-releases/${language}`, {
+      headers: {
+        ...UPSTREAM_REQUEST_HEADERS,
+        accept: 'text/html,application/xhtml+xml'
+      }
+    });
+    if (!response.ok) throw new Error(`Saavn releases page failed (${response.status}).`);
+
+    const rawSongs = extractNewReleaseSongs(await response.text());
+    const results = [];
+    const seen = new Set();
+    for (const rawSong of rawSongs) {
+      const song = mapProviderReleaseSong(rawSong);
+      if (!song || !song.language.toLowerCase().includes(language) || seen.has(song.id)) continue;
+      seen.add(song.id);
+      results.push(song);
+      if (results.length >= 25) break;
+    }
+    if (!results.length) throw new Error('Saavn returned no playable releases.');
+
+    return Response.json({ results }, {
+      headers: { 'Cache-Control': 'public, max-age=300, s-maxage=600' }
+    });
+  } catch {
+    return providerErrorResponse('JioSaavn new releases are temporarily unavailable.');
+  }
 }
 
 function providerErrorResponse(message, status = 502) {
@@ -581,4 +689,3 @@ export async function handleAutoplay(request, env = {}) {
     { headers: { 'Cache-Control': 'no-store' } }
   );
 }
-
