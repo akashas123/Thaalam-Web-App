@@ -23,6 +23,11 @@
       ) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
       window.__THAALAM_FORCE_MOBILE_LAYOUT__ =
         mobilePlatform || compactDevice || touchOnlyDevice || (touchDevice && !hasFinePointer);
+      if (!window.__THAALAM_FORCE_MOBILE_LAYOUT__ && window.matchMedia(
+        '(min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine)'
+      ).matches) {
+        document.documentElement.classList.add('desktop-genre-order-pending');
+      }
       if (!window.__THAALAM_FORCE_MOBILE_LAYOUT__) return;
       document.querySelector('meta[name="viewport"]')?.setAttribute(
         'content',
@@ -1258,6 +1263,7 @@
       const orderedTabs = document.createDocumentFragment();
       genreTabsInOrder.forEach((tab) => orderedTabs.appendChild(tab));
       genreTabList.insertBefore(orderedTabs, firstUtilityTab);
+      document.documentElement.classList.remove('desktop-genre-order-pending');
     }
 
     reorderDesktopGenreTabsFromHistory();
@@ -4566,6 +4572,13 @@
         return;
       }
       const storedView = readActiveView();
+      reorderDesktopGenreTabsFromHistory();
+      genreTabs.forEach((tab) => {
+        const selected = tab.dataset.genre === activeGenre;
+        tab.classList.toggle('is-selected', selected);
+        tab.setAttribute('aria-selected', String(selected));
+        tab.tabIndex = selected ? 0 : -1;
+      });
       if (activeGenre === 'you-like') homeSubtitle.textContent = 'Explore songs from your library';
       else if (activeGenre.startsWith('search:')) homeSubtitle.textContent = 'Explore songs by search';
       else setPersonalisedPicksSubtitle();

@@ -1855,6 +1855,10 @@ body.view-rises-from-mini.view-now-playing .player-view {
 
   .genre-tabs[hidden] { display: none; }
 
+  html.desktop-genre-order-pending .genre-tabs {
+    visibility: hidden;
+  }
+
   .genre-tabs {
     display: flex;
     align-items: center;
