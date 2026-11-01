@@ -2018,6 +2018,23 @@ body.view-rises-from-mini.view-now-playing .player-view {
     overflow: visible;
   }
 
+  @media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) {
+    body.view-home .genre-results:not(.favourites-list-layout):not(.desktop-search-list-layout):not(.recent-history-layout) {
+      column-gap: 1rem;
+      row-gap: 1.35rem;
+    }
+
+    body.view-home .genre-results:not(.favourites-list-layout):not(.desktop-search-list-layout):not(.recent-history-layout) > .genre-card {
+      width: 100%;
+      max-width: 10rem;
+      justify-self: center;
+    }
+
+    body.view-home .genre-results:not(.favourites-list-layout):not(.desktop-search-list-layout):not(.recent-history-layout) .genre-card-art-frame {
+      border-radius: 0;
+    }
+  }
+
   /* Constrain only the results region. Grid rows retain their natural height,
      so album artwork and its title/artist remain fully visible while scrolling. */
   .genre-results {
