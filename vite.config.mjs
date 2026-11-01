@@ -1,6 +1,13 @@
 import { defineConfig } from 'vite';
 import { Readable } from 'node:stream';
-import { handleAlbum, handleAutoplay, handleMusicStream, handleSearch, handleSong } from './music-api.mjs';
+import {
+  handleAlbum,
+  handleAutoplay,
+  handleMusicStream,
+  handleNewReleases,
+  handleSearch,
+  handleSong
+} from './music-api.mjs';
 
 export default defineConfig({
   plugins: [{
@@ -22,6 +29,7 @@ export default defineConfig({
         }
         const handlers = {
           '/api/music-search': handleSearch,
+          '/api/music-releases': handleNewReleases,
           '/api/music-album': handleAlbum,
           '/api/music-autoplay': handleAutoplay,
           '/api/music-song': handleSong,

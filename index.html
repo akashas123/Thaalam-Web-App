@@ -1190,8 +1190,8 @@
     mobileFolderToolbarQuery.addEventListener('change', () => {
       moveLikedFolderControls(document.body.classList.contains('library-playlist-open'));
     });
-    // Genre charts rotate through relevant artists each day, then combine
-    // three searches into one varied daily set for both mobile and desktop.
+    // Genre charts use Saavn's new-release feed for general suggestions and
+    // the listener's artist history for personalized suggestions.
     const genreFeedIds = {
       international: [
         'ed sheeran', 'taylor swift', 'the weeknd', 'dua lipa', 'bruno mars',
@@ -1281,8 +1281,8 @@
     const artistInfoRequests = new Map();
     // Genre tabs use Apple's genre charts. Versioned separately from the old
     // text-search and filtered result caches.
-    // v9 keeps only the first 21 chart tracks (7 columns x 3 rows).
-    const GENRE_CACHE_KEY = 'thaalam-jiosaavn-genre-cache-v10';
+    // v12 caches Saavn's new-release feed separately from the previous search charts.
+    const GENRE_CACHE_KEY = 'thaalam-jiosaavn-genre-cache-v12';
     const GENRE_CHART_LIMIT = 21;
     const RECOMMENDATION_DEVICE_KEY = 'thaalam-recommendation-device-v1';
     let recommendationDeviceId = '';
@@ -1442,16 +1442,6 @@
       return Array.isArray(storedEntry.songs) ? storedEntry.songs.slice(0, GENRE_CHART_LIMIT) : [];
     }
 
-    function getDailyGenreFeedQueries(key) {
-      const pool = genreFeedIds[key] || [];
-      if (pool.length <= 3) return pool;
-      const [year, month, day] = localCalendarDayKey().split('-').map(Number);
-      const dayNumber = Math.floor(Date.UTC(year, month - 1, day) / 86400000);
-      const shuffledPool = seededGenreShuffle(pool, recommendationSeed(key));
-      const start = dayNumber % pool.length;
-      return [0, 1, 2].map((slot) => shuffledPool[(start + slot) % pool.length]);
-    }
-
     function getGenreHistoryArtistQueries() {
       const counts = new Map();
       (window.getOnDemandTasteProfile?.() || []).forEach((song) => {
@@ -1517,10 +1507,9 @@
       if (genreChartRequests.has(key)) return genreChartRequests.get(key);
 
       const requestRevision = recommendationTasteRevision;
-      const generalQueries = getDailyGenreFeedQueries(key);
       const personalizedQueries = getGenreHistoryArtistQueries();
       const request = Promise.allSettled([
-        searchGenreChart(generalQueries, 0, GENRE_CHART_LIMIT + 4, key),
+        fetchGenreNewReleases(key),
         personalizedQueries.length
           ? searchGenreChart(personalizedQueries, 0, GENRE_CHART_LIMIT + 4, key)
           : Promise.resolve([])
@@ -1540,9 +1529,8 @@
             // New listeners and failed artist searches keep the general chart.
             songs = generalSongs.slice(0, GENRE_CHART_LIMIT);
           } else {
-            // With a taste profile, use 20 personalized tracks and 1 daily
-            // general discovery track in the 21-card genre grid.
-            const personalizedTarget = Math.round(GENRE_CHART_LIMIT * 0.95);
+            // With a taste profile, use a 60/40 personalized/general mix.
+            const personalizedTarget = Math.round(GENRE_CHART_LIMIT * 0.6);
             const generalTarget = GENRE_CHART_LIMIT - personalizedTarget;
             const picked = [];
             const seen = new Set();
@@ -2685,6 +2673,12 @@
               .replace(/\d+x\d+bb\./, '600x600bb.')
           : '';
         artworkFrame.appendChild(artwork);
+        if (song.isNewRelease) {
+          const badge = document.createElement('span');
+          badge.className = 'new-release-badge';
+          badge.textContent = 'New';
+          artworkFrame.appendChild(badge);
+        }
         const isFavouriteList = activeGenre === 'you-like' && favouriteLayout === 'list';
         if (searchListLayout) {
           // Mobile search rows are chrome-free: no play/info buttons — a
@@ -2955,6 +2949,38 @@
         });
     }
 
+    function fetchGenreNewReleases(genreKey) {
+      const language = {
+        international: 'english',
+        hindi: 'hindi',
+        malayalam: 'malayalam',
+        tamil: 'tamil'
+      }[genreKey];
+      if (!language) return Promise.resolve([]);
+
+      const url = new URL('/api/music-releases', window.location.origin);
+      url.searchParams.set('language', language);
+      return fetch(url, { cache: 'no-store' })
+        .then((response) => {
+          if (!response.ok) throw new Error(`The new releases request failed (${response.status}).`);
+          return response.json();
+        })
+        .then((data) => (data?.results || []).map((song) => ({
+          trackId: song.id,
+          providerTrackId: song.id,
+          trackName: song.title,
+          artistName: song.artist,
+          collectionName: song.album,
+          artworkUrl100: song.thumbnail,
+          trackViewUrl: song.permalink,
+          streamUrl: song.streamUrl,
+          trackTimeMillis: song.durationSeconds ? song.durationSeconds * 1000 : 0,
+          language: song.language || '',
+          isNewRelease: true,
+          primaryGenreName: `New Releases - ${language}`
+        })));
+    }
+
     function matchesGenreLanguage(song, genreKey) {
       const language = String(song?.language || '').trim().toLowerCase();
       const expectedLanguage = genreKey === 'international' ? 'english' : genreKey;
@@ -3142,6 +3168,12 @@
           artwork.alt = '';
           artwork.loading = 'lazy';
           play.appendChild(artwork);
+          if (song.isNewRelease) {
+            const badge = document.createElement('span');
+            badge.className = 'new-release-badge';
+            badge.textContent = 'New';
+            play.appendChild(badge);
+          }
         }
         play.addEventListener('click', () => {
           if (isLikedFolderRecent) {
