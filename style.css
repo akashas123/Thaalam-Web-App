@@ -200,6 +200,14 @@ body.view-home {
   transition: --home-tint 850ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
+@media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) {
+  body.view-home {
+    background:
+      radial-gradient(ellipse 100% 64% at 0% 0%, color-mix(in srgb, var(--home-tint) 92%, transparent), transparent 100%),
+      #05070d;
+  }
+}
+
 body.view-home::before {
   content: "";
   position: fixed;
@@ -1854,6 +1862,10 @@ body.view-rises-from-mini.view-now-playing .player-view {
   .catalog-search svg { width: 1.05rem; height: 1.05rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 
   .genre-tabs[hidden] { display: none; }
+
+  html.desktop-genre-order-pending .genre-tabs {
+    visibility: hidden;
+  }
 
   .genre-tabs {
     display: flex;
@@ -6455,6 +6467,12 @@ img {
      results. Library also stays dark until Liked Songs is opened. */
   body.mobile-search-active.view-home {
     background: #05070d !important;
+  }
+
+  body.view-home:not(.has-liked-home-glow) {
+    background:
+      radial-gradient(ellipse 94% 58% at 0% 0%, color-mix(in srgb, var(--home-tint) 72%, transparent), transparent 100%),
+      #05070d;
   }
 
   body.view-home.has-liked-home-glow {
