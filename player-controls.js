@@ -102,8 +102,20 @@ function showSongInfo(
   songInfoArtist.textContent =
     artist || '';
 
-  songInfoDetails.textContent =
-    details || '';
+  songInfoDetails.replaceChildren();
+  String(details || '').split('\n').forEach((line, index) => {
+    if (index) songInfoDetails.appendChild(document.createElement('br'));
+    const copyrightPrefix = 'Asset: © ';
+    if (line.startsWith(copyrightPrefix)) {
+      songInfoDetails.append('Asset: ');
+      const copyrightSymbol = document.createElement('small');
+      copyrightSymbol.className = 'song-info-copyright-symbol';
+      copyrightSymbol.textContent = '©';
+      songInfoDetails.append(copyrightSymbol, ` ${line.slice(copyrightPrefix.length)}`);
+    } else {
+      songInfoDetails.append(document.createTextNode(line));
+    }
+  });
 
   songInfoTrack.hidden =
     !track;
@@ -507,6 +519,8 @@ function getRatingTrackDetails(trackKey) {
       title: onDemandSong.trackName,
       artist: onDemandSong.artistName,
       album: onDemandSong.collectionName,
+      releaseDate: onDemandSong.releaseDate,
+      primaryGenreName: onDemandSong.primaryGenreName,
       art: onDemandSong.artworkUrl100,
       providerTrackId: onDemandSong.providerTrackId,
       youtubeVideoId: onDemandSong.youtubeVideoId
@@ -901,6 +915,8 @@ function setStoredRating(
           title: onDemandSong.trackName,
           artist: onDemandSong.artistName,
           album: onDemandSong.collectionName,
+          releaseDate: onDemandSong.releaseDate,
+          primaryGenreName: onDemandSong.primaryGenreName,
           art: onDemandSong.artworkUrl100,
           providerTrackId: onDemandSong.providerTrackId,
           youtubeVideoId: onDemandSong.youtubeVideoId
@@ -911,6 +927,8 @@ function setStoredRating(
           title: onDemandSong.trackName,
           artist: onDemandSong.artistName,
           album: onDemandSong.collectionName,
+          releaseDate: onDemandSong.releaseDate,
+          primaryGenreName: onDemandSong.primaryGenreName,
           art: onDemandSong.artworkUrl100,
           providerTrackId: onDemandSong.providerTrackId,
           youtubeVideoId: onDemandSong.youtubeVideoId
@@ -927,18 +945,25 @@ function setStoredRating(
         if (/^[\w-]{11}$/.test(candidate)) videoId = candidate;
       }
       const fallbackArt = videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '';
-      // Preserve any real metadata the iTunes prefetch already resolved. This
-      // snapshot exists to give the Liked view a title/artist/artwork; it must
-      // never clobber fetched details with the all-N/A fallback, otherwise the
-      // info button greys out the next time this track is opened.
+      // Preserve resolved album metadata while normalizing the details shown
+      // in the Now Playing dialog.
       const existingInfo = getStoredSongInfo(currentRatingTrackKey) || {};
       const artworkUrl100 = source?.art || source?.artworkUrl100 || song?.art || song?.artworkUrl100 ||
         existingInfo.artworkUrl100 || existingInfo.artwork || fallbackArt;
       const existingDetails = existingInfo.details;
-      const details = (existingDetails &&
-        hasUsableSongDetails({ title: rawTitle, artist: cleanArtist }, existingDetails))
-        ? existingDetails
-        : `Album: ${source?.album || 'N/A'}\nRelease date: N/A\nGenre: N/A\nDuration: N/A`;
+      const cachedLines = Object.fromEntries(
+        String(existingDetails || '').split('\n').map((line) => {
+          const separator = line.indexOf(':');
+          return separator < 0
+            ? ['', '']
+            : [line.slice(0, separator).trim().toLowerCase(), line.slice(separator + 1).trim()];
+        })
+      );
+      const details = formatSongInfoDetails(
+        source?.album || existingInfo.album || cachedLines.album,
+        cachedLines['release date'],
+        cachedLines.genre
+      );
       saveStoredSongInfo(currentRatingTrackKey, {
         track: rawTitle,
         artist: cleanArtist,
@@ -1114,6 +1139,8 @@ function updateSongInfo() {
       title: onDemandSong.trackName,
       artist: onDemandSong.artistName,
       album: onDemandSong.collectionName,
+      releaseDate: onDemandSong.releaseDate,
+      primaryGenreName: onDemandSong.primaryGenreName,
       art: onDemandSong.artworkUrl100,
       youtubeVideoId: onDemandSong.youtubeVideoId
     }
@@ -1125,18 +1152,52 @@ function updateSongInfo() {
 
   updateStoredRatingForCurrentSong(song);
   const cached = getStoredSongInfo(getTrackRatingKey(song));
-  const fallbackDetails = [
-    `Album: ${song.album || 'N/A'}`,
-    'Release date: N/A',
-    'Genre: N/A',
-    'Duration: N/A'
-  ].join('\n');
+  const cachedDetails = Object.fromEntries(
+    String(cached?.details || '').split('\n').map((line) => {
+      const separator = line.indexOf(':');
+      return separator < 0
+        ? ['', '']
+        : [line.slice(0, separator).trim().toLowerCase(), line.slice(separator + 1).trim()];
+    })
+  );
+  const album = song.album || cached?.album || cachedDetails.album || '';
+  const releaseDate = cachedDetails['release date'] || song.releaseDate || '';
 
   showSongInfo(
     cached?.track || song.title,
     cached?.artist || song.artist,
-    cached?.details || fallbackDetails
+    formatSongInfoDetails(
+      album,
+      formatReleaseDate(releaseDate),
+      cachedDetails.genre
+    )
   );
+}
+
+function formatReleaseDate(value) {
+  const releaseDate = String(value || '').trim();
+  if (!releaseDate || /^\d{4}$/.test(releaseDate)) return 'N/A';
+  const isoDate = releaseDate.match(/^(\d{4})-(\d{2})-(\d{2})(?:T|$)/);
+  const date = isoDate
+    ? new Date(Date.UTC(Number(isoDate[1]), Number(isoDate[2]) - 1, Number(isoDate[3])))
+    : new Date(releaseDate);
+  return Number.isNaN(date.getTime())
+    ? 'N/A'
+    : new Intl.DateTimeFormat(undefined, {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        timeZone: 'UTC'
+      }).format(date);
+}
+
+function formatSongInfoDetails(album, releaseDate = 'N/A', genre = 'N/A') {
+  return [
+    `Album: ${album || 'N/A'}`,
+    `Release date: ${releaseDate || 'N/A'}`,
+    `Genre: ${genre || 'N/A'}`,
+    'Asset: © Saavn Media Limited'
+  ].join('\n');
 }
 
 window.openCurrentSongInfo = () => {
@@ -1151,19 +1212,24 @@ async function prefetchSongInfo(song) {
   if (!cacheKey) return;
 
   const cached = getStoredSongInfo(cacheKey);
-  if (cached?.track && cached?.artist && cached?.details && cached?.artworkUrl100) return;
+  const cachedReleaseDate = cached?.details?.match(/^Release date:\s*(.*)$/mi)?.[1]?.trim();
+  const cachedHasReleaseDate = Boolean(
+    cachedReleaseDate && cachedReleaseDate !== 'N/A' && formatReleaseDate(cachedReleaseDate) !== 'N/A'
+  );
+  const cachedHasGenre = /^Genre:/mi.test(cached?.details || '');
+  if (cached?.track && cached?.artist && cachedHasReleaseDate &&
+      cachedHasGenre && cached?.artworkUrl100) return;
   if (prefetchingSongInfo.has(cacheKey)) return;
 
   prefetchingSongInfo.add(cacheKey);
-  const fallbackDetails = [
-    `Album: ${song.album || 'N/A'}`,
-    'Release date: N/A',
-    'Genre: N/A',
-    'Duration: N/A'
-  ].join('\n');
+  const fallbackDetails = formatSongInfoDetails(
+    song.album,
+    formatReleaseDate(song.releaseDate),
+    song.primaryGenreName || 'N/A'
+  );
 
   try {
-    const musicData = await searchItunes(`${song.artist} ${song.title}`);
+    const musicData = await searchAppleMusicMetadata(song.artist, song.title);
     const normalize = (value) => value
       ?.normalize('NFKD')
       .replace(/[\u0300-\u036f]/g, '')
@@ -1192,27 +1258,18 @@ async function prefetchSongInfo(song) {
     };
 
     if (match) {
-      const releaseDate = match.releaseDate
-        ? new Date(match.releaseDate).toLocaleDateString()
-        : 'N/A';
-      const duration = match.trackTimeMillis
-        ? `${Math.floor(match.trackTimeMillis / 60000)}:${String(
-            Math.floor(match.trackTimeMillis / 1000) % 60
-          ).padStart(2, '0')}`
-        : 'N/A';
-
       entry = {
         track: match.trackName || song.title,
         artist: match.artistName || song.artist,
+        album: match.collectionName || song.album || '',
         artworkUrl100: match.artworkUrl100
           ?.replace(/^http:/, 'https:')
           .replace(/\d+x\d+bb\./, '600x600bb.') || song.art || '',
-        details: [
-          `Album: ${match.collectionName || song.album || 'N/A'}`,
-          `Release date: ${releaseDate}`,
-          `Genre: ${match.primaryGenreName || 'N/A'}`,
-          `Duration: ${duration}`
-        ].join('\n')
+        details: formatSongInfoDetails(
+          match.collectionName || song.album,
+          formatReleaseDate(match.releaseDate || song.releaseDate),
+          match.primaryGenreName || 'N/A'
+        )
       };
     }
 
@@ -1280,11 +1337,34 @@ async function searchItunes(term, limit = 15) {
         trackName: song.title,
         artistName: primaryArtist,
         collectionName: song.album,
+        releaseDate: song.year || '',
         artworkUrl100: song.thumbnail,
         trackTimeMillis: song.durationSeconds ? Math.round(song.durationSeconds * 1000) : 0,
         providerTrackId: song.id
       };
     })
+  };
+}
+
+async function searchAppleMusicMetadata(artist, title) {
+  const url = new URL('https://itunes.apple.com/search');
+  url.searchParams.set('term', `${artist} ${title}`);
+  url.searchParams.set('entity', 'song');
+  url.searchParams.set('limit', '25');
+  const response = await fetch(url, { cache: 'force-cache' });
+  if (!response.ok) {
+    throw new Error(`Apple song metadata lookup failed (${response.status}).`);
+  }
+  const data = await response.json();
+  return {
+    results: (data?.results || []).map((song) => ({
+      trackName: song.trackName,
+      artistName: song.artistName,
+      collectionName: song.collectionName,
+      releaseDate: song.releaseDate,
+      primaryGenreName: song.primaryGenreName,
+      artworkUrl100: song.artworkUrl100
+    }))
   };
 }
 

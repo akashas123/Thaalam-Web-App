@@ -13,6 +13,8 @@ const lyricsApi =
 
 const lrclibApi =
   'https://lrclib.net/api';
+const lrclibAppId =
+  '72NOz6vy9q09vCpX1JCNfbAa-Gk-hw_uw_euQD96XdI';
 
 let syncedLines = [];
 let currentSongId = '';
@@ -42,7 +44,7 @@ const lrclibRequests = new Map();
 const LRCLIB_STORAGE_KEY = 'thaalam-lrclib-cache-v1';
 const LRCLIB_CACHE_LIMIT = 100;
 const LRCLIB_BACKOFF_KEY = 'thaalam-lrclib-backoff-until-v1';
-const LRCLIB_MIN_REQUEST_GAP_MS = 1500;
+const LRCLIB_MIN_REQUEST_GAP_MS = 500;
 let lrclibLastRequestAt = 0;
 let lrclibQueue = Promise.resolve();
 let lrclibBlockedUntil = 0;
@@ -131,7 +133,10 @@ function cleanLyricsSearchTitle(value) {
 }
 
 function normalizeLyricsTitle(value) {
-  return normalizeTrackTitle(cleanLyricsSearchTitle(value));
+  return normalizeTrackTitle(
+    cleanLyricsSearchTitle(value)
+      .replace(/\s*(?:\(|\[)?\s*(?:feat(?:uring)?|ft)\.?\s+.*$/i, '')
+  );
 }
 
 function lyricsArtistMatches(candidate, requested) {
@@ -149,11 +154,36 @@ function lyricsArtistMatches(candidate, requested) {
   ));
 }
 
-function lyricsTitlesMatch(candidate, requested) {
-  const left = normalizeLyricsTitle(candidate);
+function lyricsTitleMatchScore(candidate, requested, candidateArtist = '') {
   const right = normalizeLyricsTitle(requested);
-  return Boolean(left && right && (left === right ||
-    (Math.min(left.length, right.length) >= 8 && (left.startsWith(right) || right.startsWith(left)))));
+  if (!right) return 0;
+
+  const candidateTitles = [String(candidate || '').trim()];
+  const artistPrefix = String(candidateArtist || '').trim();
+  if (artistPrefix) {
+    for (const separator of [' - ', ' – ', ' — ']) {
+      const prefix = `${artistPrefix}${separator}`;
+      if (candidateTitles[0].toLowerCase().startsWith(prefix.toLowerCase())) {
+        candidateTitles.push(candidateTitles[0].slice(prefix.length));
+        break;
+      }
+    }
+  }
+
+  return Math.max(...candidateTitles.map((title) => {
+    const left = normalizeLyricsTitle(title);
+    if (!left) return 0;
+    if (left === right) return 1;
+    if (Math.min(left.length, right.length) >= 6 &&
+        (left.startsWith(right) || right.startsWith(left))) return 0.9;
+
+    const requestedWords = right.match(/[a-z0-9]{2,}/g) || [];
+    const candidateWords = new Set(left.match(/[a-z0-9]{2,}/g) || []);
+    if (requestedWords.length < 2) return 0;
+    const sharedWords = requestedWords.filter((word) => candidateWords.has(word)).length;
+    const overlap = sharedWords / Math.max(requestedWords.length, candidateWords.size);
+    return sharedWords >= 2 && overlap >= 0.5 ? overlap : 0;
+  }));
 }
 
 async function fetchLrclibLyrics(song) {
@@ -176,41 +206,67 @@ async function fetchLrclibLyrics(song) {
 
   const request = (async () => {
   try {
-    if (!await waitForLrclibRequestSlot()) return '';
-    const search = new URLSearchParams({
-      q: `${cleanLyricsSearchTitle(song.title)} ${String(song.artist).replace(/\s*-\s*topic$/i, '').trim()}`
-    });
-
-    const response = await fetch(
-      `${lrclibApi}/search?${search}`,
-      {
+    const requestLrclib = async (url) => {
+      if (!await waitForLrclibRequestSlot()) return null;
+      const response = await fetch(url, {
+        headers: {
+          'Lrclib-App-Id': lrclibAppId
+        },
         cache: 'default'
-      }
-    );
+      });
 
-    if (!response.ok) {
       if (response.status === 429) {
         const retryAfter = Number(response.headers.get('Retry-After'));
         pauseLrclibRequestsFor(Number.isFinite(retryAfter) && retryAfter > 0
           ? retryAfter * 1000
           : 60_000);
       } else if (response.status >= 500) {
-        pauseLrclibRequestsFor(30_000);
+        const retryAfter = Number(response.headers.get('Retry-After'));
+        pauseLrclibRequestsFor(Number.isFinite(retryAfter) && retryAfter > 0
+          ? retryAfter * 1000
+          : 30_000);
       }
-      return '';
+
+      return response;
+    };
+
+    const search = new URLSearchParams({
+      track_name: cleanLyricsSearchTitle(song.title),
+      artist_name: String(song.artist).replace(/\s*-\s*topic$/i, '').trim()
+    });
+
+    const findBestMatch = (matches) => matches
+      .map((match) => ({
+        match,
+        titleScore: lyricsTitleMatchScore(match.trackName, song.title, match.artistName)
+      }))
+      .filter(({ match, titleScore }) =>
+        titleScore > 0 &&
+        lyricsArtistMatches(match.artistName, song.artist) &&
+        (match.syncedLyrics || match.plainLyrics)
+      )
+      .sort((left, right) =>
+        right.titleScore - left.titleScore ||
+        Number(Boolean(right.match.syncedLyrics)) - Number(Boolean(left.match.syncedLyrics))
+      )[0]?.match;
+
+    let response = await requestLrclib(`${lrclibApi}/search?${search}`);
+    if (!response) return '';
+    if (!response.ok) return '';
+
+    let bestMatch = findBestMatch(await response.json());
+    if (!bestMatch) {
+      const fallbackSearch = new URLSearchParams({
+        q: `${cleanLyricsSearchTitle(song.title)} ${String(song.artist).replace(/\s*-\s*topic$/i, '').trim()}`
+      });
+      response = await requestLrclib(`${lrclibApi}/search?${fallbackSearch}`);
+      if (!response?.ok) return '';
+      bestMatch = findBestMatch(await response.json());
     }
 
-    const matches = await response.json();
-
-    const result = matches.find((match) =>
-      lyricsTitlesMatch(match.trackName, song.title) &&
-      lyricsArtistMatches(match.artistName, song.artist) &&
-      (match.syncedLyrics || match.plainLyrics)
-    );
-
     const lyrics =
-      result?.syncedLyrics ||
-      result?.plainLyrics ||
+      bestMatch?.syncedLyrics ||
+      bestMatch?.plainLyrics ||
       '';
 
     storeLyricsCacheEntry(cacheKey, lyrics);
@@ -234,10 +290,14 @@ window.prefetchOnDemandLyrics = (track) => {
   const artist = String(track?.artist || track?.artistName || '')
     .replace(/\s-\sTopic$/i, '')
     .trim();
-  if (title && artist) void fetchLrclibLyrics({ title, artist });
+  const album = String(track?.album || track?.collectionName || '').trim();
+  const duration = track?.durationSeconds ||
+    (track?.duration ? parseTrackDurationSeconds(track.duration) : 0) ||
+    (track?.trackTimeMillis ? Number(track.trackTimeMillis) / 1000 : 0);
+  if (title && artist) void fetchLrclibLyrics({ title, artist, album, duration });
 };
 
-window.prefetchOnDemandLyricsQueue = (queue, currentIndex = 0, lookahead = 4) => {
+window.prefetchOnDemandLyricsQueue = (queue, currentIndex = 0, lookahead = 2) => {
   if (!Array.isArray(queue) || !queue.length) return;
   const count = Math.min(queue.length, Math.max(1, Number(lookahead) || 4));
   for (let offset = 0; offset < count; offset += 1) {
@@ -830,7 +890,11 @@ async function fetchLyrics(nowPlayingData = null, forceLyricsLookup = false) {
       lyricsLookupResult = lrclibCache.get(cachedLyricsKey) ||
         lrclibCache.get(legacyLyricsKey) || '';
       updateLyrics(data, Boolean(lyricsLookupResult));
-      const lrclibLyrics = await fetchLrclibLyrics(song);
+      const lrclibLyrics = await fetchLrclibLyrics({
+        ...song,
+        album: song.album,
+        duration: data?.now_playing?.duration
+      });
       if (requestId !== lyricsLookupRequestId) return;
 
       lyricsLookupResult = lrclibLyrics;

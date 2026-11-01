@@ -38,6 +38,11 @@ let onDemandAudio = new Audio();
 onDemandAudio.preload = 'auto';
 onDemandAudio.setAttribute('playsinline', '');
 onDemandAudio.setAttribute('webkit-playsinline', '');
+let standbyOnDemandAudio = new Audio();
+standbyOnDemandAudio.preload = 'auto';
+standbyOnDemandAudio.setAttribute('playsinline', '');
+standbyOnDemandAudio.setAttribute('webkit-playsinline', '');
+let upcomingAudioPrefetchToken = 0;
 // A continuously looping, inaudible stream. Mobile browsers (notably Android
 // Chrome) suspend a page's timers/JS when no audio is playing - including when
 // the screen locks - which stops on-demand track transitions. Keeping this
@@ -686,6 +691,7 @@ function prepareLikedQueue(queue, selectedIndex) {
       try {
         await preparation;
         if (!song.providerTrackId || !song.streamUrl) likedQueuePreparations.delete(key);
+        else void prefetchNextOnDemandAudio();
       } catch {
         likedQueuePreparations.delete(key);
       }
@@ -700,6 +706,76 @@ function prepareLikedQueue(queue, selectedIndex) {
     if (index > 0) songs.unshift(...songs.splice(index, 1));
   }
   void Promise.all(Array.from({ length: Math.min(3, songs.length) }, worker));
+}
+
+async function prefetchNextOnDemandAudio() {
+  const token = ++upcomingAudioPrefetchToken;
+  const nextQueuedSong = onDemandQueueIndex >= 0
+    ? onDemandQueue[onDemandQueueIndex + 1]
+    : null;
+  let candidate = null;
+
+  if (nextQueuedSong) {
+    if (nextQueuedSong.streamUrl && nextQueuedSong.providerTrackId) {
+      candidate = {
+        id: nextQueuedSong.providerTrackId,
+        streamUrl: nextQueuedSong.streamUrl
+      };
+    } else {
+      const key = likedQueuePreparationKey(nextQueuedSong);
+      let preparation = likedQueuePreparations.get(key);
+      if (!preparation) {
+        preparation = resolveLikedQueueTrack(nextQueuedSong);
+        likedQueuePreparations.set(key, preparation);
+      }
+      try {
+        const track = await preparation;
+        if (likedQueuePreparations.get(key) === preparation) {
+          likedQueuePreparations.delete(key);
+        }
+        candidate = track;
+      } catch (error) {
+        if (likedQueuePreparations.get(key) === preparation) {
+          likedQueuePreparations.delete(key);
+        }
+        console.warn('Could not prepare the next on-demand track:', error);
+        return;
+      }
+    }
+  } else {
+    candidate = relatedTrackCache[relatedTrackCursor] || null;
+  }
+
+  if (token !== upcomingAudioPrefetchToken ||
+      !candidate?.streamUrl ||
+      !candidate?.id ||
+      candidate.streamUrl === onDemandAudio.getAttribute('src') ||
+      candidate.streamUrl === standbyOnDemandAudio.getAttribute('src')) return;
+
+  standbyOnDemandAudio.pause();
+  standbyOnDemandAudio.removeAttribute('src');
+  standbyOnDemandAudio.load();
+  standbyOnDemandAudio.volume = onDemandAudio.volume;
+  standbyOnDemandAudio.muted = onDemandAudio.muted;
+  standbyOnDemandAudio.src = candidate.streamUrl;
+  standbyOnDemandAudio.load();
+}
+
+function promoteStandbyOnDemandAudio(streamUrl) {
+  if (standbyOnDemandAudio.getAttribute('src') !== streamUrl) return false;
+
+  upcomingAudioPrefetchToken += 1;
+  syncOnDemandVolumeToStored();
+  standbyOnDemandAudio.volume = onDemandAudio.volume;
+  standbyOnDemandAudio.muted = onDemandAudio.muted;
+  const previousAudio = onDemandAudio;
+  onDemandAudio = standbyOnDemandAudio;
+  standbyOnDemandAudio = previousAudio;
+  standbyOnDemandAudio.pause();
+  standbyOnDemandAudio.removeAttribute('src');
+  standbyOnDemandAudio.load();
+  setOnDemandAudioReady(false);
+  return true;
 }
 
 window.resolveLikedSongIdentity = async (song) => {
@@ -1410,6 +1486,7 @@ function bindOnDemandAudioEvents(audio) {
 }
 
 bindOnDemandAudioEvents(onDemandAudio);
+bindOnDemandAudioEvents(standbyOnDemandAudio);
 // Some mobile browsers suspend a PWA's media when the screen is off, and may
 // restore it through pageshow instead of a visibilitychange event. Resume only
 // if playback was active before the app was hidden; a user pause or a fresh
@@ -1612,6 +1689,7 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
   requestedTrackId = candidate.id || '';
   requestedStreamUrl = candidate.streamUrl || '';
   const playbackUrl = requestedStreamUrl;
+  if (startSeconds === 0) promoteStandbyOnDemandAudio(playbackUrl);
   // Start from the beginning unless this is a saved-position resume.
   let effectiveStartSeconds = Math.max(0, Number(startSeconds) || 0);
   pendingStartSeconds = effectiveStartSeconds;
@@ -1676,6 +1754,9 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
   }
 
   await metadataPromise;
+  if (requestId === songRequestId && window.onDemandPlaybackActive) {
+    void prefetchNextOnDemandAudio();
+  }
 }
 
 function updateOnDemandMetadata(song, track) {
@@ -1689,6 +1770,10 @@ function updateOnDemandMetadata(song, track) {
   // Chrome media session in sync.
   const album = String(track?.album || song?.collectionName || '').trim();
   if (track?.album) song.collectionName = track.album;
+  const releaseDate = String(
+    track?.releaseDate || track?.year || song?.releaseDate || song?.year || ''
+  );
+  if (releaseDate) song.releaseDate = releaseDate;
   const catalogArtwork = song?.artworkUrl100
     ?.replace(/^http:/, 'https:')
     .replace(/\d+x\d+bb\./, '600x600bb.') || '';
@@ -1698,6 +1783,7 @@ function updateOnDemandMetadata(song, track) {
     title,
     artist,
     album,
+    releaseDate,
     art: artwork,
     // Legacy `youtube:ID` liked rows keep their original rating identity while
     // they are on screen; JioSaavn picks fall back to the title|artist key.
@@ -2105,10 +2191,11 @@ function prefetchRelatedTracks(trackId, isRetry = false) {
       shufflePreparedCursor = -1;
       // Give the next few songs time to fetch lyrics while the current track
       // is still playing, even if audio preloading starts later.
-      relatedTrackCache.slice(0, 4).forEach((track) => {
+      relatedTrackCache.slice(0, 1).forEach((track) => {
         window.prefetchOnDemandLyrics?.(track);
       });
       prefetchUpcomingTrackArtwork();
+      void prefetchNextOnDemandAudio();
       updateTransportButtonState();
     })
     .finally(() => {
@@ -2124,6 +2211,7 @@ function relatedTrackToSong(track) {
     trackName: track.title || 'Unknown song',
     artistName: (track.artist || '').replace(/\s-\sTopic$/i, '').trim(),
     collectionName: track.album || '',
+    releaseDate: track.releaseDate || track.year || '',
     language: track.language || '',
     primaryGenreName: track.primaryGenreName || '',
     artworkUrl100: track.thumbnail || '',
@@ -2445,13 +2533,13 @@ async function playRelatedTrack(track) {
   updatePlaybackProgress();
   setCurrentOnDemandTrack(song, track.id);
   persistCurrentOnDemandSession();
-  updateOnDemandMetadata(song, { id: track.id, title: track.title, artist: track.artist, album: track.album, thumbnail: track.thumbnail });
+  updateOnDemandMetadata(song, track);
   void artworkPromise.then((artworkUrl) => {
     if (!artworkUrl || currentOnDemandTrackId !== track.id) return;
     song.artworkUrl100 = artworkUrl;
     setCurrentOnDemandTrack(song, track.id);
     persistCurrentOnDemandSession();
-    updateOnDemandMetadata(song, { id: track.id, title: track.title, artist: track.artist, album: track.album, thumbnail: track.thumbnail });
+    updateOnDemandMetadata(song, track);
   });
   prefetchUpcomingTrackArtwork();
   await loadTrack(trackCandidates[0] || { id: track.id, streamUrl: track.streamUrl }, requestId);
@@ -2523,7 +2611,6 @@ async function startOnDemandSong(song, {
   const requestId = ++songRequestId;
   selectedDuration = Number(song.trackTimeMillis) / 1000 || 0;
   enqueueOnDemandSong(song);
-  window.prefetchOnDemandLyricsQueue?.(onDemandQueue, onDemandQueueIndex, 4);
   if (recordRecent) {
     const fromLikedFolder = song.recentDisplayType === 'liked-folder' ||
       (preserveQueue && onDemandQueueSource === 'favourites');
@@ -2551,6 +2638,7 @@ async function startOnDemandSong(song, {
   // now-visible mini player.
   window.revealMiniPlayer?.();
   updateOnDemandMetadata(song, {});
+  window.prefetchOnDemandLyricsQueue?.(onDemandQueue, onDemandQueueIndex, 2);
 
   onDemandModeLabel.textContent = 'Hang on';
   onDemandStation.textContent = 'On-Demand';
@@ -2871,6 +2959,10 @@ function returnToLive() {
   persistCurrentOnDemandSession();
   onDemandAudio.removeAttribute('src');
   onDemandAudio.load();
+  upcomingAudioPrefetchToken += 1;
+  standbyOnDemandAudio.pause();
+  standbyOnDemandAudio.removeAttribute('src');
+  standbyOnDemandAudio.load();
   resetScrub();
   // Cancel any in-flight related-tracks lookup so a late response cannot
   // restart on-demand playback after the listener has gone back to live.
