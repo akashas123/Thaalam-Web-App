@@ -1621,6 +1621,13 @@ function bindOnDemandAudioEvents(audio) {
       : (!audio.paused && !audio.ended ? 'playing' : 'paused'));
     updatePlaybackProgress();
   });
+  audio.addEventListener('play', () => {
+    if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
+    refreshOnDemandMediaSessionMetadata();
+    if (navigator.mediaSession) {
+      try { navigator.mediaSession.playbackState = 'playing'; } catch { /* ignore */ }
+    }
+  });
   audio.addEventListener('loadedmetadata', () => {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
     syncAdaptiveDisc(audio, 'paused');
@@ -2225,16 +2232,6 @@ function updateTransportButtonState() {
       );
     } catch {
       // Some browsers expose Media Session without supporting every action.
-    }
-    try {
-      navigator.mediaSession.setActionHandler(
-        'togglefavorite',
-        window.onDemandPlaybackActive
-          ? () => window.toggleCurrentOnDemandLike?.()
-          : null
-      );
-    } catch {
-      // Some browsers do not support the Media Session favorite action.
     }
     try {
       navigator.mediaSession.setActionHandler(
@@ -3261,6 +3258,7 @@ function returnToLive() {
   stopOnDemandSilentLoop();
 
   window.onDemandPlaybackActive = false;
+  window.dispatchEvent(new Event('thaalam:on-demand-playback-state'));
   setOnDemandAudioReady(false);
   document.body.classList.remove('on-demand-paused');
   updateTransportButtonState();
