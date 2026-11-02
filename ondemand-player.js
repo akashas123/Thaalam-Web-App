@@ -3043,6 +3043,7 @@ function toggleOnDemandPlayback(shouldPlay) {
   const isPlaying = !onDemandAudio.paused && !onDemandAudio.ended;
   if (shouldPlay === false || (shouldPlay !== true && isPlaying)) {
     pendingShouldPlay = false;
+    mobilePlaybackWasActiveBeforeHide = false;
     onDemandAudio.pause();
     if (activeOnDemandCrossfade) {
       activeOnDemandCrossfade.outgoingAudio.pause();
@@ -3052,6 +3053,7 @@ function toggleOnDemandPlayback(shouldPlay) {
         });
       }
     }
+    setOnDemandPlaying(false);
   } else {
     resumeOnDemandAudioContext();
     [onDemandAudio, ...(activeOnDemandCrossfade ? [activeOnDemandCrossfade.outgoingAudio] : [])]
