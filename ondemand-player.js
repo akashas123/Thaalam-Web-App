@@ -1483,6 +1483,7 @@ function applyPendingMediaIntent() {
   }
   if (pendingShouldPlay) {
     pendingShouldPlay = false;
+    window.activateOnDemandMediaSession?.();
     resumeOnDemandAudioContext();
     const playPromise = onDemandAudio.play();
     if (playPromise) {
@@ -1977,6 +1978,7 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
   // pending seek when metadata arrives.
   if (shouldPlay) {
     pendingShouldPlay = false;
+    window.activateOnDemandMediaSession?.();
     resumeOnDemandAudioContext();
     const playPromise = onDemandAudio.play();
     if (playPromise) {
@@ -2036,6 +2038,7 @@ function updateOnDemandMetadata(song, track) {
 
   window.currentNowPlayingSong = nowPlaying;
   window.latestNowPlayingData = data;
+  window.activateOnDemandMediaSession?.();
   document.title = `${title} - ${artist} | Thaalam 24x7`;
   onDemandStation.textContent = 'On-Demand';
   onDemandModeLabel.textContent = 'LOADING';
@@ -3063,6 +3066,7 @@ function toggleOnDemandPlayback(shouldPlay) {
     }
     setOnDemandPlaying(false);
   } else {
+    window.activateOnDemandMediaSession?.();
     resumeOnDemandAudioContext();
     [onDemandAudio, ...(activeOnDemandCrossfade ? [activeOnDemandCrossfade.outgoingAudio] : [])]
       .forEach((audio) => {
