@@ -1338,16 +1338,22 @@ function releaseOnDemandWakeLock() {
 }
 function startOnDemandSilentLoop() {
   if (!window.onDemandPlaybackActive) return;
-  const songIsPlaying = !onDemandAudio.paused && !onDemandAudio.ended;
-  if (!songIsPlaying && !autoplayTrackTransition) {
-    stopOnDemandSilentLoop();
-    return;
-  }
   // Repeated play/visibility events should not rewind an already-running loop.
   if (!onDemandSilentLoopAudio.paused && !onDemandSilentLoopAudio.ended) return;
   try { onDemandSilentLoopAudio.currentTime = 0; } catch (_) { /* ignore */ }
   const playPromise = onDemandSilentLoopAudio.play();
-  if (playPromise) playPromise.catch(() => { /* autoplay blocked until a gesture */ });
+  if (playPromise) {
+    playPromise.then(() => {
+      if (!window.onDemandPlaybackActive || !navigator.mediaSession) return;
+      prepareOnDemandMediaSession();
+      try {
+        navigator.mediaSession.playbackState =
+          !onDemandAudio.paused && !onDemandAudio.ended ? 'playing' : 'paused';
+      } catch (error) {
+        console.warn('Could not restore the on-demand media session after starting the silent loop:', error);
+      }
+    }).catch(() => { /* autoplay blocked until a gesture */ });
+  }
 }
 function stopOnDemandSilentLoop() {
   try {
