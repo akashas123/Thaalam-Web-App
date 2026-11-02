@@ -1369,10 +1369,14 @@ function registerOnDemandMediaSessionActions() {
     console.warn('Could not register the on-demand media pause action:', error);
   }
 }
-function activateOnDemandMediaSession() {
+function prepareOnDemandMediaSession() {
   if (!window.onDemandPlaybackActive || !navigator.mediaSession) return;
   registerOnDemandMediaSessionActions();
   refreshOnDemandMediaSessionMetadata();
+}
+function activateOnDemandMediaSession() {
+  if (!window.onDemandPlaybackActive || !navigator.mediaSession) return;
+  prepareOnDemandMediaSession();
   try {
     navigator.mediaSession.playbackState = 'playing';
   } catch (error) {
@@ -1536,7 +1540,7 @@ function applyPendingMediaIntent() {
   }
   if (pendingShouldPlay) {
     pendingShouldPlay = false;
-    activateOnDemandMediaSession();
+    prepareOnDemandMediaSession();
     resumeOnDemandAudioContext();
     const playPromise = onDemandAudio.play();
     if (playPromise) {
@@ -2025,7 +2029,7 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
   // pending seek when metadata arrives.
   if (shouldPlay) {
     pendingShouldPlay = false;
-    activateOnDemandMediaSession();
+    prepareOnDemandMediaSession();
     resumeOnDemandAudioContext();
     const playPromise = onDemandAudio.play();
     if (playPromise) {
@@ -2085,7 +2089,7 @@ function updateOnDemandMetadata(song, track) {
 
   window.currentNowPlayingSong = nowPlaying;
   window.latestNowPlayingData = data;
-  activateOnDemandMediaSession();
+  prepareOnDemandMediaSession();
   document.title = `${title} - ${artist} | Thaalam 24x7`;
   onDemandStation.textContent = 'On-Demand';
   onDemandModeLabel.textContent = 'LOADING';
@@ -3113,7 +3117,7 @@ function toggleOnDemandPlayback(shouldPlay) {
     }
     setOnDemandPlaying(false);
   } else {
-    activateOnDemandMediaSession();
+    prepareOnDemandMediaSession();
     resumeOnDemandAudioContext();
     [onDemandAudio, ...(activeOnDemandCrossfade ? [activeOnDemandCrossfade.outgoingAudio] : [])]
       .forEach((audio) => {
