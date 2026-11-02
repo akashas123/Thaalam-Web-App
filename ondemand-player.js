@@ -1666,7 +1666,7 @@ function bindOnDemandAudioEvents(audio) {
   // By the time a queued pause event lands, returnToLive() has usually already
   // cleared the active flag — this guard keeps teardown from repainting state.
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive ||
-        audio.ended || autoplayTrackTransition) return;
+        !audio.paused || audio.ended || autoplayTrackTransition) return;
     if (activeOnDemandCrossfade?.incomingAudio === audio) {
       activeOnDemandCrossfade.outgoingAudio.pause();
       void onDemandAudioContext?.suspend().catch((error) => {
