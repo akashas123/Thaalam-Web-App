@@ -2228,6 +2228,16 @@ function updateTransportButtonState() {
     }
     try {
       navigator.mediaSession.setActionHandler(
+        'togglefavorite',
+        window.onDemandPlaybackActive
+          ? () => window.toggleCurrentOnDemandLike?.()
+          : null
+      );
+    } catch {
+      // Some browsers do not support the Media Session favorite action.
+    }
+    try {
+      navigator.mediaSession.setActionHandler(
         'seekto',
         window.onDemandPlaybackActive
           ? (details) => {

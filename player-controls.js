@@ -2017,6 +2017,14 @@ if (onDemandLikeButton) {
   });
 }
 
+window.toggleCurrentOnDemandLike = () => {
+  if (!window.onDemandPlaybackActive || !onDemandLikeButton || onDemandLikeButton.disabled) {
+    return false;
+  }
+  onDemandLikeButton.click();
+  return true;
+};
+
 if (thumbsDownButton) {
   thumbsDownButton.setAttribute(
     'aria-pressed',
