@@ -1338,6 +1338,11 @@ function releaseOnDemandWakeLock() {
 }
 function startOnDemandSilentLoop() {
   if (!window.onDemandPlaybackActive) return;
+  const songIsPlaying = !onDemandAudio.paused && !onDemandAudio.ended;
+  if (songIsPlaying || !autoplayTrackTransition) {
+    stopOnDemandSilentLoop();
+    return;
+  }
   // Repeated play/visibility events should not rewind an already-running loop.
   if (!onDemandSilentLoopAudio.paused && !onDemandSilentLoopAudio.ended) return;
   try { onDemandSilentLoopAudio.currentTime = 0; } catch (_) { /* ignore */ }
