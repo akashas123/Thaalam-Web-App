@@ -2,7 +2,6 @@ const metadataRadio = document.getElementById('radio');
 const fallbackArtwork = new URL('thaalam-icon-512.png?v=1', window.location.href).href;
 let currentArtwork = '';
 const defaultDocumentTitle = 'Thaalam 24x7';
-let onDemandMediaSessionRefreshId = 0;
 
 function setFavicon(artwork) {
   if (!artwork) return;
@@ -93,16 +92,20 @@ function refreshVisibleMediaSession() {
   }
 }
 
-function scheduleOnDemandMediaSessionRefresh() {
-  const refreshId = ++onDemandMediaSessionRefreshId;
-  [0, 250, 1000].forEach((delay) => {
-    window.setTimeout(() => {
-      if (refreshId !== onDemandMediaSessionRefreshId ||
-          !window.onDemandPlaybackActive || !window.onDemandPlaying) return;
-      refreshVisibleMediaSession();
-    }, delay);
+function activateOnDemandMediaSession() {
+  if (!window.onDemandPlaybackActive || !navigator.mediaSession) return;
+  registerMediaSessionPlaybackHandlers();
+  refreshNowPlayingMetadata({
+    now_playing: { song: window.currentNowPlayingSong }
   });
+  try {
+    navigator.mediaSession.playbackState = 'playing';
+  } catch (error) {
+    console.warn('Could not activate on-demand media playback state:', error);
+  }
 }
+
+window.activateOnDemandMediaSession = activateOnDemandMediaSession;
 
 document.addEventListener('visibilitychange', refreshVisibleMediaSession);
 window.addEventListener('pageshow', refreshVisibleMediaSession);
@@ -140,12 +143,7 @@ if (navigator.mediaSession) {
   registerMediaSessionPlaybackHandlers();
   const syncOnDemandMediaSession = () => {
     registerMediaSessionPlaybackHandlers();
-    if (!window.onDemandPlaybackActive) {
-      onDemandMediaSessionRefreshId += 1;
-      return;
-    }
-    refreshVisibleMediaSession();
-    if (window.onDemandPlaying) scheduleOnDemandMediaSessionRefresh();
+    if (window.onDemandPlaybackActive) refreshVisibleMediaSession();
   };
   window.addEventListener('thaalam:on-demand-playback-state', syncOnDemandMediaSession);
   window.addEventListener('thaalam:nowplaying', syncOnDemandMediaSession);
