@@ -1350,6 +1350,53 @@ function stopOnDemandSilentLoop() {
     onDemandSilentLoopAudio.currentTime = 0;
   } catch (_) { /* ignore */ }
 }
+function registerOnDemandMediaSessionActions() {
+  if (!navigator.mediaSession?.setActionHandler) return;
+  try {
+    navigator.mediaSession.setActionHandler(
+      'play',
+      () => window.toggleOnDemandPlayback?.(true)
+    );
+  } catch (error) {
+    console.warn('Could not register the on-demand media play action:', error);
+  }
+  try {
+    navigator.mediaSession.setActionHandler(
+      'pause',
+      () => window.toggleOnDemandPlayback?.(false)
+    );
+  } catch (error) {
+    console.warn('Could not register the on-demand media pause action:', error);
+  }
+}
+function activateOnDemandMediaSession() {
+  if (!window.onDemandPlaybackActive || !navigator.mediaSession) return;
+  registerOnDemandMediaSessionActions();
+  refreshOnDemandMediaSessionMetadata();
+  try {
+    navigator.mediaSession.playbackState = 'playing';
+  } catch (error) {
+    console.warn('Could not activate the on-demand media session:', error);
+  }
+}
+function clearOnDemandMediaSession() {
+  if (!navigator.mediaSession) return;
+  if (navigator.mediaSession.setActionHandler) {
+    for (const action of ['play', 'pause']) {
+      try {
+        navigator.mediaSession.setActionHandler(action, null);
+      } catch (error) {
+        console.warn(`Could not clear the on-demand ${action} action:`, error);
+      }
+    }
+  }
+  try {
+    navigator.mediaSession.metadata = null;
+    navigator.mediaSession.playbackState = 'none';
+  } catch (error) {
+    console.warn('Could not clear the on-demand media session:', error);
+  }
+}
 function setOnDemandPlaying(isPlaying) {
   // Mirror of the live flag, so a restored session can reapply the pause state
   // the listener had chosen instead of always resuming with sound.
@@ -1359,8 +1406,14 @@ function setOnDemandPlaying(isPlaying) {
   // would replay a song the listener had already paused.
   if (window.onDemandPlaybackActive) persistCurrentOnDemandSession();
   window.setPlayerVisualState?.(isPlaying);
-  if (navigator.mediaSession) {
-    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+  if (isPlaying) {
+    activateOnDemandMediaSession();
+  } else if (navigator.mediaSession && window.onDemandPlaybackActive) {
+    try {
+      navigator.mediaSession.playbackState = 'paused';
+    } catch (error) {
+      console.warn('Could not pause the on-demand media session:', error);
+    }
   }
   if (isPlaying || autoplayTrackTransition) {
     if (window.onDemandPlaybackActive) startOnDemandSilentLoop();
@@ -1483,7 +1536,7 @@ function applyPendingMediaIntent() {
   }
   if (pendingShouldPlay) {
     pendingShouldPlay = false;
-    window.activateOnDemandMediaSession?.();
+    activateOnDemandMediaSession();
     resumeOnDemandAudioContext();
     const playPromise = onDemandAudio.play();
     if (playPromise) {
@@ -1624,10 +1677,7 @@ function bindOnDemandAudioEvents(audio) {
   });
   audio.addEventListener('play', () => {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
-    refreshOnDemandMediaSessionMetadata();
-    if (navigator.mediaSession) {
-      try { navigator.mediaSession.playbackState = 'playing'; } catch { /* ignore */ }
-    }
+    activateOnDemandMediaSession();
   });
   audio.addEventListener('loadedmetadata', () => {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
@@ -1653,12 +1703,9 @@ function bindOnDemandAudioEvents(audio) {
     autoplayTrackTransition = false;
     onDemandCrossfadeTransitionStarted = false;
     logOnDemand('playing', audio.currentTime.toFixed(1), 's');
-    refreshOnDemandMediaSessionMetadata();
+    activateOnDemandMediaSession();
     updateOnDemandMediaSessionPositionState();
     onDemandModeLabel.textContent = 'ON DEMAND';
-    if (navigator.mediaSession) {
-      try { navigator.mediaSession.playbackState = 'playing'; } catch { /* ignore */ }
-    }
     syncOnDemandVolumeToStored();
     setOnDemandPlaying(true);
     void acquireOnDemandWakeLock();
@@ -1978,7 +2025,7 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
   // pending seek when metadata arrives.
   if (shouldPlay) {
     pendingShouldPlay = false;
-    window.activateOnDemandMediaSession?.();
+    activateOnDemandMediaSession();
     resumeOnDemandAudioContext();
     const playPromise = onDemandAudio.play();
     if (playPromise) {
@@ -2038,7 +2085,7 @@ function updateOnDemandMetadata(song, track) {
 
   window.currentNowPlayingSong = nowPlaying;
   window.latestNowPlayingData = data;
-  window.activateOnDemandMediaSession?.();
+  activateOnDemandMediaSession();
   document.title = `${title} - ${artist} | Thaalam 24x7`;
   onDemandStation.textContent = 'On-Demand';
   onDemandModeLabel.textContent = 'LOADING';
@@ -3066,7 +3113,7 @@ function toggleOnDemandPlayback(shouldPlay) {
     }
     setOnDemandPlaying(false);
   } else {
-    window.activateOnDemandMediaSession?.();
+    activateOnDemandMediaSession();
     resumeOnDemandAudioContext();
     [onDemandAudio, ...(activeOnDemandCrossfade ? [activeOnDemandCrossfade.outgoingAudio] : [])]
       .forEach((audio) => {
@@ -3262,6 +3309,7 @@ function returnToLive() {
   stopOnDemandSilentLoop();
 
   window.onDemandPlaybackActive = false;
+  clearOnDemandMediaSession();
   window.dispatchEvent(new Event('thaalam:on-demand-playback-state'));
   setOnDemandAudioReady(false);
   document.body.classList.remove('on-demand-paused');
