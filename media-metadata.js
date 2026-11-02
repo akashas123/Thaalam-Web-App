@@ -84,35 +84,54 @@ window.addEventListener('thaalam:nowplaying', (event) => {
 });
 
 function refreshVisibleMediaSession() {
-  if (document.visibilityState !== 'visible') return;
+  if (!window.onDemandPlaybackActive && document.visibilityState !== 'visible') return;
   refreshNowPlayingMetadata(
     window.onDemandPlaybackActive
       ? { now_playing: { song: window.currentNowPlayingSong } }
       : window.latestNowPlayingData
   );
+  if (window.onDemandPlaybackActive && navigator.mediaSession) {
+    try {
+      navigator.mediaSession.playbackState = window.onDemandPlaying ? 'playing' : 'paused';
+    } catch (error) {
+      console.warn('Could not refresh on-demand media playback state:', error);
+    }
+  }
 }
 
 document.addEventListener('visibilitychange', refreshVisibleMediaSession);
 window.addEventListener('pageshow', refreshVisibleMediaSession);
-window.addEventListener('thaalam:on-demand-playback-state', refreshVisibleMediaSession);
 
 if (window.latestNowPlayingData) {
   refreshNowPlayingMetadata(window.latestNowPlayingData);
 }
 
-if (navigator.mediaSession) {
+function registerMediaSessionPlaybackHandlers() {
+  if (!navigator.mediaSession?.setActionHandler) return;
   try {
     navigator.mediaSession.setActionHandler('play', () => {
-      if (window.onDemandPlaybackActive) window.toggleOnDemandPlayback?.();
+      if (window.onDemandPlaybackActive) window.toggleOnDemandPlayback?.(true);
       else metadataRadio.play().catch(() => {});
     });
+  } catch (error) {
+    console.log('Media play control is not supported:', error);
+  }
+  try {
     navigator.mediaSession.setActionHandler('pause', () => {
       if (window.onDemandPlaybackActive) window.toggleOnDemandPlayback?.(false);
       else metadataRadio.pause();
     });
   } catch (error) {
-    console.log('Media controls are not supported:', error);
+    console.log('Media pause control is not supported:', error);
   }
+}
+
+if (navigator.mediaSession) {
+  registerMediaSessionPlaybackHandlers();
+  window.addEventListener('thaalam:on-demand-playback-state', () => {
+    registerMediaSessionPlaybackHandlers();
+    refreshVisibleMediaSession();
+  });
   metadataRadio.addEventListener('play', () => {
     if (window.onDemandPlaybackActive) return;
     navigator.mediaSession.playbackState = 'playing';

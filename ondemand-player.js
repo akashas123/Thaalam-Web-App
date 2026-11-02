@@ -28,7 +28,7 @@ const onDemandNextButton = document.getElementById('onDemandNextButton');
 const onDemandShuffleButton = document.getElementById('onDemandShuffleButton');
 const onDemandRepeatButton = document.getElementById('onDemandRepeatButton');
 const onDemandRepeatOneBadge = onDemandRepeatButton?.querySelector('.repeat-one-badge');
-const onDemandFallbackArtwork = new URL('thaalam-icon-512.png?v=1', window.location.href).href;
+const onDemandFallbackArtwork = new URL('album-placeholder.svg?v=3', window.location.href).href;
 
 /* Two audio elements alternate roles. The standby warms the next track; at a
    transition it becomes the active element so mobile background playback can
@@ -2079,12 +2079,13 @@ function updateOnDemandMetadata(song, track) {
         'is-wide-thumbnail',
         image.naturalWidth / image.naturalHeight > 1.1
       );
+      nowPlaying.art = candidates[index];
       window.updateAlbumColors?.(candidates[index], colorRequestId);
       if (candidates[index] !== artwork) {
         song.artworkUrl100 = candidates[index];
         if (currentOnDemandSong === song) persistCurrentOnDemandSession();
-        refreshOnDemandMediaSessionMetadata({ title, artist, album, art: candidates[index] });
       }
+      refreshOnDemandMediaSessionMetadata(nowPlaying);
     };
     image.onerror = () => tryArtwork(index + 1);
     image.src = candidates[index];
