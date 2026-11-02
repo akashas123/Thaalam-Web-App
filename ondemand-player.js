@@ -1339,7 +1339,7 @@ function releaseOnDemandWakeLock() {
 function startOnDemandSilentLoop() {
   if (!window.onDemandPlaybackActive) return;
   const songIsPlaying = !onDemandAudio.paused && !onDemandAudio.ended;
-  if (songIsPlaying || !autoplayTrackTransition) {
+  if (!songIsPlaying && !autoplayTrackTransition) {
     stopOnDemandSilentLoop();
     return;
   }
