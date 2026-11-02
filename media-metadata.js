@@ -45,19 +45,6 @@ function applyNowPlayingMetadata(data) {
   document.title = `${title} - ${artist}`;
   if (artworkSource) setFavicon(artwork);
 
-  if (window.onDemandPlaybackActive && navigator.mediaSession &&
-      'MediaMetadata' in window) {
-    try {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title,
-        artist,
-        album,
-        artwork: [{ src: artwork, sizes: '512x512' }]
-      });
-    } catch (error) {
-      console.warn('Could not update media session metadata:', error);
-    }
-  }
 }
 
 function clearInactiveRadioMetadata() {
@@ -76,78 +63,6 @@ function refreshNowPlayingMetadata(data = window.latestNowPlayingData) {
 window.addEventListener('thaalam:nowplaying', (event) => {
   refreshNowPlayingMetadata(event.detail);
 });
-
-function refreshVisibleMediaSession() {
-  if (!window.onDemandPlaybackActive) return;
-  registerMediaSessionPlaybackHandlers();
-  refreshNowPlayingMetadata(
-    { now_playing: { song: window.currentNowPlayingSong } }
-  );
-  if (navigator.mediaSession) {
-    try {
-      navigator.mediaSession.playbackState = window.onDemandPlaying ? 'playing' : 'paused';
-    } catch (error) {
-      console.warn('Could not refresh on-demand media playback state:', error);
-    }
-  }
-}
-
-function activateOnDemandMediaSession() {
-  if (!window.onDemandPlaybackActive || !navigator.mediaSession) return;
-  registerMediaSessionPlaybackHandlers();
-  refreshNowPlayingMetadata({
-    now_playing: { song: window.currentNowPlayingSong }
-  });
-  try {
-    navigator.mediaSession.playbackState = 'playing';
-  } catch (error) {
-    console.warn('Could not activate on-demand media playback state:', error);
-  }
-}
-
-window.activateOnDemandMediaSession = activateOnDemandMediaSession;
-
-document.addEventListener('visibilitychange', refreshVisibleMediaSession);
-window.addEventListener('pageshow', refreshVisibleMediaSession);
-
-function registerMediaSessionPlaybackHandlers() {
-  if (!navigator.mediaSession?.setActionHandler) return;
-  const isOnDemand = Boolean(window.onDemandPlaybackActive);
-  try {
-    navigator.mediaSession.setActionHandler(
-      'play',
-      isOnDemand ? () => window.toggleOnDemandPlayback?.(true) : null
-    );
-  } catch (error) {
-    console.log('Media play control is not supported:', error);
-  }
-  try {
-    navigator.mediaSession.setActionHandler(
-      'pause',
-      isOnDemand ? () => window.toggleOnDemandPlayback?.(false) : null
-    );
-  } catch (error) {
-    console.log('Media pause control is not supported:', error);
-  }
-  if (!isOnDemand) {
-    try {
-      navigator.mediaSession.metadata = null;
-      navigator.mediaSession.playbackState = 'none';
-    } catch (error) {
-      console.warn('Could not clear inactive on-demand media session:', error);
-    }
-  }
-}
-
-if (navigator.mediaSession) {
-  registerMediaSessionPlaybackHandlers();
-  const syncOnDemandMediaSession = () => {
-    registerMediaSessionPlaybackHandlers();
-    if (window.onDemandPlaybackActive) refreshVisibleMediaSession();
-  };
-  window.addEventListener('thaalam:on-demand-playback-state', syncOnDemandMediaSession);
-  window.addEventListener('thaalam:nowplaying', syncOnDemandMediaSession);
-}
 
 new MutationObserver((records) => {
   if (records.some((record) => [...record.addedNodes].some((node) =>
