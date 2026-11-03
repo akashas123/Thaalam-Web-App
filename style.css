@@ -7406,6 +7406,300 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
     height: 3.75rem;
   }
 }
+
+@media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) {
+  body.view-home:not(.has-home-glow) {
+    background:
+      radial-gradient(ellipse 100% 64% at 0% 0%, rgba(80, 68, 64, 0.62), transparent 100%),
+      #05070d;
+  }
+
+  .home-page .site-page-content {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .home-page .genre-tabs {
+    display: none !important;
+  }
+
+  body.view-home:not(.desktop-library-active) .home-page .favourite-sort-control {
+    display: none !important;
+  }
+
+  .home-page .mobile-genre-shelves {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin-top: 1.5rem;
+  }
+
+  .home-page .mobile-genre-shelves::-webkit-scrollbar,
+  .home-page .mobile-genre-track-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .home-page .mobile-genre-shelves {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding: 3rem 0 3rem;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-width: none;
+  }
+
+  .home-page .mobile-genre-row {
+    min-width: 0;
+    flex: 0 0 auto;
+    overflow: visible;
+    scroll-margin-top: 0.5rem;
+  }
+
+  .home-page .mobile-genre-row h2 {
+    margin-bottom: 0.75rem;
+    font-size: 1.15rem;
+  }
+
+  .home-page .mobile-genre-track-row {
+    display: flex;
+    gap: 1rem;
+    overflow-x: auto;
+    padding-bottom: 0.35rem;
+  }
+
+  .home-page .mobile-genre-track {
+    position: relative;
+    width: clamp(8.5rem, 11vw, 11rem);
+    min-width: 0;
+    flex: 0 0 clamp(8.5rem, 11vw, 11rem);
+    overflow: hidden;
+  }
+
+  .home-page .mobile-genre-track-art {
+    position: relative;
+    display: block;
+    overflow: hidden;
+    border: 0;
+    border-radius: 0.55rem;
+    background: #111 url('album-placeholder.svg?v=3') center / cover no-repeat;
+  }
+
+  .home-page .mobile-genre-track-art.is-liked-folder-recent {
+    display: grid;
+    place-items: center;
+    background: linear-gradient(145deg, color-mix(in srgb, var(--liked-folder-color) 65%, white) 0%, var(--liked-folder-color) 55%, color-mix(in srgb, var(--liked-folder-color) 82%, black) 100%);
+  }
+
+  .home-page .mobile-genre-track-art.is-liked-folder-recent svg {
+    width: 1.8rem;
+    height: 1.8rem;
+    fill: #fff !important;
+  }
+
+  .home-page .mobile-genre-track-art img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0;
+    transition: opacity 0.16s ease;
+  }
+
+  .home-page .mobile-genre-track-art.has-artwork img {
+    opacity: 1;
+  }
+
+  .home-page .mobile-genre-track-title,
+  .home-page .mobile-genre-track-artist {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .home-page .mobile-genre-track-title {
+    margin-top: 0.4rem;
+    color: #fff;
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  .home-page .mobile-genre-track-artist {
+    margin-top: 0.16rem;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 0.74rem;
+  }
+
+  .home-page .mobile-genre-track-art,
+  .home-page .mobile-genre-loading-art {
+    width: clamp(8.5rem, 11vw, 11rem);
+    min-width: clamp(8.5rem, 11vw, 11rem);
+    height: clamp(8.5rem, 11vw, 11rem);
+    min-height: clamp(8.5rem, 11vw, 11rem);
+    flex-basis: clamp(8.5rem, 11vw, 11rem);
+  }
+
+  .home-page .mobile-recents-row .mobile-genre-track,
+  .home-page .mobile-recents-row .mobile-genre-track-art {
+    width: 6rem;
+    min-width: 6rem;
+    height: 6rem;
+    min-height: 6rem;
+    flex-basis: 6rem;
+  }
+
+  .home-page .mobile-recents-row .mobile-genre-track-row {
+    gap: 0.8rem;
+  }
+
+  .home-page .mobile-recents-row .new-release-badge {
+    display: none;
+  }
+
+  .home-page .mobile-recents-row .mobile-genre-track {
+    flex-basis: 6rem;
+  }
+
+  .home-page .desktop-library-row .mobile-genre-track-row {
+    gap: 0.8rem;
+  }
+
+  .desktop-liked-folder {
+    display: flex;
+    width: 6rem;
+    flex: 0 0 6rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.4rem;
+    border: 0;
+    background: transparent;
+    color: #fff;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .desktop-liked-folder-art {
+    display: grid;
+    width: 6rem;
+    height: 6rem;
+    place-items: center;
+    border-radius: 0.55rem;
+    background: linear-gradient(145deg, color-mix(in srgb, var(--liked-folder-color) 65%, white) 0%, var(--liked-folder-color) 55%, color-mix(in srgb, var(--liked-folder-color) 82%, black) 100%);
+  }
+
+  .desktop-liked-folder-art svg {
+    width: 1.8rem;
+    height: 1.8rem;
+    fill: #fff;
+  }
+
+  .desktop-liked-folder-title {
+    overflow: hidden;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .desktop-liked-folder:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.75);
+    outline-offset: 3px;
+  }
+
+  .home-page .recent-history-panel {
+    display: none;
+  }
+
+  body.view-home.desktop-catalog-active .home-page .site-page-content {
+    grid-template-rows: auto auto auto minmax(0, 1fr);
+  }
+
+  body.view-home.desktop-catalog-active .home-page .mobile-genre-shelves {
+    display: none;
+  }
+
+  body.view-home.desktop-catalog-active .home-page .recent-history-panel {
+    display: contents;
+  }
+
+  body.view-home.desktop-catalog-active .home-page .genre-results {
+    display: grid;
+  }
+
+  body.view-home.desktop-library-active .home-page .site-page-content {
+    grid-template-rows: auto auto auto minmax(0, 1fr);
+  }
+
+  body.view-home.desktop-library-active .home-catalog-header,
+  body.view-home.desktop-library-active .mobile-genre-shelves {
+    display: none !important;
+  }
+
+  body.view-home.desktop-library-active #likedSongsHeader:not([hidden]) {
+    display: flex !important;
+    grid-column: 1 / -1;
+    grid-row: 1;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  body.view-home.desktop-library-active .liked-songs-view-title {
+    display: flex !important;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    align-items: center;
+    gap: 0.8rem;
+    margin: 0.35rem 0 0;
+  }
+
+  body.view-home.desktop-library-active .liked-songs-view-title button {
+    display: grid;
+    width: 2.2rem;
+    height: 2.2rem;
+    flex: 0 0 2.2rem;
+    place-items: center;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 1.6rem;
+    cursor: pointer;
+  }
+
+  body.view-home.desktop-library-active .liked-songs-view-title h2 {
+    font-size: 0.95rem;
+    font-weight: 650;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-toolbar:not([hidden]) {
+    display: flex;
+    grid-column: 1 / -1;
+    grid-row: 3;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 0.5rem;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-toolbar .catalog-search {
+    display: flex;
+    flex: 0 1 22rem;
+    margin: 0;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-toolbar .favourite-sort-control {
+    display: flex;
+    width: auto;
+    grid-template-columns: none;
+    justify-content: flex-end;
+    margin-top: 0;
+  }
+
+  body.view-home.desktop-library-active .genre-results {
+    grid-row: 4;
+  }
+}
 .catalog-suggestions.catalog-suggestions-floating {
   position: fixed;
   right: auto;
