@@ -489,7 +489,7 @@ try {
         seenRecentIdentities.add(identity);
         return true;
       })
-      .slice(0, 10);
+      .slice(0, 20);
     if (onDemandRecentHistory.length !== storedRecents.length) {
       localStorage.setItem(ON_DEMAND_RECENTS_KEY, JSON.stringify(onDemandRecentHistory));
     }
@@ -593,6 +593,7 @@ function scheduleOnDemandHistoryCommit({ recent = false, playback = false } = {}
       try { localStorage.setItem(ON_DEMAND_RECENTS_KEY, JSON.stringify(onDemandRecentHistory)); }
       catch { /* Keep the in-memory recents list for this visit. */ }
       window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
+      window.dispatchEvent(new CustomEvent('thaalam-on-demand-recents-change'));
     }
     if (savePlaybackHistory) {
       try { localStorage.setItem(ON_DEMAND_PLAYBACK_HISTORY_KEY, JSON.stringify(onDemandPlaybackHistory)); }
@@ -612,6 +613,7 @@ function scheduleOnDemandHistoryCommit({ recent = false, playback = false } = {}
 
 function rememberOnDemandPlayback(song) {
   if (!song?.trackName) return;
+  const queueStep = Math.max(0, onDemandQueueIndex - onDemandQueueStartIndex);
   const entry = {
     trackName: String(song.trackName),
     artistName: String(song.artistName || ''),
@@ -624,11 +626,14 @@ function rememberOnDemandPlayback(song) {
     queueSource: onDemandQueueSource === 'favourites' ? 'favourites' : 'autoplay',
     queueStartTrackName: String(onDemandQueue[onDemandQueueStartIndex]?.trackName || song.trackName),
     queueSessionId: onDemandQueueSessionId,
-    queueStep: Math.max(0, onDemandQueueIndex - onDemandQueueStartIndex),
+    queueStep,
     playedAt: Date.now()
   };
   onDemandPlaybackHistory = [entry, ...onDemandPlaybackHistory].slice(0, 500);
   scheduleOnDemandHistoryCommit({ playback: true });
+  if (queueStep === 0) {
+    window.dispatchEvent(new CustomEvent('thaalam-on-demand-recents-change'));
+  }
 }
 
 function rememberOnDemandSong(song, { fromLikedFolder = false } = {}) {
@@ -639,10 +644,20 @@ function rememberOnDemandSong(song, { fromLikedFolder = false } = {}) {
     ? 'liked-folder'
     : `${entry.trackName || ''}\n${entry.artistName || ''}`.toLowerCase();
   const key = identity(recentSong);
+  const previousRecents = onDemandRecentHistory.filter((entry) => identity(entry) !== key);
+  const playedTracks = fromLikedFolder ? onDemandPlaybackHistory : [];
+  const seen = new Set([key, ...previousRecents.map(identity)]);
+  const restoredPlayedTracks = playedTracks.filter((entry) => {
+    const entryKey = identity(entry);
+    if (!entryKey || seen.has(entryKey)) return false;
+    seen.add(entryKey);
+    return true;
+  });
   onDemandRecentHistory = [
     recentSong,
-    ...onDemandRecentHistory.filter((entry) => identity(entry) !== key)
-  ].slice(0, 10);
+    ...previousRecents,
+    ...restoredPlayedTracks
+  ].slice(0, 20);
   scheduleOnDemandHistoryCommit({ recent: true });
 }
 

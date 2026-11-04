@@ -144,6 +144,11 @@ body.on-demand-paused .tagline #nowPlaying::after {
 
 /* The liked-folder header and back row belong to the mobile Library flow.
    Hide them on wide layouts even if a mobile folder state survives resizing. */
+.liked-folder-playback-actions,
+.liked-folder-table-header {
+  display: none;
+}
+
 @media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) {
   .library-playlist-heading,
   .liked-songs-view-title {
@@ -350,6 +355,10 @@ body.view-now-playing::after {
 
 .mobile-genre-shelves {
   display: none;
+}
+
+.mobile-home-initial-shelf {
+  display: none !important;
 }
 
 .desktop-profile-button {
@@ -2225,7 +2234,20 @@ body.view-rises-from-mini.view-now-playing .player-view {
   }
 
   .genre-results.favourites-list-layout .genre-card-details {
+    min-width: 0;
     margin-top: 0;
+    overflow: hidden;
+  }
+
+  .genre-results.favourites-list-layout .genre-card-list-actions {
+    flex: 0 0 auto;
+  }
+
+  .genre-results.favourites-list-layout .genre-card-title,
+  .genre-results.favourites-list-layout .genre-card-artist {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .genre-results.favourites-list-layout .genre-card-title {
@@ -6325,6 +6347,11 @@ img {
     gap: 0.4rem;
   }
 
+  body.library-playlist-open .liked-folder-hero-art,
+  body.library-playlist-open .liked-folder-hero-meta {
+    display: none;
+  }
+
   body.library-playlist-open .liked-folder-subtitle {
     margin-top: 0;
   }
@@ -7408,6 +7435,27 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
 }
 
 @media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) {
+  /* Liked Songs gets its own warm ribbon in the top-right, using the same
+     accent as the folder art. It stays behind the page content. */
+  body.view-home.desktop-library-active::before {
+    top: -10rem;
+    right: -14rem;
+    left: auto;
+    width: min(76vw, 76rem);
+    height: 31rem;
+    background:
+      radial-gradient(ellipse 31% 42% at 52% 61%, color-mix(in srgb, var(--liked-folder-color) 45%, #ffb057) 0%, var(--liked-folder-color) 38%, color-mix(in srgb, var(--liked-folder-color) 66%, #2b0613) 58%, transparent 76%),
+      radial-gradient(ellipse 50% 56% at 70% 39%, color-mix(in srgb, var(--liked-folder-color) 54%, #26050f) 0%, transparent 72%);
+    background-size: 100% 100%;
+    background-position: center;
+    border-radius: 50%;
+    filter: blur(0.8rem) saturate(1.08);
+    opacity: 0.72;
+    -webkit-mask-image: radial-gradient(ellipse 65% 58% at 54% 57%, #000 25%, transparent 78%);
+    mask-image: radial-gradient(ellipse 65% 58% at 54% 57%, #000 25%, transparent 78%);
+    clip-path: none;
+  }
+
   body.view-home:not(.has-home-glow) {
     background:
       radial-gradient(ellipse 100% 64% at 0% 0%, rgba(80, 68, 64, 0.62), transparent 100%),
@@ -7416,6 +7464,11 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
 
   .home-page .site-page-content {
     grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .home-page {
+    --desktop-home-art-size: 6rem;
+    --desktop-home-genre-art-size: clamp(8.5rem, 11vw, 11rem);
   }
 
   .home-page .genre-tabs {
@@ -7454,6 +7507,10 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
     flex: 0 0 auto;
     overflow: visible;
     scroll-margin-top: 0.5rem;
+  }
+
+  .home-page .mobile-home-initial-shelf {
+    display: block !important;
   }
 
   .home-page .mobile-genre-row h2 {
@@ -7539,17 +7596,34 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
     flex-basis: clamp(8.5rem, 11vw, 11rem);
   }
 
+  .home-page .mobile-genre-loading-art {
+    display: block;
+    border-radius: 0.55rem;
+    background: #111 url('album-placeholder.svg?v=3') center / cover no-repeat;
+  }
+
   .home-page .mobile-recents-row .mobile-genre-track,
   .home-page .mobile-recents-row .mobile-genre-track-art {
-    width: 6rem;
-    min-width: 6rem;
-    height: 6rem;
-    min-height: 6rem;
-    flex-basis: 6rem;
+    width: var(--desktop-home-art-size);
+    min-width: var(--desktop-home-art-size);
+    flex-basis: var(--desktop-home-art-size);
+  }
+
+  .home-page .mobile-recents-row .mobile-genre-track {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .home-page .mobile-recents-row .mobile-genre-track-art {
+    height: var(--desktop-home-art-size);
+    min-height: var(--desktop-home-art-size);
   }
 
   .home-page .mobile-recents-row .mobile-genre-track-row {
     gap: 0.8rem;
+    overflow-x: hidden;
+    justify-content: flex-start;
   }
 
   .home-page .mobile-recents-row .new-release-badge {
@@ -7557,7 +7631,11 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
   }
 
   .home-page .mobile-recents-row .mobile-genre-track {
-    flex-basis: 6rem;
+    flex-basis: var(--desktop-home-art-size);
+  }
+
+  body.view-home.desktop-library-active .liked-songs-view-title h2 {
+    display: none;
   }
 
   .home-page .desktop-library-row .mobile-genre-track-row {
@@ -7566,8 +7644,8 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
 
   .desktop-liked-folder {
     display: flex;
-    width: 6rem;
-    flex: 0 0 6rem;
+    width: var(--desktop-home-genre-art-size);
+    flex: 0 0 var(--desktop-home-genre-art-size);
     flex-direction: column;
     align-items: flex-start;
     gap: 0.4rem;
@@ -7581,8 +7659,8 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
 
   .desktop-liked-folder-art {
     display: grid;
-    width: 6rem;
-    height: 6rem;
+    width: var(--desktop-home-genre-art-size);
+    height: var(--desktop-home-genre-art-size);
     place-items: center;
     border-radius: 0.55rem;
     background: linear-gradient(145deg, color-mix(in srgb, var(--liked-folder-color) 65%, white) 0%, var(--liked-folder-color) 55%, color-mix(in srgb, var(--liked-folder-color) 82%, black) 100%);
@@ -7628,6 +7706,7 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
   }
 
   body.view-home.desktop-library-active .home-page .site-page-content {
+    --liked-songs-table-columns: 2.5rem 3rem minmax(14rem, 2.1fr) minmax(10rem, 1.2fr) 4.5rem 2.5rem;
     grid-template-rows: auto auto auto minmax(0, 1fr);
   }
 
@@ -7637,27 +7716,93 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
   }
 
   body.view-home.desktop-library-active #likedSongsHeader:not([hidden]) {
-    display: flex !important;
+    display: grid !important;
     grid-column: 1 / -1;
     grid-row: 1;
-    flex-direction: column;
-    gap: 0.4rem;
+    grid-template-columns: clamp(8rem, 9vw, 9rem) minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+    align-items: start;
+    column-gap: 0.8rem;
+    row-gap: 0.55rem;
   }
 
-  body.view-home.desktop-library-active .liked-songs-view-title {
-    display: flex !important;
-    grid-column: 1 / -1;
+  body.view-home.desktop-library-active #likedSongsHeader h1 {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+    overflow: visible;
+    font-size: clamp(2.5rem, 3.5vw, 3rem);
+    line-height: 1.2;
+    padding-bottom: 0.08em;
+  }
+
+  body.view-home.desktop-library-active #likedSongsHeader .library-subtitle {
+    grid-column: 2;
     grid-row: 2;
-    align-items: center;
-    gap: 0.8rem;
-    margin: 0.35rem 0 0;
+    margin: 0;
   }
 
-  body.view-home.desktop-library-active .liked-songs-view-title button {
+  body.view-home.desktop-library-active .liked-folder-hero-meta {
+    display: flex;
+    grid-column: 2;
+    grid-row: 3;
+    align-items: center;
+    gap: 1rem;
+    color: rgba(255, 255, 255, 0.76);
+    font-size: 0.85rem;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-hero-meta span + span {
+    padding-left: 1rem;
+    border-left: 1px solid rgba(255, 255, 255, 0.25);
+  }
+
+  body.view-home.desktop-library-active .liked-folder-hero-art {
+    position: relative;
+    display: grid;
+    width: clamp(8rem, 9vw, 9rem);
+    height: clamp(8rem, 9vw, 9rem);
+    grid-column: 1;
+    grid-row: 1 / span 3;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 0.85rem;
+    background: linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--liked-folder-color) 65%, white) 0%,
+      var(--liked-folder-color) 55%,
+      color-mix(in srgb, var(--liked-folder-color) 82%, black) 100%
+    );
+    box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, 0.22);
+  }
+
+  body.view-home.desktop-library-active .liked-folder-hero-art img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-hero-art.has-artwork .liked-folder-hero-heart {
+    display: none;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-hero-heart {
+    width: 2rem;
+    height: 2rem;
+    fill: #fff;
+  }
+
+  body.view-home.desktop-library-active #likedSongsHeader #closeLikedSongs {
+    position: fixed;
+    z-index: 3;
+    top: 6.1rem;
+    left: max(1rem, calc((100vw - 88rem) / 2 - 7.9rem));
     display: grid;
     width: 2.2rem;
     height: 2.2rem;
-    flex: 0 0 2.2rem;
     place-items: center;
     border: 0;
     border-radius: 50%;
@@ -7665,6 +7810,10 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
     color: #fff;
     font-size: 1.6rem;
     cursor: pointer;
+  }
+
+  body.view-home.desktop-library-active .liked-songs-view-title {
+    display: none !important;
   }
 
   body.view-home.desktop-library-active .liked-songs-view-title h2 {
@@ -7675,11 +7824,74 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
   body.view-home.desktop-library-active .liked-folder-toolbar:not([hidden]) {
     display: flex;
     grid-column: 1 / -1;
-    grid-row: 3;
+    grid-row: 2;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 1rem;
-    margin-top: 0.5rem;
+    margin: 1rem 0 1.25rem;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-playback-actions {
+    display: flex;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-playback-actions {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.9rem;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-play-all {
+    display: inline-flex;
+    min-width: 6.8rem;
+    height: 2.5rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    padding: 0 1rem;
+    border: 0;
+    border-radius: 999px;
+    background: #fff;
+    color: #171717;
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-play-all svg {
+    width: 1rem;
+    height: 1rem;
+    fill: currentColor;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-play-all:disabled,
+  body.view-home.desktop-library-active .liked-folder-shuffle:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-shuffle {
+    display: grid;
+    width: 2.5rem;
+    height: 2.5rem;
+    place-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    cursor: pointer;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-shuffle svg {
+    width: 1.15rem;
+    height: 1.15rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 2;
   }
 
   body.view-home.desktop-library-active .liked-folder-toolbar .catalog-search {
@@ -7693,7 +7905,116 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
     width: auto;
     grid-template-columns: none;
     justify-content: flex-end;
+    margin-left: auto;
     margin-top: 0;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-table-header {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-row: 3;
+    grid-template-columns: var(--liked-songs-table-columns);
+    align-items: center;
+    gap: 0.8rem;
+    /* The scrollable song area reserves space at the right. Match that here
+       so the headings sit above the existing song values without moving rows. */
+    padding: 0.35rem 3.5rem 0.35rem 0.75rem;
+    color: rgba(255, 255, 255, 0.66);
+    font-size: 0.8rem;
+  }
+
+  body.view-home.desktop-library-active #likedFolderTableHeader[hidden] {
+    display: none !important;
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout {
+    grid-row: 4;
+    padding-right: 0;
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .genre-card {
+    grid-template-columns: var(--liked-songs-table-columns);
+    gap: 0.8rem;
+    min-height: 3.5rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 0.6rem;
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .genre-card:hover,
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .genre-card:focus-within {
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: none;
+    transform: none;
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .genre-card-media {
+    grid-column: 2;
+    width: 3rem;
+    height: 3rem;
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .genre-card-art-frame {
+    width: 3rem;
+    height: 3rem;
+    border-radius: 0.35rem;
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .favourite-row-number {
+    grid-column: 1;
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 0.9rem;
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .genre-card-link,
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .genre-card-details {
+    grid-column: 3;
+    min-width: 0;
+    margin: 0;
+    color: #fff;
+    text-decoration: none;
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .genre-card-title {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 700;
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .favourite-row-artist {
+    grid-column: 4;
+    min-width: 0;
+    overflow: hidden;
+    color: rgba(255, 255, 255, 0.72);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.85rem;
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .favourite-row-duration {
+    grid-column: 5;
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 0.85rem;
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .genre-remove-favourite-button {
+    grid-column: 6;
+    color: var(--liked-folder-color, #ff1744) !important;
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .genre-remove-favourite-button svg {
+    fill: var(--liked-folder-color, #ff1744) !important;
+    stroke: none !important;
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .genre-info-button {
+    grid-column: 7;
+    color: rgba(255, 255, 255, 0.78);
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .genre-info-button svg {
+    width: 1.1rem;
+    height: 1.1rem;
+    fill: currentColor;
   }
 
   body.view-home.desktop-library-active .genre-results {

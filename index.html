@@ -38,7 +38,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=644">
+  <link rel="stylesheet" href="style.css?v=660">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -295,14 +295,35 @@
   <main class="site-page home-page" id="homePage" aria-labelledby="homeTitle">
     <div class="site-page-content">
       <header class="library-playlist-heading" id="likedSongsHeader" hidden>
+        <div class="liked-folder-hero-art" id="likedFolderHeroArt" aria-hidden="true">
+          <img id="likedFolderHeroImage" alt="" hidden>
+          <svg class="liked-folder-hero-heart" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78Z"/></svg>
+        </div>
         <h1>Your Library</h1>
         <p class="library-subtitle liked-folder-subtitle" id="likedFolderSubtitle">Liked songs are saved on this device</p>
+        <div class="liked-folder-hero-meta" id="likedFolderHeroMeta">
+          <span id="likedFolderSongCount">0 songs</span>
+          <span id="likedFolderHeroSource">On this device</span>
+        </div>
       </header>
       <div class="liked-songs-view-title">
-        <button type="button" id="closeLikedSongs" aria-label="Back to Library">‹</button>
+        <button type="button" id="closeLikedSongs" aria-label="Back to your library">‹</button>
         <h2>Liked Songs</h2>
       </div>
-      <div class="liked-folder-toolbar" id="likedFolderToolbar" hidden></div>
+      <div class="liked-folder-toolbar" id="likedFolderToolbar" hidden>
+        <div class="liked-folder-playback-actions">
+          <button class="liked-folder-play-all" id="likedFolderPlayAll" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+            <span>Play All</span>
+          </button>
+          <button class="liked-folder-shuffle" id="likedFolderShuffle" type="button" aria-label="Shuffle liked songs" title="Shuffle">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M4 4l5 5m3 3 9 9"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="liked-folder-table-header" id="likedFolderTableHeader" aria-hidden="true">
+        <span>#</span><span aria-hidden="true"></span><span>Title</span><span>Artist</span><span>Duration</span><span aria-hidden="true"></span>
+      </div>
       <header class="home-catalog-header">
         <div>
           <h1 id="homeTitle" tabindex="-1">Browse music</h1>
@@ -319,7 +340,28 @@
           <div class="catalog-suggestions" id="catalogSuggestions" role="listbox" aria-label="Song suggestions" hidden></div>
         </form>
       </header>
-      <div class="mobile-genre-shelves" id="mobileGenreShelves" aria-label="Browse songs by genre"></div>
+      <div class="mobile-genre-shelves" id="mobileGenreShelves" aria-label="Browse songs by genre">
+        <section class="mobile-genre-row mobile-home-initial-shelf" aria-label="International songs">
+          <h2>International</h2><div class="mobile-genre-track-row">
+            <article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article>
+          </div>
+        </section>
+        <section class="mobile-genre-row mobile-home-initial-shelf" aria-label="Hindi songs">
+          <h2>Hindi</h2><div class="mobile-genre-track-row">
+            <article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article>
+          </div>
+        </section>
+        <section class="mobile-genre-row mobile-home-initial-shelf" aria-label="Malayalam songs">
+          <h2>Malayalam</h2><div class="mobile-genre-track-row">
+            <article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article>
+          </div>
+        </section>
+        <section class="mobile-genre-row mobile-home-initial-shelf" aria-label="Tamil songs">
+          <h2>Tamil</h2><div class="mobile-genre-track-row">
+            <article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article>
+          </div>
+        </section>
+      </div>
       <nav class="genre-tabs" aria-label="Browse music categories">
         <button class="genre-tab is-selected" type="button" aria-pressed="true" data-genre="international">International</button>
         <button class="genre-tab" type="button" aria-pressed="false" data-genre="hindi">Hindi</button>
@@ -911,7 +953,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=92"></script>
-  <script src="ondemand-player.js?v=197"></script>
+  <script src="ondemand-player.js?v=200"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=18"></script>
@@ -984,6 +1026,8 @@
       placeStationForViewport();
       placeStreamQualityForViewport();
       if (!desktopNavigation.matches) {
+        restoreMobileLikedSongsHeading();
+        returnLikedSongsBackButtonToRow();
         // Home is the default landing view on mobile, including after a
         // viewport change from desktop.
         document.body.classList.remove('desktop-catalog-active', 'desktop-library-active');
@@ -1340,6 +1384,11 @@
     let suggestionTimer = 0;
     let genreRequestId = 0;
     let currentFavouriteSongs = [];
+    let activeDesktopLibraryFolder = {
+      name: 'Liked Songs',
+      artworkUrl: '',
+      sourceLabel: 'On this device'
+    };
     let desktopLibraryRequestId = 0;
     const pendingFavouriteRatingChanges = new Map();
     const PENDING_FAVOURITE_CHANGES_KEY = 'thaalam-pending-favourite-changes-v1';
@@ -1355,6 +1404,7 @@
     } catch { /* Pending UI overrides remain in memory for this session. */ }
     const FAVOURITE_SORT_KEY = 'thaalam-favourite-sort-v1';
     const FAVOURITE_LAYOUT_KEY = 'thaalam-favourite-layout-v1';
+    const TRACK_DURATION_CACHE_KEY = 'thaalam-track-duration-cache-v1';
     let favouriteLayout = 'list';
     let favouriteLayoutAnimationTimer = 0;
     try {
@@ -2114,11 +2164,72 @@
         existing.favouritedAt = Math.max(existing.favouritedAt || 0, song.favouritedAt || 0);
         if (!existing.providerTrackId && song.providerTrackId) existing.providerTrackId = song.providerTrackId;
         if (!existing.artworkUrl100 && song.artworkUrl100) existing.artworkUrl100 = song.artworkUrl100;
+        if (!existing.trackTimeMillis && song.trackTimeMillis) existing.trackTimeMillis = song.trackTimeMillis;
+        if (!existing.durationSeconds && song.durationSeconds) existing.durationSeconds = song.durationSeconds;
       }
       return uniqueSongs;
     }
 
+    function durationCacheIdentity(song) {
+      const normalize = (value) => String(value || '').trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+      const title = normalize(song?.trackName || song?.title);
+      const artist = normalize(song?.artistName || song?.artist);
+      return title && artist ? `${title}|${artist}` : '';
+    }
+
+    function readTrackDurationCache() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(TRACK_DURATION_CACHE_KEY) || '{}');
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+      } catch {
+        return {};
+      }
+    }
+
+    function cachedTrackDurationMillis(song, cache = readTrackDurationCache()) {
+      const identity = durationCacheIdentity(song);
+      const duration = Number(identity ? cache[identity] : 0);
+      return Number.isFinite(duration) && duration > 0 ? duration : 0;
+    }
+
+    function storeTrackDurations(songs) {
+      const cache = readTrackDurationCache();
+      let changed = false;
+      for (const song of Array.isArray(songs) ? songs : []) {
+        const identity = durationCacheIdentity(song);
+        const durationMillis = Number(song?.trackTimeMillis) || Number(song?.durationSeconds) * 1000;
+        if (!identity || !Number.isFinite(durationMillis) || durationMillis <= 0) continue;
+        if (Number(cache[identity]) !== durationMillis) {
+          cache[identity] = durationMillis;
+          changed = true;
+        }
+      }
+      if (!changed) return;
+      try { localStorage.setItem(TRACK_DURATION_CACHE_KEY, JSON.stringify(cache)); } catch { /* Cache is optional. */ }
+
+      for (const song of currentFavouriteSongs) {
+        if (!song.trackTimeMillis && !song.durationSeconds) {
+          const durationMillis = cachedTrackDurationMillis(song, cache);
+          if (durationMillis) {
+            song.trackTimeMillis = durationMillis;
+            song.durationSeconds = durationMillis / 1000;
+          }
+        }
+      }
+      genreResults.querySelectorAll('.genre-card').forEach((card) => {
+        const durationCell = card.querySelector('.favourite-row-duration');
+        const durationMillis = cachedTrackDurationMillis({
+          trackName: card.dataset.favouriteTrackName,
+          artistName: card.dataset.favouriteArtistName
+        }, cache);
+        if (!durationCell || !durationMillis) return;
+        const seconds = Math.floor(durationMillis / 1000);
+        durationCell.textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+      });
+    }
+
     function songsFromRatingEntries(entries, artworkByTrackKey = {}) {
+      const durationCache = readTrackDurationCache();
       return dedupeFavouriteSongs((Array.isArray(entries) ? entries : [])
         .filter((entry) => entry.rating === 'up')
         .map((entry) => {
@@ -2140,6 +2251,10 @@
               : (entry.track_id || entry.provider_track_id || ''),
             artworkUrl100: entry.artwork || entry.artworkUrl100 || artworkByTrackKey[trackKey] ||
               (!entry.artwork && videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : ''),
+            trackTimeMillis: cachedTrackDurationMillis({
+              trackName: entry.title,
+              artistName: entry.artist
+            }, durationCache),
             ...(videoId ? { youtubeVideoId: videoId } : {})
           };
         }));
@@ -2290,6 +2405,14 @@
 
     function refreshFavouriteListPlaybackState() {
       const miniPlayerSong = window.latestNowPlayingData?.now_playing?.song || window.currentNowPlayingSong;
+      const currentDuration = Number(window.latestNowPlayingData?.now_playing?.duration) || 0;
+      if (miniPlayerSong && currentDuration > 0) {
+        storeTrackDurations([{
+          trackName: miniPlayerSong.title || miniPlayerSong.trackName,
+          artistName: miniPlayerSong.artist || miniPlayerSong.artistName,
+          trackTimeMillis: currentDuration * 1000
+        }]);
+      }
       const current = miniPlayerSong || (window.onDemandPlaybackActive
         ? window.getCurrentOnDemandSong?.()
         : null);
@@ -2311,6 +2434,13 @@
           Number(card.dataset.queueStep) === recentQueuePosition.queueStep
         ));
         card.classList.toggle('is-active-track', active);
+        if (active && genreResults.classList.contains('favourites-list-layout')) {
+          const durationSeconds = Math.floor(Number(window.latestNowPlayingData?.now_playing?.duration) || 0);
+          const durationCell = card.querySelector('.favourite-row-duration');
+          if (durationCell && durationSeconds > 0) {
+            durationCell.textContent = `${Math.floor(durationSeconds / 60)}:${String(durationSeconds % 60).padStart(2, '0')}`;
+          }
+        }
         const button = card.querySelector('.genre-play-button');
         if (!button) return;
         const isPlaying = active && playing;
@@ -2475,12 +2605,60 @@
       updateHomeTint(firstArtwork ? [{ artworkUrl100: firstArtwork }] : []);
     }
 
+    function updateDesktopLibraryHero() {
+      const name = activeDesktopLibraryFolder.name || 'Liked Songs';
+      const artworkUrl = String(activeDesktopLibraryFolder.artworkUrl || '').replace(/^http:/, 'https:');
+      const count = Number.isFinite(Number(activeDesktopLibraryFolder.songCount))
+        ? Number(activeDesktopLibraryFolder.songCount)
+        : currentFavouriteSongs.length;
+      const image = document.getElementById('likedFolderHeroImage');
+      const artwork = document.getElementById('likedFolderHeroArt');
+      document.querySelector('#likedSongsHeader h1').textContent = name;
+      document.getElementById('likedFolderSubtitle').textContent = name === 'Liked Songs'
+        ? 'Your liked songs, saved on this device.'
+        : `Songs in ${name}.`;
+      document.querySelector('.liked-songs-view-title h2').textContent = name;
+      document.getElementById('likedFolderSongCount').textContent = `${count} ${count === 1 ? 'song' : 'songs'}`;
+      document.getElementById('likedFolderHeroSource').textContent = activeDesktopLibraryFolder.sourceLabel || 'On this device';
+      document.getElementById('likedFolderPlayAll').disabled = count === 0;
+      document.getElementById('likedFolderShuffle').disabled = count === 0;
+      document.getElementById('likedFolderShuffle').setAttribute('aria-label', `Shuffle ${name.toLocaleLowerCase()}`);
+      if (!image || !artwork) return;
+      if (!artworkUrl) {
+        image.removeAttribute('src');
+        image.hidden = true;
+        artwork.classList.remove('has-artwork');
+        return;
+      }
+      image.onerror = () => {
+        image.hidden = true;
+        artwork.classList.remove('has-artwork');
+      };
+      image.onload = () => artwork.classList.add('has-artwork');
+      image.src = artworkUrl;
+      image.hidden = false;
+    }
+
     function updateDesktopLibraryFolder() {
       const shelves = document.getElementById('mobileGenreShelves');
       if (!shelves) return;
-      shelves.querySelector('.desktop-library-row')?.remove();
-      if (!desktopNavigation.matches) return;
-      if (!currentFavouriteSongs.length) return;
+      if (document.body.classList.contains('desktop-library-active')) updateDesktopLibraryHero();
+      const existingSection = shelves.querySelector('.desktop-library-row');
+      if (!desktopNavigation.matches || !currentFavouriteSongs.length) {
+        existingSection?.remove();
+        return;
+      }
+
+      const genreShelves = [...shelves.children].filter((shelf) =>
+        mobileHomeGenreRows.some((category) =>
+          shelf.getAttribute('aria-label') === `${category.title} songs`
+        )
+      );
+      if (genreShelves.length < 2) {
+        existingSection?.remove();
+        return;
+      }
+      existingSection?.remove();
 
       const section = document.createElement('section');
       section.className = 'mobile-genre-row desktop-library-row';
@@ -2492,33 +2670,36 @@
       const folder = document.createElement('button');
       folder.type = 'button';
       folder.className = 'desktop-liked-folder';
+      folder.dataset.folderName = 'Liked Songs';
+      folder.dataset.folderArtwork = '';
+      folder.dataset.folderSource = 'On this device';
       folder.setAttribute('aria-label', `Open Liked Songs, ${currentFavouriteSongs.length} songs`);
       folder.innerHTML = '<span class="desktop-liked-folder-art" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78Z"/></svg></span><span class="desktop-liked-folder-title">Liked Songs</span>';
-      folder.addEventListener('click', openDesktopLikedSongs);
+      folder.addEventListener('click', () => openDesktopLibraryFolder(folder));
       trackRow.appendChild(folder);
       section.append(heading, trackRow);
-      const genreShelves = [...shelves.children].filter((shelf) =>
-        mobileHomeGenreRows.some((category) =>
-          shelf.getAttribute('aria-label') === `${category.title} songs`
-        )
-      );
-      const insertionShelf = genreShelves[1] || genreShelves[0];
-      if (insertionShelf) insertionShelf.after(section);
-      else if (shelves.querySelector('.mobile-recents-row')) {
-        shelves.querySelector('.mobile-recents-row').after(section);
-      }
-      else shelves.prepend(section);
+      genreShelves[1].after(section);
     }
 
     function renderGenreResults(songs) {
       if (activeGenre.startsWith('search:')) genreResults.scrollTop = 0;
-      lastGenreResultsSongs = songs;
+      storeTrackDurations(songs);
       songs = window.filterUnavailableOnDemandSongs?.(songs) || songs;
+      const durationCache = readTrackDurationCache();
+      songs = songs.map((song) => {
+        if (song.trackTimeMillis || song.durationSeconds) return song;
+        const trackTimeMillis = cachedTrackDurationMillis(song, durationCache);
+        return trackTimeMillis ? { ...song, trackTimeMillis, durationSeconds: trackTimeMillis / 1000 } : song;
+      });
+      lastGenreResultsSongs = songs;
       const wasBusy = genreResults.getAttribute('aria-busy') === 'true';
       genreResults.setAttribute('aria-busy', 'false');
       genreResults.classList.toggle(
         'favourites-list-layout',
         activeGenre === 'you-like' && favouriteLayout === 'list'
+      );
+      document.getElementById('likedFolderTableHeader').hidden = !(
+        desktopNavigation.matches && activeGenre === 'you-like' && favouriteLayout === 'list'
       );
       genreResults.classList.toggle('favourites-view', activeGenre === 'you-like');
       const recentHistoryLayout = activeGenre === 'recently-played';
@@ -2716,6 +2897,8 @@
         infoButton.type = 'button';
         infoButton.setAttribute('aria-label', `Song information for ${song.trackName || 'song'}`);
         infoButton.title = 'Song information';
+        const desktopFavouriteList = activeGenre === 'you-like' &&
+          favouriteLayout === 'list' && desktopNavigation.matches;
         infoButton.textContent = 'i';
         infoButton.addEventListener('click', () => openCatalogSongInfo(song, infoButton));
 
@@ -2809,7 +2992,48 @@
         // Search rows skip the iTunes Store link: the metadata tap plays the
         // song instead of navigating away.
         const mobileFavourite = activeGenre === 'you-like' && !desktopNavigation.matches;
-        if (mobileFavourite) {
+        if (desktopFavouriteList) {
+          details.replaceChildren(title);
+          const rowNumber = document.createElement('span');
+          rowNumber.className = 'favourite-row-number';
+          rowNumber.textContent = String(cardIndex + 1);
+          const artistColumn = document.createElement('span');
+          artistColumn.className = 'favourite-row-artist';
+          artistColumn.textContent = song.artistName || 'Unknown artist';
+          const durationColumn = document.createElement('span');
+          durationColumn.className = 'favourite-row-duration';
+          const nowPlaying = window.latestNowPlayingData?.now_playing;
+          const nowPlayingSong = nowPlaying?.song || window.currentNowPlayingSong;
+          const normalizeTrackPart = (value) => String(value || '').trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+          const matchesNowPlaying = normalizeTrackPart(song.trackName) === normalizeTrackPart(nowPlayingSong?.title || nowPlayingSong?.trackName) &&
+            normalizeTrackPart(song.artistName) === normalizeTrackPart(nowPlayingSong?.artist || nowPlayingSong?.artistName);
+          const durationSeconds = Math.floor(
+            (Number(song.trackTimeMillis) || Number(song.durationSeconds) * 1000 ||
+              (matchesNowPlaying ? Number(nowPlaying?.duration) * 1000 : 0)) / 1000
+          );
+          durationColumn.textContent = durationSeconds
+            ? `${Math.floor(durationSeconds / 60)}:${String(durationSeconds % 60).padStart(2, '0')}`
+            : '—';
+          let titleCell = details;
+          if (song.trackViewUrl) {
+            const link = document.createElement('a');
+            link.className = 'genre-card-link';
+            link.href = song.trackViewUrl.replace(/^http:/, 'https:');
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.setAttribute('aria-label', `Open ${song.trackName || 'song'} in the iTunes Store`);
+            link.append(details);
+            titleCell = link;
+          }
+          card.append(
+            rowNumber,
+            media,
+            titleCell,
+            artistColumn,
+            durationColumn,
+            removeFavouriteButton
+          );
+        } else if (mobileFavourite) {
           const metadataPlayButton = document.createElement('button');
           metadataPlayButton.className = 'genre-card-meta-tap';
           metadataPlayButton.type = 'button';
@@ -2849,7 +3073,7 @@
         } else if (!mobileFavourite) {
           card.append(media, details);
         }
-        if (isFavouriteList) card.append(listActions);
+        if (isFavouriteList && !desktopFavouriteList) card.append(listActions);
         if (searchListLayout) {
           // Tap anywhere on the row plays. The handler cannot live on the card
           // itself: script.js installs a capture-phase document click guard
@@ -3194,7 +3418,33 @@
       return nextOrder.map((key) => songsByKey.get(key)).filter(Boolean);
     }
 
-    function renderMobileGenrePlaceholders(category) {
+    function appendMobileGenreLoadingCards(section, targetCount) {
+      const trackRow = section.querySelector('.mobile-genre-track-row');
+      if (!trackRow) return;
+      for (let index = trackRow.children.length; index < targetCount; index += 1) {
+        const card = document.createElement('article');
+        card.className = 'mobile-genre-track mobile-genre-loading-card';
+        card.setAttribute('aria-hidden', 'true');
+        const artwork = document.createElement('div');
+        artwork.className = 'mobile-genre-loading-art';
+        artwork.setAttribute('aria-hidden', 'true');
+        card.appendChild(artwork);
+        trackRow.appendChild(card);
+      }
+    }
+
+    function getMobileHomePlaceholderCount(shelves) {
+      if (!desktopNavigation.matches) return 4;
+      const width = shelves.clientWidth ||
+        shelves.parentElement?.clientWidth ||
+        document.getElementById('homePage')?.clientWidth ||
+        window.innerWidth;
+      const artSize = Math.min(176, Math.max(136, window.innerWidth * 0.11));
+      const gap = 16;
+      return Math.max(4, Math.ceil((width + gap) / (artSize + gap)));
+    }
+
+    function renderMobileGenrePlaceholders(category, count = 4) {
       const section = document.createElement('section');
       section.className = 'mobile-genre-row';
       section.setAttribute('aria-label', `${category.title} songs`);
@@ -3202,22 +3452,16 @@
       heading.textContent = category.title;
       const trackRow = document.createElement('div');
       trackRow.className = 'mobile-genre-track-row';
-      for (let index = 0; index < 4; index += 1) {
-        const card = document.createElement('article');
-        card.className = 'mobile-genre-track mobile-genre-loading-card';
-        const artwork = document.createElement('div');
-        artwork.className = 'mobile-genre-loading-art';
-        artwork.setAttribute('aria-hidden', 'true');
-        card.appendChild(artwork);
-        trackRow.appendChild(card);
-      }
       section.append(heading, trackRow);
+      appendMobileGenreLoadingCards(section, count);
       return section;
     }
 
     function renderMobileHomeGenreRow(category, songs, { shuffle = true, all = false } = {}) {
       if (!songs.length) return renderMobileGenrePlaceholders(category);
-      songs = window.filterUnavailableOnDemandSongs?.(songs) || songs;
+      if (category.title !== 'Recents' || !desktopNavigation.matches) {
+        songs = window.filterUnavailableOnDemandSongs?.(songs) || songs;
+      }
       if (category.key && Object.prototype.hasOwnProperty.call(genreFeedIds, category.key)) {
         window.prefetchCatalogSongInfo?.(songs);
       }
@@ -3306,7 +3550,18 @@
       const shelves = document.getElementById('mobileGenreShelves');
       if (!shelves) return;
       const songs = window.getOnDemandHistory?.() || [];
-      const visibleSongs = songs.slice(0, 10);
+      const isDesktop = window.matchMedia('(min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine)').matches;
+      let visibleSongs = songs.slice(0, 10);
+      if (isDesktop) {
+        const rowWidth = shelves.clientWidth ||
+          shelves.parentElement?.clientWidth ||
+          document.getElementById('homePage')?.clientWidth ||
+          window.innerWidth;
+        const cardWidth = 96;
+        const cardGap = 12.8;
+        const songsThatFit = Math.max(1, Math.floor((rowWidth + cardGap) / (cardWidth + cardGap)));
+        visibleSongs = songs.slice(0, Math.min(20, songsThatFit));
+      }
       const signature = visibleSongs.map((song) => [
         song.recentDisplayType || '',
         song.providerTrackId || song.trackId || '',
@@ -3356,6 +3611,11 @@
       updateDesktopHomeTint();
       updateDesktopLibraryFolder();
     }
+
+    window.addEventListener('resize', () => {
+      mobileRecentsRenderSignature = null;
+      updateMobileRecents();
+    }, { passive: true });
 
     function orderRecentPlaybackHistory(songs) {
       const dates = new Map();
@@ -3456,15 +3716,19 @@
         .map((key) => mobileHomeGenreRows.find((category) => category.key === key))
         .filter(Boolean);
       shelves.replaceChildren();
-      updateMobileRecents();
       const placeholders = categories.map((category) => {
         const cachedSongs = getAnyCachedGenreChart(category.key);
+        const placeholderCount = getMobileHomePlaceholderCount(shelves);
         const section = cachedSongs.length
           ? renderMobileHomeGenreRow(category, cachedSongs)
-          : renderMobileGenrePlaceholders(category);
+          : renderMobileGenrePlaceholders(category, placeholderCount);
+        if (cachedSongs.length && desktopNavigation.matches) {
+          appendMobileGenreLoadingCards(section, placeholderCount);
+        }
         shelves.appendChild(section);
         return section;
       });
+      updateMobileRecents();
       const results = await Promise.allSettled(categories.map((category) =>
         loadDailyGenreChart(category.key)
       ));
@@ -3492,12 +3756,14 @@
           item.getAttribute('aria-label') === `${category.title} songs`);
         if (section) shelves.append(section);
       });
+      updateDesktopLibraryFolder();
     }
 
     window.addEventListener('thaalam-on-demand-history-change', () => {
-      updateMobileRecents();
       reorderMobileGenreRowsFromHistory();
     });
+
+    window.addEventListener('thaalam-on-demand-recents-change', updateMobileRecents);
 
     window.addEventListener('thaalam-personalized-recommendations-update', async () => {
       recommendationTasteRevision += 1;
@@ -4438,17 +4704,41 @@
       return loadCatalog(genre, '', genreFeedIds[genre]);
     }
 
-    function openDesktopLikedSongs() {
+    function openDesktopLibraryFolder(folder = null) {
       if (!desktopNavigation.matches) return;
+      activeDesktopLibraryFolder = {
+        name: typeof folder === 'string' ? folder : folder?.dataset.folderName || 'Liked Songs',
+        artworkUrl: typeof folder === 'string' ? '' : folder?.dataset.folderArtwork || '',
+        sourceLabel: typeof folder === 'string' ? 'On this device' : folder?.dataset.folderSource || 'On this device',
+        songCount: typeof folder === 'string' ? undefined : folder?.dataset.songCount
+      };
+      const likedSongsHeader = document.getElementById('likedSongsHeader');
+      likedSongsHeader.insertBefore(
+        document.getElementById('closeLikedSongs'),
+        likedSongsHeader.firstChild
+      );
       document.body.classList.add('desktop-library-active', 'desktop-catalog-active');
-      document.getElementById('likedSongsHeader').hidden = false;
-      document.querySelector('.liked-songs-view-title h2').textContent = 'Liked Songs';
+      likedSongsHeader.hidden = false;
+      updateDesktopLibraryHero();
       moveLikedFolderControls(true);
       loadGenre('you-like');
     }
 
+    function restoreMobileLikedSongsHeading() {
+      document.querySelector('#likedSongsHeader h1').textContent = 'Your Library';
+      document.getElementById('likedFolderSubtitle').textContent = 'Liked songs are saved on this device';
+      document.querySelector('.liked-songs-view-title h2').textContent = 'Liked Songs';
+    }
+
+    function returnLikedSongsBackButtonToRow() {
+      const row = document.querySelector('.liked-songs-view-title');
+      const button = document.getElementById('closeLikedSongs');
+      if (row && button && button.parentElement !== row) row.prepend(button);
+    }
+
     function closeDesktopLikedSongs() {
       if (!desktopNavigation.matches) return;
+      returnLikedSongsBackButtonToRow();
       document.body.classList.remove('desktop-library-active', 'desktop-catalog-active');
       document.getElementById('likedSongsHeader').hidden = true;
       moveLikedFolderControls(false);
@@ -4728,6 +5018,7 @@
       else if (activeGenre.startsWith('search:')) homeSubtitle.textContent = 'Explore songs by search';
       else setPersonalisedPicksSubtitle();
       applyView(storedView);
+      if (storedView === 'home') void loadMobileHomeGenres();
       requestAnimationFrame(() => {
         window.updateMiniPlayerMarquees?.();
         // Same zero-width measurement issue as showView(): re-measure the
@@ -4754,7 +5045,7 @@
           document.body.classList.add('desktop-catalog-active');
           loadCatalog(activeGenre, activeSearchTerm);
         } else if (activeGenre === 'you-like') {
-          openDesktopLikedSongs();
+          openDesktopLibraryFolder();
         } else {
           activeGenre = 'international';
           void loadMobileHomeGenres();
@@ -4858,7 +5149,7 @@
       if (view === 'about') loadAboutArtistPortraits();
       if (view === 'home') {
         scheduleHomeRefresh();
-        if (!desktopNavigation.matches) void loadMobileHomeGenres();
+        void loadMobileHomeGenres();
       }
       document.getElementById(
         view === 'home'
@@ -4922,6 +5213,7 @@
     }
     function restoreMobileNavigationSnapshot(snapshot) {
       const state = snapshot || {};
+      restoreMobileLikedSongsHeading();
       const view = ['home', 'library', 'now-playing'].includes(state.view) ? state.view : 'home';
       const destination = ['home', 'search', 'library'].includes(state.destination)
         ? state.destination
@@ -5010,6 +5302,7 @@
     });
 
     document.getElementById('openLikedPlaylist')?.addEventListener('click', () => {
+      restoreMobileLikedSongsHeading();
       setMobileDestination('library');
       document.getElementById('likedSongsHeader').hidden = false;
       document.body.classList.add('library-playlist-open');
@@ -5029,6 +5322,24 @@
       showView('library');
       animateMobilePanel(-1);
       saveMobileNavigationSnapshot();
+    });
+    const startDesktopLibraryQueue = (shuffle = false) => {
+      const queue = sortFavouriteSongs(currentFavouriteSongs);
+      if (shuffle) {
+        for (let index = queue.length - 1; index > 0; index -= 1) {
+          const swapIndex = Math.floor(Math.random() * (index + 1));
+          [queue[index], queue[swapIndex]] = [queue[swapIndex], queue[index]];
+        }
+      }
+      if (queue.length) {
+        window.startOnDemandQueue?.(queue, 0, { openNowPlaying: false });
+      }
+    };
+    document.getElementById('likedFolderPlayAll')?.addEventListener('click', () => {
+      startDesktopLibraryQueue(false);
+    });
+    document.getElementById('likedFolderShuffle')?.addEventListener('click', () => {
+      startDesktopLibraryQueue(true);
     });
     document.getElementById('mobilePlayerMinimize')?.addEventListener('click', () => {
       if (mobileFolderToolbarQuery.matches && history.state?.thaalamMobileNavigation?.view === 'now-playing') {
