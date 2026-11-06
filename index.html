@@ -300,7 +300,7 @@
           <svg class="liked-folder-hero-heart" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78Z"/></svg>
         </div>
         <h1>Your Library</h1>
-        <p class="library-subtitle liked-folder-subtitle" id="likedFolderSubtitle">Liked songs are saved on this device</p>
+        <p class="library-subtitle liked-folder-subtitle" id="likedFolderSubtitle">Your most favourite tracks</p>
         <div class="liked-folder-hero-meta" id="likedFolderHeroMeta">
           <span id="likedFolderSongCount">0 songs</span>
           <span id="likedFolderHeroSource">On this device</span>
@@ -1372,13 +1372,13 @@
       : null;
     const ACTIVE_VIEW_KEY = 'thaalam-active-view-v1';
     const ACTIVE_GENRE_KEY = 'thaalam-active-genre-v1';
-    let activeGenre = 'international';
+    let activeGenre = null;
     try {
       const savedGenre = localStorage.getItem(ACTIVE_GENRE_KEY);
       if (savedGenre === 'you-like') {
         activeGenre = savedGenre;
       }
-    } catch { /* Use International when browser storage is unavailable. */ }
+    } catch { /* Use International on first load. */ }
     let activeSearchTerm = '';
     let suggestionRequestId = 0;
     let suggestionTimer = 0;
@@ -2615,7 +2615,7 @@
       const artwork = document.getElementById('likedFolderHeroArt');
       document.querySelector('#likedSongsHeader h1').textContent = name;
       document.getElementById('likedFolderSubtitle').textContent = name === 'Liked Songs'
-        ? 'Your liked songs, saved on this device.'
+        ? 'Your most favourite tracks'
         : `Songs in ${name}.`;
       document.querySelector('.liked-songs-view-title h2').textContent = name;
       document.getElementById('likedFolderSongCount').textContent = `${count} ${count === 1 ? 'song' : 'songs'}`;
@@ -4641,11 +4641,13 @@
     });
 
     function loadGenre(genre) {
-      genreResults.scrollTop = 0;
-      if (activeGenre !== genre && catalogSearchInput.value) {
-        catalogSearchInput.value = '';
-        catalogClearButton.hidden = true;
-        hideCatalogSuggestions();
+      if (activeGenre !== genre) {
+        genreResults.scrollTop = 0;
+        if (catalogSearchInput.value) {
+          catalogSearchInput.value = '';
+          catalogClearButton.hidden = true;
+          hideCatalogSuggestions();
+        }
       }
       catalogSearchInput.placeholder = genre === 'you-like'
         ? 'Search your library'
@@ -4726,7 +4728,7 @@
 
     function restoreMobileLikedSongsHeading() {
       document.querySelector('#likedSongsHeader h1').textContent = 'Your Library';
-      document.getElementById('likedFolderSubtitle').textContent = 'Liked songs are saved on this device';
+      document.getElementById('likedFolderSubtitle').textContent = 'Your most favourite tracks';
       document.querySelector('.liked-songs-view-title h2').textContent = 'Liked Songs';
     }
 
@@ -4993,7 +4995,7 @@
       document.body.classList.add(`view-${view}`);
       if (view === 'library') document.body.classList.add('view-home');
       if (view !== 'home') document.body.classList.remove('library-playlist-open');
-      if (view !== 'home') document.getElementById('likedSongsHeader').hidden = true;
+      if (view !== 'home' && view !== 'library') document.getElementById('likedSongsHeader').hidden = true;
       markCurrentView(view);
       if (view === 'now-playing') setMobileDestination('');
     }
@@ -5150,6 +5152,15 @@
       if (view === 'home') {
         scheduleHomeRefresh();
         void loadMobileHomeGenres();
+        // Restore Liked Songs hero when returning to Home from Now Playing
+        if (
+          desktopNavigation.matches &&
+          document.body.classList.contains('desktop-library-active')
+        ) {
+          const likedSongsHeader = document.getElementById('likedSongsHeader');
+          if (likedSongsHeader) likedSongsHeader.hidden = false;
+          updateDesktopLibraryHero();
+        }
       }
       document.getElementById(
         view === 'home'
@@ -5338,8 +5349,14 @@
     document.getElementById('likedFolderPlayAll')?.addEventListener('click', () => {
       startDesktopLibraryQueue(false);
     });
-    document.getElementById('likedFolderShuffle')?.addEventListener('click', () => {
-      startDesktopLibraryQueue(true);
+    const likedFolderShuffle = document.getElementById('likedFolderShuffle');
+    likedFolderShuffle?.addEventListener('click', () => {
+      const isActive = !likedFolderShuffle.classList.contains('is-active');
+      likedFolderShuffle.classList.toggle('is-active', isActive);
+      likedFolderShuffle.setAttribute('aria-pressed', String(isActive));
+      likedFolderShuffle.setAttribute('aria-label', `Shuffle ${isActive ? 'on' : 'off'}`);
+      if (typeof setOnDemandShuffle === 'function') setOnDemandShuffle(isActive);
+      startDesktopLibraryQueue(isActive);
     });
     document.getElementById('mobilePlayerMinimize')?.addEventListener('click', () => {
       if (mobileFolderToolbarQuery.matches && history.state?.thaalamMobileNavigation?.view === 'now-playing') {
@@ -5625,7 +5642,7 @@
 
       const showGuest = () => {
         if (librarySubtitle) librarySubtitle.textContent = 'Liked songs are saved on this device';
-        if (likedFolderSubtitle) likedFolderSubtitle.textContent = 'Liked songs are saved on this device';
+        if (likedFolderSubtitle) likedFolderSubtitle.textContent = 'Your most favourite tracks';
         profileButton.classList.remove('is-signed-in');
         welcomeGreeting.hidden = true;
         profileButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"></path></svg>';
