@@ -6967,7 +6967,7 @@ img {
   body.view-now-playing .track-time,
   body.view-now-playing .player-controls,
   body.view-now-playing .lyrics-panel {
-    width: var(--mobile-player-content-width);
+    width: min(100%, calc(var(--mobile-player-content-width) + clamp(0.75rem, 3vw, 1.25rem)));
     max-width: 100%;
     margin-inline: auto;
   }
