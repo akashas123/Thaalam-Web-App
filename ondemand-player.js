@@ -334,6 +334,7 @@ function updateNowPlayingSubtitle(isOnDemand) {
    was bumped and stale v1/v2-era payloads are dropped on read. */
 const ON_DEMAND_STORAGE_KEY = 'thaalam-on-demand-session-v2';
 const ON_DEMAND_RECENTS_KEY = 'thaalam-on-demand-recents-v1';
+const ON_DEMAND_RECENTS_LIMIT = 10;
 const ON_DEMAND_PLAYBACK_HISTORY_KEY = 'thaalam-on-demand-playback-history-v1';
 const PLAYBACK_MODE_STORAGE_KEY = 'thaalam-playback-mode-v1';
 const isMobilePlaybackLayout = () => window.matchMedia('(max-width: 56.1875rem)').matches;
@@ -425,7 +426,7 @@ try {
         seenRecentIdentities.add(identity);
         return true;
       })
-      .slice(0, 20);
+      .slice(0, ON_DEMAND_RECENTS_LIMIT);
     if (onDemandRecentHistory.length !== storedRecents.length) {
       localStorage.setItem(ON_DEMAND_RECENTS_KEY, JSON.stringify(onDemandRecentHistory));
     }
@@ -593,7 +594,7 @@ function rememberOnDemandSong(song, { fromLikedFolder = false } = {}) {
     recentSong,
     ...previousRecents,
     ...restoredPlayedTracks
-  ].slice(0, 20);
+  ].slice(0, ON_DEMAND_RECENTS_LIMIT);
   scheduleOnDemandHistoryCommit({ recent: true });
 }
 

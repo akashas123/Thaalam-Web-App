@@ -35,6 +35,17 @@
       );
     })();
   </script>
+  <script>
+    // Prevent a signed-in user's login gate from painting before the account
+    // bootstrap script below restores the locally saved profile.
+    try {
+      if (localStorage.getItem('thaalam.googleProfile')) {
+        document.documentElement.classList.add('has-saved-login');
+      }
+    } catch {
+      // Storage can be unavailable in private browsing; show the login gate.
+    }
+  </script>
 
   <title>Thaalam 24x7</title>
 
@@ -262,6 +273,70 @@
     })();
   </script>
 
+  <!-- Full-screen login gate. Covers the app until the user signs in with Google. -->
+  <div id="loginScreen" class="login-screen" role="dialog" aria-modal="true" aria-labelledby="loginScreenTitle">
+    <video class="login-background-video is-visible" autoplay muted playsinline preload="auto" aria-hidden="true">
+      <source src="Login-background.mp4" type="video/mp4">
+    </video>
+    <video class="login-background-video" muted playsinline preload="auto" aria-hidden="true">
+      <source src="Login-background.mp4" type="video/mp4">
+    </video>
+    <div class="login-card">
+      <h1 id="loginScreenTitle" class="login-heading">Access to over <span class="login-highlight"><span id="loginCount">30</span> million songs</span></h1>
+      <p class="login-subtitle">Sign in to listen to your favourite songs across devices.</p>
+      <button class="login-button" id="googleSignInButton" type="button" disabled>
+        <img class="login-button-icon" src="Google.png" alt="" aria-hidden="true">
+        Continue with Google
+      </button>
+      <p class="login-status" id="loginStatus" role="status" hidden></p>
+    </div>
+  </div>
+
+  <div class="app-loader" id="appLoader" role="status" aria-label="Loading Thaalam">
+    <span class="app-loader-ring" aria-hidden="true"></span>
+  </div>
+
+  <script>
+    (() => {
+      const videos = [...document.querySelectorAll('.login-background-video')];
+      if (videos.length !== 2) return;
+
+      const fadeDuration = 0.85;
+      let active = videos[0];
+      let standby = videos[1];
+      let isCrossfading = false;
+
+      const beginCrossfade = () => {
+        if (isCrossfading || !Number.isFinite(active.duration) || active.duration - active.currentTime > fadeDuration) return;
+        isCrossfading = true;
+        standby.currentTime = 0;
+        standby.play().catch(() => {});
+        standby.classList.add('is-visible');
+        active.classList.remove('is-visible');
+
+        window.setTimeout(() => {
+          active.pause();
+          active.currentTime = 0;
+          [active, standby] = [standby, active];
+          isCrossfading = false;
+        }, fadeDuration * 1000);
+      };
+
+      const watchLoop = () => {
+        beginCrossfade();
+        requestAnimationFrame(watchLoop);
+      };
+
+      active.addEventListener('loadedmetadata', watchLoop, { once: true });
+      active.addEventListener('ended', () => {
+        if (!isCrossfading) {
+          active.currentTime = 0;
+          active.play().catch(() => {});
+        }
+      });
+    })();
+  </script>
+
   <nav class="desktop-nav" aria-label="Main navigation">
     <div class="desktop-nav-links">
       <span class="desktop-nav-pill" aria-hidden="true"></span>
@@ -279,11 +354,6 @@
     <form method="dialog"><button class="dialog-close" aria-label="Close account information">&times;</button></form>
     <p class="site-page-eyebrow">THAALAM ACCOUNT</p>
     <h2 id="profileDialogTitle">Listen across browsers</h2>
-    <div id="profileGuestView">
-      <p class="profile-dialog-copy">Sign in with your Google account to listen across browsers.</p>
-      <p class="profile-dialog-status" id="profileDialogStatus" role="status">Google sign-in needs a Google OAuth client ID before it can be used.</p>
-      <button class="profile-dialog-action" id="googleSignInButton" type="button" disabled title="Google sign-in is not configured yet">Continue with Google</button>
-    </div>
     <div id="profileAccountView" hidden>
       <img class="profile-account-avatar" id="profileAccountAvatar" alt="Profile picture">
       <p class="profile-account-name" id="profileAccountName"></p>
@@ -300,7 +370,7 @@
           <svg class="liked-folder-hero-heart" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78Z"/></svg>
         </div>
         <h1>Your Library</h1>
-        <p class="library-subtitle liked-folder-subtitle" id="likedFolderSubtitle">Your most favourite tracks</p>
+        <p class="library-subtitle liked-folder-subtitle" id="likedFolderSubtitle">Liked songs are saved on this device</p>
         <div class="liked-folder-hero-meta" id="likedFolderHeroMeta">
           <span id="likedFolderSongCount">0 songs</span>
           <span id="likedFolderHeroSource">On this device</span>
@@ -3885,7 +3955,11 @@
     async function loadMobileHomeGenres() {
       const shelves = document.getElementById('mobileGenreShelves');
       const today = localCalendarDayKey();
-      if (!shelves || (mobileHomeGenresLoaded && mobileHomeGenresDay === today)) return;
+      if (!shelves || (
+        mobileHomeGenresLoaded &&
+        mobileHomeGenresDay === today &&
+        shelves.querySelector('.mobile-genre-row')
+      )) return;
       mobileHomeGenresLoaded = true;
       mobileHomeGenresDay = today;
       const requestId = ++mobileHomeGenresRequest;
@@ -3922,6 +3996,16 @@
       updateMobileRecents();
       updateDesktopHomeTint();
       updateDesktopLibraryFolder();
+    }
+
+    // A view/history transition can clear the shelf container after today's
+    // charts have been marked as loaded. Treat an empty container as needing
+    // a rebuild instead of leaving Home blank.
+    function ensureMobileHomeShelves() {
+      const shelves = document.getElementById('mobileGenreShelves');
+      if (!shelves) return;
+      if (!shelves.querySelector('.mobile-genre-row')) mobileHomeGenresLoaded = false;
+      void loadMobileHomeGenres();
     }
 
     function reorderMobileGenreRowsFromHistory() {
@@ -4924,7 +5008,13 @@
 
     function restoreMobileLikedSongsHeading() {
       document.querySelector('#likedSongsHeader h1').textContent = 'Your Library';
-      document.getElementById('likedFolderSubtitle').textContent = 'Your most favourite tracks';
+      let hasGoogleAccount = false;
+      try {
+        hasGoogleAccount = Boolean(JSON.parse(localStorage.getItem('thaalam.googleProfile') || 'null'));
+      } catch { /* Treat unreadable storage as an on-device library. */ }
+      document.getElementById('likedFolderSubtitle').textContent = hasGoogleAccount
+        ? 'Liked songs sync with Google'
+        : 'Liked songs are saved on this device';
       document.querySelector('.liked-songs-view-title h2').textContent = 'Liked Songs';
     }
 
@@ -5299,6 +5389,15 @@
       const isAlreadyOnView = document.body.classList.contains(`view-${view}`) &&
         !(view === 'home' && document.body.classList.contains('view-library'));
       if (isAlreadyOnView) {
+        const homeDestinationIsActive = document.querySelector(
+          '[data-mobile-destination="home"]'
+        )?.classList.contains('is-current');
+        if (view === 'home' && !desktopNavigation.matches && homeDestinationIsActive) {
+          document.body.classList.remove('mobile-search-active', 'library-playlist-open');
+          document.getElementById('likedSongsHeader').hidden = true;
+          moveLikedFolderControls(false);
+          ensureMobileHomeShelves();
+        }
         return Promise.resolve();
       }
 
@@ -5359,7 +5458,7 @@
       if (view === 'about') loadAboutArtistPortraits();
       if (view === 'home') {
         scheduleHomeRefresh();
-        void loadMobileHomeGenres();
+        ensureMobileHomeShelves();
         // Restore Liked Songs hero when returning to Home from Now Playing
         if (
           desktopNavigation.matches &&
@@ -5407,6 +5506,17 @@
         if (selected) button.setAttribute('aria-current', 'page');
         else button.removeAttribute('aria-current');
       });
+      if (destination === 'home' && !desktopNavigation.matches) {
+        document.body.classList.remove(
+          'mobile-search-active',
+          'library-playlist-open',
+          'desktop-catalog-active',
+          'desktop-library-active'
+        );
+        document.getElementById('likedSongsHeader').hidden = true;
+        moveLikedFolderControls(false);
+        ensureMobileHomeShelves();
+      }
     }
     function getMobileNavigationSnapshot() {
       const view = document.body.classList.contains('view-now-playing')
@@ -5498,6 +5608,7 @@
             loadGenre('international');
           }
           setPersonalisedPicksSubtitle();
+          ensureMobileHomeShelves();
           showView('home');
         } else if (destination === 'search') {
           moveLikedFolderControls(false);
@@ -5773,14 +5884,46 @@
       const likedFolderSubtitle = document.getElementById('likedFolderSubtitle');
       const profileDialog = document.getElementById('profileDialog');
       const signInButton = document.getElementById('googleSignInButton');
-      const status = document.getElementById('profileDialogStatus');
-      const guestView = document.getElementById('profileGuestView');
+      const loginStatus = document.getElementById('loginStatus');
       const accountView = document.getElementById('profileAccountView');
       const accountAvatar = document.getElementById('profileAccountAvatar');
       const accountName = document.getElementById('profileAccountName');
       const accountEmail = document.getElementById('profileAccountEmail');
       const logoutButton = document.getElementById('profileLogoutButton');
-      if (!profileButton || !profileDialog || !signInButton || !status || !guestView || !accountView) return;
+      const loginScreen = document.getElementById('loginScreen');
+      const appLoader = document.getElementById('appLoader');
+      if (!profileButton || !profileDialog || !signInButton || !loginStatus || !accountView || !loginScreen) return;
+
+      const showLoginScreen = () => { loginScreen.hidden = false; };
+      const hideLoginScreen = () => { loginScreen.hidden = true; };
+      const showAppLoader = () => {
+        window.__thaalamLoaderStartedAt = performance.now();
+        document.documentElement.classList.add('is-restoring-session');
+        appLoader?.removeAttribute('hidden');
+      };
+      const hideAppLoader = () => {
+        const elapsed = performance.now() - (window.__thaalamLoaderStartedAt || performance.now());
+        const delay = Math.max(0, 420 - elapsed);
+        window.setTimeout(() => {
+          document.documentElement.classList.remove('is-restoring-session');
+          appLoader?.setAttribute('hidden', '');
+        }, delay);
+      };
+
+      // Animate "100 million" counter from 30 up to 100 on the login screen.
+      const loginCount = document.getElementById('loginCount');
+      if (loginCount) {
+        const start = 30;
+        const end = 100;
+        const duration = 700;
+        const startTime = performance.now();
+        function tick(now) {
+          const progress = Math.min((now - startTime) / duration, 1);
+          loginCount.textContent = Math.round(start + (end - start) * progress);
+          if (progress < 1) requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+      }
 
       const clientId = window.THAALAM_GOOGLE_CLIENT_ID || '';
       const profileStorageKey = 'thaalam.googleProfile';
@@ -5808,6 +5951,10 @@
       } catch (_) {
         localStorage.removeItem(profileStorageKey);
       }
+      if (!savedProfile || typeof savedProfile !== 'object') {
+        document.documentElement.classList.remove('has-saved-login');
+        document.documentElement.classList.remove('is-restoring-session');
+      }
       window.getThaalamGoogleUserId = () => savedProfile?.sub || '';
 
       const getTimeGreeting = () => {
@@ -5817,7 +5964,8 @@
         return 'Good evening';
       };
 
-      const showProfile = (user) => {
+      const showProfile = (user, showTransitionLoader = false) => {
+        if (showTransitionLoader) showAppLoader();
         if (librarySubtitle) librarySubtitle.textContent = 'Liked songs sync with Google';
         if (likedFolderSubtitle) likedFolderSubtitle.textContent = 'Liked songs sync with Google';
         profileButton.classList.add('is-signed-in');
@@ -5842,29 +5990,20 @@
         accountAvatar.onerror = () => { accountAvatar.hidden = true; };
         accountName.textContent = user.name || '';
         accountEmail.textContent = user.email || '';
-        guestView.hidden = true;
         accountView.hidden = false;
         document.getElementById('profileDialogTitle').hidden = true;
         profileDialog.classList.add('is-signed-in');
+        hideLoginScreen();
+        hideAppLoader();
       };
 
-      const showGuest = () => {
-        if (librarySubtitle) librarySubtitle.textContent = 'Liked songs are saved on this device';
-        if (likedFolderSubtitle) likedFolderSubtitle.textContent = 'Your most favourite tracks';
-        profileButton.classList.remove('is-signed-in');
-        welcomeGreeting.hidden = true;
-        profileButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"></path></svg>';
-        profileButton.setAttribute('aria-label', 'Account and sync information');
-        accountView.hidden = true;
-        guestView.hidden = false;
-        document.getElementById('profileDialogTitle').hidden = false;
-        profileDialog.classList.remove('is-signed-in');
-        status.hidden = Boolean(clientId);
-        if (!clientId) status.textContent = 'Google sign-in needs a Google OAuth client ID before it can be used.';
-      };
-
-      if (savedProfile && typeof savedProfile === 'object') showProfile(savedProfile);
-      else showGuest();
+      if (savedProfile && typeof savedProfile === 'object') {
+        showProfile(savedProfile);
+        hideLoginScreen();
+      } else {
+        showLoginScreen();
+        hideAppLoader();
+      }
 
       let tokenClient = null;
       const keepSavedAccountVisible = () => {
@@ -5927,8 +6066,8 @@
 
       const finishGoogleSignIn = (response) => {
         if (response.error || !response.access_token) {
-          status.hidden = false;
-          status.textContent = 'Google sign-in failed. Please try again.';
+          loginStatus.hidden = false;
+          loginStatus.textContent = 'Google sign-in failed. Please try again.';
           return;
         }
         fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
@@ -5951,15 +6090,15 @@
             profile = { sub: profile.sub || '', name: profile.name || '', email: profile.email || '', picture: profile.picture || '' };
             localStorage.setItem(profileStorageKey, JSON.stringify(profile));
             savedProfile = profile;
-            showProfile(profile);
+            showProfile(profile, true);
             window.dispatchEvent(new Event('thaalam:authenticated'));
             if (profileDialog.open) profileDialog.close();
           })
           .catch(() => {
             if (savedProfile) keepSavedAccountVisible();
             else {
-              status.hidden = false;
-              status.textContent = 'Signed in with Google, but the profile could not be loaded.';
+              loginStatus.hidden = false;
+              loginStatus.textContent = 'Signed in with Google, but the profile could not be loaded.';
             }
           });
       };
@@ -5979,14 +6118,12 @@
       const requestGoogleAccess = () => {
         const client = getTokenClient();
         if (!client) {
-          status.hidden = false;
-          status.textContent = 'Google sign-in is not available. Check the OAuth client configuration and reload.';
+          loginStatus.hidden = false;
+          loginStatus.textContent = 'Google sign-in is not available. Check the OAuth client configuration and reload.';
           return;
         }
         client.requestAccessToken();
       };
-
-      if (savedProfile && typeof savedProfile === 'object') keepSavedAccountVisible();
 
       window.addEventListener('thaalam:auth-expired', () => {
         sessionStorage.removeItem(accessTokenStorageKey);
@@ -6010,6 +6147,7 @@
           }
           localStorage.setItem('thaalam24x7-ratings-owner', 'anonymous');
         } catch { /* Keep the active device ratings if storage is unavailable. */ }
+        savedProfile = null;
         localStorage.removeItem(profileStorageKey);
         sessionStorage.removeItem(accessTokenStorageKey);
         localStorage.removeItem(accessTokenStorageKey);
