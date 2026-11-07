@@ -6950,8 +6950,26 @@ img {
 /* Keep the mobile player composition consistent: artwork stays compact enough
    that the top of the Lyrics card is visible on every phone height. */
 @media (max-width: 56.1875rem), (pointer: coarse) and (any-pointer: coarse) {
+  body.view-now-playing {
+    --mobile-player-content-width: min(
+      calc(100vw - 4rem),
+      22rem,
+      max(12rem, calc(100dvh - 22rem))
+    );
+  }
+
   body.view-now-playing .album-art-card {
-    width: min(100%, 18rem, max(10rem, calc(100dvh - 28.5rem)));
+    width: var(--mobile-player-content-width);
+  }
+
+  body.view-now-playing .now-playing-track,
+  body.view-now-playing .live-row,
+  body.view-now-playing .track-time,
+  body.view-now-playing .player-controls,
+  body.view-now-playing .lyrics-panel {
+    width: var(--mobile-player-content-width);
+    max-width: 100%;
+    margin-inline: auto;
   }
 }
 
