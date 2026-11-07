@@ -1372,13 +1372,13 @@
       : null;
     const ACTIVE_VIEW_KEY = 'thaalam-active-view-v1';
     const ACTIVE_GENRE_KEY = 'thaalam-active-genre-v1';
-    let activeGenre = null;
+    let activeGenre = 'international';
     try {
       const savedGenre = localStorage.getItem(ACTIVE_GENRE_KEY);
       if (savedGenre === 'you-like') {
         activeGenre = savedGenre;
       }
-    } catch { /* Use International on first load. */ }
+    } catch { /* Use International when browser storage is unavailable. */ }
     let activeSearchTerm = '';
     let suggestionRequestId = 0;
     let suggestionTimer = 0;
@@ -4640,7 +4640,7 @@
       }
     });
 
-    function loadGenre(genre) {
+    function loadGenre(genre, { scrollDesktopShelf = true } = {}) {
       if (activeGenre !== genre) {
         genreResults.scrollTop = 0;
         if (catalogSearchInput.value) {
@@ -4680,7 +4680,7 @@
         const section = [...shelves.children].find(
           (item) => item.getAttribute('aria-label') === `${category?.title || ''} songs`
         );
-        if (section) {
+        if (section && scrollDesktopShelf) {
           const sectionTop = section.getBoundingClientRect().top - shelves.getBoundingClientRect().top;
           const shelfPadding = parseFloat(getComputedStyle(shelves).paddingTop) || 0;
           shelves.scrollTo({
@@ -4750,6 +4750,18 @@
       activeGenre = 'international';
       favouriteSortControl.hidden = true;
       setPersonalisedPicksSubtitle();
+      // The Library detail is rendered within Home, so showView('home') would
+      // treat it as the already-active page. Replay Home's existing entrance
+      // animation explicitly to give this back action the same transition as
+      // navigating to Home from another desktop view.
+      const homePage = document.getElementById('homePage');
+      if (homePage) {
+        homePage.style.animation = 'none';
+        void homePage.offsetWidth;
+        homePage.style.animation = '';
+      }
+      scheduleHomeRefresh();
+      void loadMobileHomeGenres();
     }
 
     window.addEventListener('thaalam-on-demand-playback-history-change', () => {
@@ -5069,7 +5081,7 @@
       homeRefreshTimer = window.setTimeout(() => {
         homeRefreshTimer = 0;
         if (activeGenre.startsWith('search:')) loadCatalog(activeGenre, activeSearchTerm);
-        else loadGenre(activeGenre);
+        else loadGenre(activeGenre, { scrollDesktopShelf: false });
       }, VIEW_SLIDE_MS);
     }
 

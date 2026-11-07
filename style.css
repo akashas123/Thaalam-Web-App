@@ -7687,6 +7687,9 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
   body.view-home.desktop-library-active .home-page .site-page-content {
     --liked-songs-table-columns: 2.5rem 3rem minmax(14rem, 1.9fr) minmax(6rem, 1fr) 4.5rem 2.5rem;
     grid-template-rows: auto auto auto minmax(0, 1fr);
+    /* The table has its own scroll region. Let the header's back control use
+       the outer gutter instead of clipping it at the content column edge. */
+    overflow: visible;
   }
 
   body.view-home.desktop-library-active .home-catalog-header,
@@ -7780,19 +7783,28 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
   body.desktop-library-active #likedSongsHeader #closeLikedSongs {
     position: absolute;
     z-index: 10;
-    top: 0.5rem;
-    right: 10rem;
-    transform: translate(-100%, -50%);
+    top: calc(50% - 0.9rem);
+    /* Fits entirely in the Home page's existing left padding, keeping the
+       cover in its original position while avoiding horizontal clipping. */
+    left: calc(-2.25rem - 1rem);
+    transform: translateY(-50%);
     display: grid;
-    width: 2.5rem;
-    height: 2.5rem;
+    width: 2.25rem;
+    height: 2.25rem;
     place-items: center;
     border: 0;
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.15);
     color: #fff;
-    font-size: 1.8rem;
+    font-size: 1.7rem;
     cursor: pointer;
+    transition: background 0.18s ease, color 0.18s ease;
+  }
+
+  body.view-home.desktop-library-active #likedSongsHeader #closeLikedSongs:hover,
+  body.view-home.desktop-library-active #likedSongsHeader #closeLikedSongs:focus-visible {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
   }
 
   body.view-home.desktop-library-active .liked-songs-view-title {
@@ -7811,7 +7823,7 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
     align-items: center;
     justify-content: flex-start;
     gap: 1rem;
-    margin: 1rem 0 1.25rem;
+    margin: 1rem 0 2rem;
   }
 
   body.view-home.desktop-library-active .liked-folder-playback-actions {
