@@ -606,8 +606,12 @@ html.is-restoring-session .app-loader {
   left: 50%;
   max-width: min(94vw, 64rem);
   width: 100%;
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  scrollbar-width: none;
   transform: translate(-50%, -50%);
 }
+.login-card::-webkit-scrollbar { display: none; }
 .login-heading {
   margin: 0 0 0.85rem;
   font-size: clamp(2rem, 3.8vw, 3.5rem);
@@ -669,29 +673,31 @@ html.is-restoring-session .app-loader {
 
 @media (max-width: 40rem) {
   .login-card {
-    width: calc(100% - 2rem);
+    width: min(calc(100% - 2rem), 34rem);
   }
 
   .login-heading {
-    margin-bottom: 0.7rem;
+    margin-bottom: 0.8rem;
     width: 113.64%;
     margin-left: -6.82%;
-    font-size: clamp(1.2rem, 5.6vw, 1.7rem);
-    letter-spacing: -0.04em;
+    font-size: clamp(1rem, 6.2vw, 1.85rem);
+    letter-spacing: -0.045em;
     line-height: 1.15;
-    transform: scaleX(0.88);
+    transform: scaleX(0.86);
     transform-origin: center;
     white-space: nowrap !important;
   }
 
   .login-subtitle {
-    margin-bottom: 2.5rem;
-    font-size: clamp(0.9rem, 3.8vw, 1rem);
+    margin: 0 0 2.5rem;
+    color: rgba(255, 255, 255, 0.86);
+    font-size: clamp(0.88rem, 4vw, 1rem);
     line-height: 1.4;
   }
 
   .login-button {
     width: min(82%, 20rem);
+    min-width: 10.5rem;
     padding: 0.9rem 1.1rem;
     font-size: 1rem;
   }
@@ -700,6 +706,27 @@ html.is-restoring-session .app-loader {
     width: 1.9rem;
     height: 1.9rem;
   }
+}
+
+/* Landscape phones and compact-height browser windows need less vertical
+   breathing room, while retaining the same visual hierarchy. */
+@media (max-height: 34rem) {
+  .login-heading { margin-bottom: 0.45rem; }
+  .login-subtitle { margin-bottom: 1.15rem; }
+  .login-button { padding-block: 0.75rem; }
+  .login-button-icon { width: 1.65rem; height: 1.65rem; }
+}
+
+/* Keep the complete headline inside exceptionally narrow device viewports. */
+@media (max-width: 17.5rem) {
+  .login-card { width: calc(100% - 1rem); }
+  .login-heading {
+    width: 119%;
+    margin-left: -9.5%;
+    font-size: 1rem;
+    transform: scaleX(0.8);
+  }
+  .login-button { min-width: 0; width: 100%; }
 }
 
 .site-page {
