@@ -144,6 +144,11 @@ body.on-demand-paused .tagline #nowPlaying::after {
 
 /* The liked-folder header and back row belong to the mobile Library flow.
    Hide them on wide layouts even if a mobile folder state survives resizing. */
+.liked-folder-playback-actions,
+.liked-folder-table-header {
+  display: none;
+}
+
 @media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) {
   .library-playlist-heading,
   .liked-songs-view-title {
@@ -352,6 +357,10 @@ body.view-now-playing::after {
   display: none;
 }
 
+.mobile-home-initial-shelf {
+  display: none !important;
+}
+
 .desktop-profile-button {
   position: fixed;
   z-index: 6;
@@ -551,6 +560,36 @@ body.view-about .site-page.about-page {
 }
 
 @media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) {
+  /* Desktop tiles always expose their primary action. This is intentionally
+     not hover-only: the control remains discoverable when using a mouse,
+     trackpad, or keyboard. */
+  body.view-home .genre-results:not(.favourites-list-layout) .genre-card-media > .genre-play-button {
+    position: absolute !important;
+    z-index: 4;
+    display: grid !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    top: 50%;
+    right: auto;
+    bottom: auto;
+    left: 50%;
+    width: clamp(2rem, 32%, 2.8rem);
+    aspect-ratio: 1;
+    border: 1px solid rgba(255, 255, 255, 0.82);
+    border-radius: 50%;
+    background: rgba(8, 10, 14, 0.72);
+    color: #fff;
+    box-shadow: 0 0.25rem 0.8rem rgba(0, 0, 0, 0.45);
+    transform: translate(-50%, -50%);
+  }
+
+  body.view-home .genre-results:not(.favourites-list-layout) .genre-card-media > .genre-play-button:hover,
+  body.view-home .genre-results:not(.favourites-list-layout) .genre-card-media > .genre-play-button:focus-visible {
+    background: rgba(8, 10, 14, 0.9);
+    border-color: #fff;
+    transform: translate(-50%, -50%) scale(1.07);
+  }
+
   /* Now Playing's sideways slide is desktop-only. On mobile the page is the
      launch view — showView() no-ops there and the body class never switches —
      so the global rule only made the player card and lyrics slide in on every
@@ -2225,7 +2264,20 @@ body.view-rises-from-mini.view-now-playing .player-view {
   }
 
   .genre-results.favourites-list-layout .genre-card-details {
+    min-width: 0;
     margin-top: 0;
+    overflow: hidden;
+  }
+
+  .genre-results.favourites-list-layout .genre-card-list-actions {
+    flex: 0 0 auto;
+  }
+
+  .genre-results.favourites-list-layout .genre-card-title,
+  .genre-results.favourites-list-layout .genre-card-artist {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .genre-results.favourites-list-layout .genre-card-title {
@@ -6325,6 +6377,11 @@ img {
     gap: 0.4rem;
   }
 
+  body.library-playlist-open .liked-folder-hero-art,
+  body.library-playlist-open .liked-folder-hero-meta {
+    display: none;
+  }
+
   body.library-playlist-open .liked-folder-subtitle {
     margin-top: 0;
   }
@@ -7406,8 +7463,731 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
     height: 3.75rem;
   }
 }
+
+
+  body.view-home:not(.has-home-glow) {
+    background:
+      radial-gradient(ellipse 100% 64% at 0% 0%, rgba(80, 68, 64, 0.62), transparent 100%),
+      #05070d;
+  }
+
+  .home-page .site-page-content {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .home-page {
+    --desktop-home-art-size: 6rem;
+    --desktop-home-genre-art-size: clamp(8.5rem, 11vw, 11rem);
+  }
+
+  .home-page .genre-tabs {
+    display: none !important;
+  }
+
+  body.view-home:not(.desktop-library-active) .home-page .favourite-sort-control {
+    display: none !important;
+  }
+
+  .home-page .mobile-genre-shelves {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin-top: 1.5rem;
+  }
+
+  .home-page .mobile-genre-shelves::-webkit-scrollbar,
+  .home-page .mobile-genre-track-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .home-page .mobile-genre-shelves {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding: 3rem 0 3rem;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-width: none;
+  }
+
+  .home-page .mobile-genre-row {
+    min-width: 0;
+    flex: 0 0 auto;
+    overflow: visible;
+    scroll-margin-top: 0.5rem;
+  }
+
+  .home-page .mobile-home-initial-shelf {
+    display: block !important;
+  }
+
+  .home-page .mobile-genre-row h2 {
+    margin-bottom: 0.75rem;
+    font-size: 1.15rem;
+  }
+
+  .home-page .mobile-genre-track-row {
+    display: flex;
+    gap: 1rem;
+    overflow-x: auto;
+    padding-bottom: 0.35rem;
+  }
+
+  .home-page .mobile-genre-track {
+    position: relative;
+    width: clamp(8.5rem, 11vw, 11rem);
+    min-width: 0;
+    flex: 0 0 clamp(8.5rem, 11vw, 11rem);
+    overflow: hidden;
+  }
+
+  .home-page .mobile-genre-track-art {
+    position: relative;
+    display: block;
+    overflow: hidden;
+    border: 0;
+    border-radius: 0.55rem;
+    background: #111 url('album-placeholder.svg?v=3') center / cover no-repeat;
+  }
+
+  .home-page .mobile-genre-track-art.is-liked-folder-recent {
+    display: grid;
+    place-items: center;
+    background: linear-gradient(145deg, color-mix(in srgb, var(--liked-folder-color) 65%, white) 0%, var(--liked-folder-color) 55%, color-mix(in srgb, var(--liked-folder-color) 82%, black) 100%);
+  }
+
+  .home-page .mobile-genre-track-art.is-liked-folder-recent svg {
+    width: 1.8rem;
+    height: 1.8rem;
+    fill: #fff !important;
+  }
+
+  .home-page .mobile-genre-track-art img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0;
+    transition: opacity 0.16s ease;
+  }
+
+  .home-page .mobile-genre-track-art.has-artwork img {
+    opacity: 1;
+  }
+
+  .home-page .mobile-genre-track-title,
+  .home-page .mobile-genre-track-artist {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .home-page .mobile-genre-track-title {
+    margin-top: 0.4rem;
+    color: #fff;
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  .home-page .mobile-genre-track-artist {
+    margin-top: 0.16rem;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 0.74rem;
+  }
+
+  .home-page .mobile-genre-track-art,
+  .home-page .mobile-genre-loading-art {
+    width: clamp(8.5rem, 11vw, 11rem);
+    min-width: clamp(8.5rem, 11vw, 11rem);
+    height: clamp(8.5rem, 11vw, 11rem);
+    min-height: clamp(8.5rem, 11vw, 11rem);
+    flex-basis: clamp(8.5rem, 11vw, 11rem);
+  }
+
+  .home-page .mobile-genre-loading-art {
+    display: block;
+    border-radius: 0.55rem;
+    background: #111 url('album-placeholder.svg?v=3') center / cover no-repeat;
+  }
+
+  .home-page .mobile-recents-row .mobile-genre-track,
+  .home-page .mobile-recents-row .mobile-genre-track-art {
+    width: var(--desktop-home-art-size);
+    min-width: var(--desktop-home-art-size);
+    flex-basis: var(--desktop-home-art-size);
+  }
+
+  .home-page .mobile-recents-row .mobile-genre-track {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .home-page .mobile-recents-row .mobile-genre-track-art {
+    height: var(--desktop-home-art-size);
+    min-height: var(--desktop-home-art-size);
+  }
+
+  .home-page .mobile-recents-row .mobile-genre-track-row {
+    gap: 0.8rem;
+    overflow-x: hidden;
+    justify-content: flex-start;
+  }
+
+  .home-page .mobile-recents-row .new-release-badge {
+    display: none;
+  }
+
+  .home-page .mobile-recents-row .mobile-genre-track {
+    flex-basis: var(--desktop-home-art-size);
+  }
+
+  body.view-home.desktop-library-active .liked-songs-view-title h2 {
+    display: none;
+  }
+
+  .home-page .desktop-library-row .mobile-genre-track-row {
+    gap: 0.8rem;
+  }
+
+  .desktop-liked-folder {
+    display: flex;
+    width: var(--desktop-home-genre-art-size);
+    flex: 0 0 var(--desktop-home-genre-art-size);
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.4rem;
+    border: 0;
+    background: transparent;
+    color: #fff;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .desktop-liked-folder-art {
+    display: grid;
+    width: var(--desktop-home-genre-art-size);
+    height: var(--desktop-home-genre-art-size);
+    place-items: center;
+    border-radius: 0.55rem;
+    background: linear-gradient(145deg, color-mix(in srgb, var(--liked-folder-color) 65%, white) 0%, var(--liked-folder-color) 55%, color-mix(in srgb, var(--liked-folder-color) 82%, black) 100%);
+  }
+
+  .desktop-liked-folder-art svg {
+    width: 1.8rem;
+    height: 1.8rem;
+    fill: #fff;
+  }
+
+  .desktop-liked-folder-title {
+    overflow: hidden;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .desktop-liked-folder:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.75);
+    outline-offset: 3px;
+  }
+
+  .home-page .recent-history-panel {
+    display: none;
+  }
+
+  body.view-home.desktop-catalog-active .home-page .site-page-content {
+    grid-template-rows: auto auto auto minmax(0, 1fr);
+  }
+
+  body.view-home.desktop-catalog-active .home-page .mobile-genre-shelves {
+    display: none;
+  }
+
+  body.view-home.desktop-catalog-active .home-page .recent-history-panel {
+    display: contents;
+  }
+
+  body.view-home.desktop-catalog-active .home-page .genre-results {
+    display: grid;
+  }
+
+  body.view-home.desktop-library-active .home-page .site-page-content {
+    --liked-songs-table-columns: 2.5rem 3rem minmax(14rem, 1.9fr) minmax(6rem, 1fr) 4.5rem 2.5rem;
+    grid-template-rows: auto auto auto minmax(0, 1fr);
+    /* The table has its own scroll region. Let the header's back control use
+       the outer gutter instead of clipping it at the content column edge. */
+    overflow: visible;
+  }
+
+  body.view-home.desktop-library-active .home-catalog-header,
+  body.view-home.desktop-library-active .mobile-genre-shelves {
+    display: none !important;
+  }
+
+  body.view-home.desktop-library-active #likedSongsHeader:not([hidden]) {
+    display: grid !important;
+    grid-column: 1 / -1;
+    grid-row: 1;
+    grid-template-columns: clamp(8rem, 9vw, 9rem) minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+    align-items: start;
+    column-gap: 0.8rem;
+    row-gap: 0.55rem;
+    position: relative;
+    overflow: visible;
+  }
+
+  body.view-home.desktop-library-active #likedSongsHeader h1 {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+    overflow: visible;
+    font-size: clamp(2.5rem, 3.5vw, 3rem);
+    line-height: 1.2;
+    padding-bottom: 0.08em;
+  }
+
+  body.view-home.desktop-library-active #likedSongsHeader .library-subtitle {
+    grid-column: 2;
+    grid-row: 2;
+    margin: 0;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-hero-meta {
+    display: flex;
+    grid-column: 2;
+    grid-row: 3;
+    align-items: center;
+    gap: 1rem;
+    color: rgba(255, 255, 255, 0.76);
+    font-size: 0.85rem;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-hero-meta span + span {
+    padding-left: 1rem;
+    border-left: 1px solid rgba(255, 255, 255, 0.25);
+  }
+
+  body.view-home.desktop-library-active .liked-folder-hero-art {
+    position: relative;
+    display: grid;
+    width: clamp(8rem, 9vw, 9rem);
+    height: clamp(8rem, 9vw, 9rem);
+    grid-column: 1;
+    grid-row: 1 / span 3;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 0.85rem;
+    background: linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--liked-folder-color) 65%, white) 0%,
+      var(--liked-folder-color) 55%,
+      color-mix(in srgb, var(--liked-folder-color) 82%, black) 100%
+    );
+    box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, 0.22);
+  }
+
+  body.view-home.desktop-library-active .liked-folder-hero-art img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-hero-art.has-artwork .liked-folder-hero-heart {
+    display: none;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-hero-heart {
+    width: 2rem;
+    height: 2rem;
+    fill: #fff;
+  }
+
+  body.view-home.desktop-library-active #likedSongsHeader #closeLikedSongs,
+  body.desktop-library-active #likedSongsHeader #closeLikedSongs {
+    position: absolute;
+    z-index: 10;
+    top: calc(50% - 0.9rem);
+    /* Fits entirely in the Home page's existing left padding, keeping the
+       cover in its original position while avoiding horizontal clipping. */
+    left: calc(-2.25rem - 1rem);
+    transform: translateY(-50%);
+    display: grid;
+    width: 2.25rem;
+    height: 2.25rem;
+    place-items: center;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    font-size: 1.7rem;
+    cursor: pointer;
+    transition: background 0.18s ease, color 0.18s ease;
+  }
+
+  body.view-home.desktop-library-active #likedSongsHeader #closeLikedSongs:hover,
+  body.view-home.desktop-library-active #likedSongsHeader #closeLikedSongs:focus-visible {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+  }
+
+  body.view-home.desktop-library-active .liked-songs-view-title {
+    display: none !important;
+  }
+
+  body.view-home.desktop-library-active .liked-songs-view-title h2 {
+    font-size: 0.95rem;
+    font-weight: 650;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-toolbar:not([hidden]) {
+    display: flex;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 1rem;
+    margin: 1rem 0 2rem;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-playback-actions {
+    display: flex;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-playback-actions {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.9rem;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-play-all {
+    display: inline-flex;
+    min-width: 6.8rem;
+    height: 2.5rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    padding: 0 1rem;
+    border: 0;
+    border-radius: 999px;
+    background: #fff;
+    color: #171717;
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-play-all svg {
+    width: 1rem;
+    height: 1rem;
+    fill: currentColor;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-play-all:disabled,
+  body.view-home.desktop-library-active .liked-folder-shuffle:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-shuffle {
+    display: grid;
+    width: 2.5rem;
+    height: 2.5rem;
+    place-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    cursor: pointer;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-shuffle.is-active {
+    color: var(--liked-folder-color, #ff1744);
+  }
+
+  body.view-home.desktop-library-active .liked-folder-shuffle svg {
+    width: 1.15rem;
+    height: 1.15rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 2;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-toolbar .catalog-search {
+    display: flex;
+    flex: 0 1 22rem;
+    margin: 0;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-toolbar .favourite-sort-control {
+    display: flex;
+    width: auto;
+    grid-template-columns: none;
+    justify-content: flex-end;
+    margin-left: auto;
+    margin-top: 0;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-table-header {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-row: 3;
+    grid-template-columns: var(--liked-songs-table-columns);
+    align-items: center;
+    gap: 0.8rem;
+    /* The scrollable song area reserves space at the right. Match that here
+       so the headings sit above the existing song values without moving rows. */
+    padding: 0.35rem 3.5rem 0.35rem 0.75rem;
+    color: rgba(255, 255, 255, 0.66);
+    font-size: 0.8rem;
+  }
+
+  body.view-home.desktop-library-active #likedFolderTableHeader[hidden] {
+    display: none !important;
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout {
+    grid-row: 4;
+    padding-right: 0;
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .genre-card {
+    grid-template-columns: var(--liked-songs-table-columns);
+    gap: 0.8rem;
+    min-height: 3.5rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 0.6rem;
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .genre-card:hover,
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .genre-card:focus-within {
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: none;
+    transform: none;
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .genre-card-media {
+    grid-column: 2;
+    width: 3rem;
+    height: 3rem;
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .genre-card-art-frame {
+    width: 3rem;
+    height: 3rem;
+    border-radius: 0.35rem;
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .favourite-row-number {
+    grid-column: 1;
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 0.9rem;
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .genre-card-link,
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .genre-card-details {
+    grid-column: 3;
+    min-width: 0;
+    margin: 0;
+    color: #fff;
+    text-decoration: none;
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .genre-card-title {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 700;
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .favourite-row-artist {
+    grid-column: 4;
+    min-width: 0;
+    overflow: hidden;
+    color: rgba(255, 255, 255, 0.72);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.85rem;
+    padding-right: 1rem;
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .favourite-row-duration {
+    grid-column: 5;
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 0.85rem;
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .genre-remove-favourite-button {
+    grid-column: 6;
+    color: var(--liked-folder-color, #ff1744) !important;
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .genre-remove-favourite-button svg {
+    fill: var(--liked-folder-color, #ff1744) !important;
+    stroke: none !important;
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .genre-info-button {
+    grid-column: 7;
+    color: rgba(255, 255, 255, 0.78);
+  }
+
+  body.view-home.desktop-library-active .genre-results.favourites-list-layout .genre-info-button svg {
+    width: 1.1rem;
+    height: 1.1rem;
+    fill: currentColor;
+  }
+
+  body.view-home.desktop-library-active .genre-results {
+    grid-row: 4;
+  }
 .catalog-suggestions.catalog-suggestions-floating {
   position: fixed;
   right: auto;
   z-index: 9999;
+}
+
+/* The desktop catalogue is viewport-based, not pointer-based: a desktop can
+   report a coarse pointer when it has a touchscreen. Keep this affordance
+   visible in both cases. This final rule deliberately wins over mobile-card
+   declarations earlier in the stylesheet. */
+@media (min-width: 56.25rem) {
+  .home-page .mobile-genre-track-art > .desktop-home-play-overlay {
+    position: absolute;
+    z-index: 3;
+    display: grid;
+    width: clamp(2.2rem, 28%, 3.2rem);
+    aspect-ratio: 1;
+    top: 50%;
+    left: 50%;
+    place-items: center;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.88);
+    border-radius: 50%;
+    background: rgba(8, 10, 14, 0.78);
+    box-shadow: 0 0.25rem 0.8rem rgba(0, 0, 0, 0.5);
+    color: #fff;
+    transform: translate(-50%, -50%);
+  }
+
+  .home-page .mobile-genre-track-art > .desktop-home-play-overlay svg {
+    width: 45%;
+    height: 45%;
+    fill: currentColor;
+  }
+
+  .home-page .mobile-genre-track-art > .desktop-home-play-overlay.is-playing {
+    background: rgba(8, 10, 14, 0.78);
+    border-color: rgba(255, 255, 255, 0.88);
+  }
+
+  .home-page .mobile-genre-track-art > .desktop-home-play-overlay.is-loading svg {
+    opacity: 0;
+  }
+
+  .home-page .mobile-genre-track-art > .desktop-home-play-overlay.is-loading::after {
+    position: absolute;
+    width: 1.35rem;
+    height: 1.35rem;
+    border: 0.15rem solid rgba(255, 255, 255, 0.28);
+    border-top-color: #fff;
+    border-radius: 50%;
+    content: '';
+    animation: streamSpinner 0.8s linear infinite;
+  }
+
+  body.view-home .genre-card-art-frame > .desktop-album-play-overlay {
+    position: absolute !important;
+    z-index: 20 !important;
+    display: grid !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    top: 50% !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: 50% !important;
+    width: clamp(2rem, 32%, 2.8rem) !important;
+    height: auto !important;
+    aspect-ratio: 1;
+    place-items: center;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.88) !important;
+    border-radius: 50% !important;
+    background: rgba(8, 10, 14, 0.78) !important;
+    color: #fff !important;
+    box-shadow: 0 0.25rem 0.8rem rgba(0, 0, 0, 0.52) !important;
+    transform: translate(-50%, -50%) !important;
+  }
+
+  body.view-home .genre-card-art-frame > .desktop-album-play-overlay svg {
+    display: block;
+    width: 45%;
+    height: 45%;
+    fill: currentColor;
+  }
+
+  body.view-home .genre-card-art-frame > .desktop-album-play-overlay:hover,
+  body.view-home .genre-card-art-frame > .desktop-album-play-overlay:focus-visible {
+    background: rgba(8, 10, 14, 0.96) !important;
+    transform: translate(-50%, -50%) scale(1.07) !important;
+  }
+
+  body.view-home .genre-results:not(.favourites-list-layout) .genre-card-media > .genre-play-button {
+    position: absolute !important;
+    z-index: 10 !important;
+    display: grid !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    top: 50% !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: 50% !important;
+    width: clamp(2rem, 32%, 2.8rem) !important;
+    height: auto !important;
+    aspect-ratio: 1;
+    border: 1px solid rgba(255, 255, 255, 0.82) !important;
+    border-radius: 50% !important;
+    background: rgba(8, 10, 14, 0.76) !important;
+    color: #fff !important;
+    box-shadow: 0 0.25rem 0.8rem rgba(0, 0, 0, 0.48) !important;
+    transform: translate(-50%, -50%) !important;
+  }
+
+  body.view-home .genre-results:not(.favourites-list-layout) .genre-card-media > .genre-play-button:hover,
+  body.view-home .genre-results:not(.favourites-list-layout) .genre-card-media > .genre-play-button:focus-visible {
+    background: rgba(8, 10, 14, 0.94) !important;
+    transform: translate(-50%, -50%) scale(1.07) !important;
+  }
+}
+
+/* Mobile Home: keep the first shelf close to the Browse heading and let the
+   Recents rail handle its own horizontal swipe gesture. These intentionally
+   override the desktop-home shelf rules that appear earlier in this file. */
+@media (max-width: 56.1875rem) {
+  body.view-home .home-page .mobile-genre-shelves {
+    margin-top: 1.8rem !important;
+    padding-top: 0.55rem !important;
+  }
+
+  body.view-home .home-page .mobile-recents-row .mobile-genre-track-row {
+    overflow-x: auto !important;
+    overflow-y: hidden;
+    justify-content: flex-start;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+  }
+
+  body.view-home .home-page .mobile-recents-row .mobile-genre-track {
+    flex: 0 0 5.5rem;
+  }
 }
