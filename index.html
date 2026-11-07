@@ -35,10 +35,21 @@
       );
     })();
   </script>
+  <script>
+    // Prevent a signed-in user's login gate from painting before the account
+    // bootstrap script below restores the locally saved profile.
+    try {
+      if (localStorage.getItem('thaalam.googleProfile')) {
+        document.documentElement.classList.add('has-saved-login');
+      }
+    } catch {
+      // Storage can be unavailable in private browsing; show the login gate.
+    }
+  </script>
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=640">
+  <link rel="stylesheet" href="style.css?v=662">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -262,6 +273,70 @@
     })();
   </script>
 
+  <!-- Full-screen login gate. Covers the app until the user signs in with Google. -->
+  <div id="loginScreen" class="login-screen" role="dialog" aria-modal="true" aria-labelledby="loginScreenTitle">
+    <video class="login-background-video is-visible" autoplay muted playsinline preload="auto" aria-hidden="true">
+      <source src="Login-background.mp4" type="video/mp4">
+    </video>
+    <video class="login-background-video" muted playsinline preload="auto" aria-hidden="true">
+      <source src="Login-background.mp4" type="video/mp4">
+    </video>
+    <div class="login-card">
+      <h1 id="loginScreenTitle" class="login-heading">Access to over <span class="login-highlight"><span id="loginCount">30</span> million songs</span></h1>
+      <p class="login-subtitle">Sign in to listen to your favourite songs across devices.</p>
+      <button class="login-button" id="googleSignInButton" type="button" disabled>
+        <img class="login-button-icon" src="Google.png" alt="" aria-hidden="true">
+        Continue with Google
+      </button>
+      <p class="login-status" id="loginStatus" role="status" hidden></p>
+    </div>
+  </div>
+
+  <div class="app-loader" id="appLoader" role="status" aria-label="Loading Thaalam">
+    <span class="app-loader-ring" aria-hidden="true"></span>
+  </div>
+
+  <script>
+    (() => {
+      const videos = [...document.querySelectorAll('.login-background-video')];
+      if (videos.length !== 2) return;
+
+      const fadeDuration = 0.85;
+      let active = videos[0];
+      let standby = videos[1];
+      let isCrossfading = false;
+
+      const beginCrossfade = () => {
+        if (isCrossfading || !Number.isFinite(active.duration) || active.duration - active.currentTime > fadeDuration) return;
+        isCrossfading = true;
+        standby.currentTime = 0;
+        standby.play().catch(() => {});
+        standby.classList.add('is-visible');
+        active.classList.remove('is-visible');
+
+        window.setTimeout(() => {
+          active.pause();
+          active.currentTime = 0;
+          [active, standby] = [standby, active];
+          isCrossfading = false;
+        }, fadeDuration * 1000);
+      };
+
+      const watchLoop = () => {
+        beginCrossfade();
+        requestAnimationFrame(watchLoop);
+      };
+
+      active.addEventListener('loadedmetadata', watchLoop, { once: true });
+      active.addEventListener('ended', () => {
+        if (!isCrossfading) {
+          active.currentTime = 0;
+          active.play().catch(() => {});
+        }
+      });
+    })();
+  </script>
+
   <nav class="desktop-nav" aria-label="Main navigation">
     <div class="desktop-nav-links">
       <span class="desktop-nav-pill" aria-hidden="true"></span>
@@ -279,11 +354,6 @@
     <form method="dialog"><button class="dialog-close" aria-label="Close account information">&times;</button></form>
     <p class="site-page-eyebrow">THAALAM ACCOUNT</p>
     <h2 id="profileDialogTitle">Listen across browsers</h2>
-    <div id="profileGuestView">
-      <p class="profile-dialog-copy">Sign in with your Google account to listen across browsers.</p>
-      <p class="profile-dialog-status" id="profileDialogStatus" role="status">Google sign-in needs a Google OAuth client ID before it can be used.</p>
-      <button class="profile-dialog-action" id="googleSignInButton" type="button" disabled title="Google sign-in is not configured yet">Continue with Google</button>
-    </div>
     <div id="profileAccountView" hidden>
       <img class="profile-account-avatar" id="profileAccountAvatar" alt="Profile picture">
       <p class="profile-account-name" id="profileAccountName"></p>
@@ -295,14 +365,35 @@
   <main class="site-page home-page" id="homePage" aria-labelledby="homeTitle">
     <div class="site-page-content">
       <header class="library-playlist-heading" id="likedSongsHeader" hidden>
+        <div class="liked-folder-hero-art" id="likedFolderHeroArt" aria-hidden="true">
+          <img id="likedFolderHeroImage" alt="" hidden>
+          <svg class="liked-folder-hero-heart" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78Z"/></svg>
+        </div>
         <h1>Your Library</h1>
         <p class="library-subtitle liked-folder-subtitle" id="likedFolderSubtitle">Liked songs are saved on this device</p>
+        <div class="liked-folder-hero-meta" id="likedFolderHeroMeta">
+          <span id="likedFolderSongCount">0 songs</span>
+          <span id="likedFolderHeroSource">On this device</span>
+        </div>
       </header>
       <div class="liked-songs-view-title">
-        <button type="button" id="closeLikedSongs" aria-label="Back to Library">‹</button>
+        <button type="button" id="closeLikedSongs" aria-label="Back to your library">‹</button>
         <h2>Liked Songs</h2>
       </div>
-      <div class="liked-folder-toolbar" id="likedFolderToolbar" hidden></div>
+      <div class="liked-folder-toolbar" id="likedFolderToolbar" hidden>
+        <div class="liked-folder-playback-actions">
+          <button class="liked-folder-play-all" id="likedFolderPlayAll" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+            <span>Play All</span>
+          </button>
+          <button class="liked-folder-shuffle" id="likedFolderShuffle" type="button" aria-label="Shuffle liked songs" title="Shuffle">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M4 4l5 5m3 3 9 9"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="liked-folder-table-header" id="likedFolderTableHeader" aria-hidden="true">
+        <span>#</span><span aria-hidden="true"></span><span>Title</span><span>Artist</span><span>Duration</span><span aria-hidden="true"></span>
+      </div>
       <header class="home-catalog-header">
         <div>
           <h1 id="homeTitle" tabindex="-1">Browse music</h1>
@@ -319,15 +410,35 @@
           <div class="catalog-suggestions" id="catalogSuggestions" role="listbox" aria-label="Song suggestions" hidden></div>
         </form>
       </header>
-      <div class="mobile-genre-shelves" id="mobileGenreShelves" aria-label="Browse songs by genre"></div>
-      <div class="genre-tabs" role="tablist" aria-label="Music genres">
-        <button class="genre-tab is-selected" type="button" role="tab" aria-selected="true" aria-controls="genreResults" tabindex="0" data-genre="international">International</button>
-        <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="hindi">Hindi</button>
-        <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="malayalam">Malayalam</button>
-        <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="tamil">Tamil</button>
-        <button class="genre-tab desktop-recents-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="recently-played">Recents</button>
-        <button class="genre-tab" type="button" role="tab" aria-selected="false" aria-controls="genreResults" tabindex="-1" data-genre="you-like">Favourites</button>
+      <div class="mobile-genre-shelves" id="mobileGenreShelves" aria-label="Browse songs by genre">
+        <section class="mobile-genre-row mobile-home-initial-shelf" aria-label="International songs">
+          <h2>International</h2><div class="mobile-genre-track-row">
+            <article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article>
+          </div>
+        </section>
+        <section class="mobile-genre-row mobile-home-initial-shelf" aria-label="Hindi songs">
+          <h2>Hindi</h2><div class="mobile-genre-track-row">
+            <article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article>
+          </div>
+        </section>
+        <section class="mobile-genre-row mobile-home-initial-shelf" aria-label="Malayalam songs">
+          <h2>Malayalam</h2><div class="mobile-genre-track-row">
+            <article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article>
+          </div>
+        </section>
+        <section class="mobile-genre-row mobile-home-initial-shelf" aria-label="Tamil songs">
+          <h2>Tamil</h2><div class="mobile-genre-track-row">
+            <article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article><article class="mobile-genre-track mobile-genre-loading-card"><div class="mobile-genre-loading-art"></div></article>
+          </div>
+        </section>
       </div>
+      <nav class="genre-tabs" aria-label="Browse music categories">
+        <button class="genre-tab is-selected" type="button" aria-pressed="true" data-genre="international">International</button>
+        <button class="genre-tab" type="button" aria-pressed="false" data-genre="hindi">Hindi</button>
+        <button class="genre-tab" type="button" aria-pressed="false" data-genre="malayalam">Malayalam</button>
+        <button class="genre-tab" type="button" aria-pressed="false" data-genre="tamil">Tamil</button>
+        <button class="genre-tab" type="button" aria-pressed="false" data-genre="you-like">Favourites</button>
+      </nav>
       <div class="favourite-sort-control" id="favouriteSortControl" hidden>
         <label for="favouriteSort">
           <svg class="favourite-sort-icon" viewBox="0 0 16 16" aria-hidden="true">
@@ -912,7 +1023,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=92"></script>
-  <script src="ondemand-player.js?v=197"></script>
+  <script src="ondemand-player.js?v=201"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=18"></script>
@@ -985,8 +1096,14 @@
       placeStationForViewport();
       placeStreamQualityForViewport();
       if (!desktopNavigation.matches) {
+        restoreMobileLikedSongsHeading();
+        returnLikedSongsBackButtonToRow();
         // Home is the default landing view on mobile, including after a
         // viewport change from desktop.
+        document.body.classList.remove('desktop-catalog-active', 'desktop-library-active');
+        document.getElementById('likedSongsHeader').hidden = true;
+        moveLikedFolderControls(false);
+        document.querySelector('#mobileGenreShelves .desktop-library-row')?.remove();
         applyView('home');
         storeActiveView('home');
         setMobileDestination('home');
@@ -1172,7 +1289,9 @@
     const catalogArtistPortrait = document.getElementById('catalogArtistPortrait');
     const catalogArtistBackground = document.getElementById('catalogArtistBackground');
     function moveLikedFolderControls(open) {
-      const shouldMove = Boolean(open && mobileFolderToolbarQuery.matches && likedFolderToolbar);
+      const shouldMove = Boolean(open &&
+        (mobileFolderToolbarQuery.matches || document.body.classList.contains('desktop-library-active')) &&
+        likedFolderToolbar);
       if (shouldMove) {
         likedFolderToolbar.hidden = false;
         likedFolderToolbar.append(catalogSearchForm, favouriteSortControl);
@@ -1326,8 +1445,7 @@
     let activeGenre = 'international';
     try {
       const savedGenre = localStorage.getItem(ACTIVE_GENRE_KEY);
-      if (savedGenre === 'you-like' || Object.prototype.hasOwnProperty.call(genreFeedIds, savedGenre) ||
-          (savedGenre === 'recently-played' && desktopNavigation.matches)) {
+      if (savedGenre === 'you-like') {
         activeGenre = savedGenre;
       }
     } catch { /* Use International when browser storage is unavailable. */ }
@@ -1336,6 +1454,12 @@
     let suggestionTimer = 0;
     let genreRequestId = 0;
     let currentFavouriteSongs = [];
+    let activeDesktopLibraryFolder = {
+      name: 'Liked Songs',
+      artworkUrl: '',
+      sourceLabel: 'On this device'
+    };
+    let desktopLibraryRequestId = 0;
     const pendingFavouriteRatingChanges = new Map();
     const PENDING_FAVOURITE_CHANGES_KEY = 'thaalam-pending-favourite-changes-v1';
     try {
@@ -1350,6 +1474,7 @@
     } catch { /* Pending UI overrides remain in memory for this session. */ }
     const FAVOURITE_SORT_KEY = 'thaalam-favourite-sort-v1';
     const FAVOURITE_LAYOUT_KEY = 'thaalam-favourite-layout-v1';
+    const TRACK_DURATION_CACHE_KEY = 'thaalam-track-duration-cache-v1';
     let favouriteLayout = 'list';
     let favouriteLayoutAnimationTimer = 0;
     try {
@@ -2109,12 +2234,73 @@
         existing.favouritedAt = Math.max(existing.favouritedAt || 0, song.favouritedAt || 0);
         if (!existing.providerTrackId && song.providerTrackId) existing.providerTrackId = song.providerTrackId;
         if (!existing.artworkUrl100 && song.artworkUrl100) existing.artworkUrl100 = song.artworkUrl100;
+        if (!existing.trackTimeMillis && song.trackTimeMillis) existing.trackTimeMillis = song.trackTimeMillis;
+        if (!existing.durationSeconds && song.durationSeconds) existing.durationSeconds = song.durationSeconds;
       }
       return uniqueSongs;
     }
 
+    function durationCacheIdentity(song) {
+      const normalize = (value) => String(value || '').trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+      const title = normalize(song?.trackName || song?.title);
+      const artist = normalize(song?.artistName || song?.artist);
+      return title && artist ? `${title}|${artist}` : '';
+    }
+
+    function readTrackDurationCache() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(TRACK_DURATION_CACHE_KEY) || '{}');
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+      } catch {
+        return {};
+      }
+    }
+
+    function cachedTrackDurationMillis(song, cache = readTrackDurationCache()) {
+      const identity = durationCacheIdentity(song);
+      const duration = Number(identity ? cache[identity] : 0);
+      return Number.isFinite(duration) && duration > 0 ? duration : 0;
+    }
+
+    function storeTrackDurations(songs) {
+      const cache = readTrackDurationCache();
+      let changed = false;
+      for (const song of Array.isArray(songs) ? songs : []) {
+        const identity = durationCacheIdentity(song);
+        const durationMillis = Number(song?.trackTimeMillis) || Number(song?.durationSeconds) * 1000;
+        if (!identity || !Number.isFinite(durationMillis) || durationMillis <= 0) continue;
+        if (Number(cache[identity]) !== durationMillis) {
+          cache[identity] = durationMillis;
+          changed = true;
+        }
+      }
+      if (!changed) return;
+      try { localStorage.setItem(TRACK_DURATION_CACHE_KEY, JSON.stringify(cache)); } catch { /* Cache is optional. */ }
+
+      for (const song of currentFavouriteSongs) {
+        if (!song.trackTimeMillis && !song.durationSeconds) {
+          const durationMillis = cachedTrackDurationMillis(song, cache);
+          if (durationMillis) {
+            song.trackTimeMillis = durationMillis;
+            song.durationSeconds = durationMillis / 1000;
+          }
+        }
+      }
+      genreResults.querySelectorAll('.genre-card').forEach((card) => {
+        const durationCell = card.querySelector('.favourite-row-duration');
+        const durationMillis = cachedTrackDurationMillis({
+          trackName: card.dataset.favouriteTrackName,
+          artistName: card.dataset.favouriteArtistName
+        }, cache);
+        if (!durationCell || !durationMillis) return;
+        const seconds = Math.floor(durationMillis / 1000);
+        durationCell.textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+      });
+    }
+
     function songsFromRatingEntries(entries, artworkByTrackKey = {}) {
-      return dedupeFavouriteSongs((Array.isArray(entries) ? entries : [])
+      const durationCache = readTrackDurationCache();
+      const songs = dedupeFavouriteSongs((Array.isArray(entries) ? entries : [])
         .filter((entry) => entry.rating === 'up')
         .map((entry) => {
           const trackKey = entry.track_key || '';
@@ -2123,6 +2309,7 @@
             ? (entry.track_id || entry.video_id || trackKey.slice('youtube:'.length))
             : (entry.video_id || '');
           const videoId = /^[\w-]{11}$/.test(candidateVideoId) ? candidateVideoId : '';
+          const durationSeconds = Math.max(0, Math.floor(Number(entry.duration_seconds) || 0));
           return {
             trackKey,
             trackId: entry.track_id || '',
@@ -2135,9 +2322,15 @@
               : (entry.track_id || entry.provider_track_id || ''),
             artworkUrl100: entry.artwork || entry.artworkUrl100 || artworkByTrackKey[trackKey] ||
               (!entry.artwork && videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : ''),
+            trackTimeMillis: durationSeconds * 1000 || cachedTrackDurationMillis({
+              trackName: entry.title,
+              artistName: entry.artist
+            }, durationCache),
             ...(videoId ? { youtubeVideoId: videoId } : {})
           };
         }));
+      storeTrackDurations(songs);
+      return songs;
     }
 
     function mergePendingFavouriteRatingChanges(entries, userId, { acknowledge = true } = {}) {
@@ -2169,6 +2362,9 @@
           artist: song.artistName || remote?.artist || 'Unknown artist',
           album: song.collectionName || remote?.album || '',
           artwork: song.artworkUrl100 || remote?.artwork || '',
+          duration_seconds: Math.max(0, Math.floor(
+            Number(song.trackTimeMillis) / 1000 || Number(song.durationSeconds) || Number(remote?.duration_seconds) || 0
+          )),
           updated_at: Math.floor(change.changedAt / 1000)
         };
         if (index >= 0) merged[index] = optimisticEntry;
@@ -2209,6 +2405,102 @@
           artworkByTrackKey
         }));
       } catch { /* The database remains authoritative if browser caching is unavailable. */ }
+    }
+
+    const favouriteDurationBackfills = new Set();
+
+    function durationSecondsFromSong(song) {
+      return Math.max(0, Math.min(86400, Math.floor(
+        Number(song?.trackTimeMillis) / 1000 || Number(song?.durationSeconds) || 0
+      )));
+    }
+
+    function normalizeDurationMatch(value) {
+      return String(value || '').toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+    }
+
+    async function resolveFavouriteDuration(song) {
+      const trackId = String(song?.providerTrackId || song?.trackId || '').trim();
+      try {
+        if (trackId) {
+          const url = new URL('/api/music-song', window.location.origin);
+          url.searchParams.set('id', trackId);
+          const response = await fetch(url, { cache: 'no-store' });
+          const data = await response.json().catch(() => null);
+          const seconds = Math.floor(Number(data?.results?.[0]?.durationSeconds) || 0);
+          if (response.ok && seconds > 0) return seconds;
+        }
+        const title = String(song?.trackName || '').trim();
+        const artist = String(song?.artistName || '').trim();
+        if (!title || !artist || title === 'Liked song' || artist === 'Unknown artist') return 0;
+        const url = new URL('/api/music-search', window.location.origin);
+        url.searchParams.set('q', `${title} ${artist}`);
+        url.searchParams.set('limit', '5');
+        const response = await fetch(url, { cache: 'no-store' });
+        const data = await response.json().catch(() => null);
+        if (!response.ok) return 0;
+        const wantedTitle = normalizeDurationMatch(title);
+        const wantedArtist = normalizeDurationMatch(artist);
+        const match = (data?.results || []).find((candidate) =>
+          normalizeDurationMatch(candidate?.title) === wantedTitle &&
+          (normalizeDurationMatch(candidate?.artist).includes(wantedArtist) || wantedArtist.includes(normalizeDurationMatch(candidate?.artist)))
+        ) || data?.results?.[0];
+        return Math.max(0, Math.floor(Number(match?.durationSeconds) || 0));
+      } catch {
+        return 0;
+      }
+    }
+
+    async function backfillFavouriteDurations(userId, ratings, songs) {
+      if (!userId || !Array.isArray(ratings) || !Array.isArray(songs)) return;
+      const ratingsByKey = new Map(ratings.map((entry) => [entry.track_key, entry]));
+      const missing = songs.filter((song) => {
+        const entry = ratingsByKey.get(song.trackKey);
+        return entry?.rating === 'up' && !durationSecondsFromSong(song) && !Number(entry.duration_seconds);
+      }).slice(0, 30);
+      if (!missing.length) return;
+      const token = window.getThaalamGoogleAccessToken?.();
+      const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+      const updates = [];
+      for (let index = 0; index < missing.length; index += 3) {
+        const batch = await Promise.all(missing.slice(index, index + 3).map(async (song) => {
+          if (favouriteDurationBackfills.has(song.trackKey)) return null;
+          favouriteDurationBackfills.add(song.trackKey);
+          const durationSeconds = await resolveFavouriteDuration(song);
+          favouriteDurationBackfills.delete(song.trackKey);
+          return durationSeconds ? { song, durationSeconds } : null;
+        }));
+        updates.push(...batch.filter(Boolean));
+      }
+      if (!updates.length) return;
+      for (const { song, durationSeconds } of updates) {
+        song.durationSeconds = durationSeconds;
+        song.trackTimeMillis = durationSeconds * 1000;
+        const entry = ratingsByKey.get(song.trackKey);
+        if (entry) entry.duration_seconds = durationSeconds;
+      }
+      storeTrackDurations(updates.map(({ song }) => song));
+      persistFavouriteArtwork(userId, songs, ratings);
+      try {
+        const response = await fetch('/api/ratings', {
+          method: 'PUT', credentials: 'same-origin', headers,
+          body: JSON.stringify({ ratings: updates.map(({ song, durationSeconds }) => ({
+            trackKey: song.trackKey,
+            rating: 'up',
+            title: song.trackName,
+            artist: song.artistName,
+            album: song.collectionName || '',
+            trackId: song.trackId || song.providerTrackId || '',
+            providerTrackId: song.providerTrackId || '',
+            artwork: song.artworkUrl100 || '',
+            videoId: song.youtubeVideoId || '',
+            durationSeconds
+          })) })
+        });
+        if (!response.ok) throw new Error(`Duration sync failed (${response.status}).`);
+      } catch (error) {
+        console.warn('Could not save liked-song durations to the account.', error);
+      }
     }
 
     function patchFavouriteArtworkInPlace(songs) {
@@ -2285,6 +2577,14 @@
 
     function refreshFavouriteListPlaybackState() {
       const miniPlayerSong = window.latestNowPlayingData?.now_playing?.song || window.currentNowPlayingSong;
+      const currentDuration = Number(window.latestNowPlayingData?.now_playing?.duration) || 0;
+      if (miniPlayerSong && currentDuration > 0) {
+        storeTrackDurations([{
+          trackName: miniPlayerSong.title || miniPlayerSong.trackName,
+          artistName: miniPlayerSong.artist || miniPlayerSong.artistName,
+          trackTimeMillis: currentDuration * 1000
+        }]);
+      }
       const current = miniPlayerSong || (window.onDemandPlaybackActive
         ? window.getCurrentOnDemandSong?.()
         : null);
@@ -2306,6 +2606,13 @@
           Number(card.dataset.queueStep) === recentQueuePosition.queueStep
         ));
         card.classList.toggle('is-active-track', active);
+        if (active && genreResults.classList.contains('favourites-list-layout')) {
+          const durationSeconds = Math.floor(Number(window.latestNowPlayingData?.now_playing?.duration) || 0);
+          const durationCell = card.querySelector('.favourite-row-duration');
+          if (durationCell && durationSeconds > 0) {
+            durationCell.textContent = `${Math.floor(durationSeconds / 60)}:${String(durationSeconds % 60).padStart(2, '0')}`;
+          }
+        }
         const button = card.querySelector('.genre-play-button');
         if (!button) return;
         const isPlaying = active && playing;
@@ -2359,10 +2666,7 @@
       probe.decoding = 'async';
       probe.onerror = () => {
         if (requestId !== homeTintSampleRequest) return;
-        setHomeTint('');
-        // CORS-blocked art (e.g. some chart images) still gets a soft
-        // neutral glow from the blurred ::before layer alone — leave the
-        // wash cleared so it can't mismatch the real cover.
+        setHomeTint(desktopNavigation.matches ? '#302b35' : '');
       };
       probe.onload = () => {
         if (requestId !== homeTintSampleRequest) return;
@@ -2393,7 +2697,10 @@
             buckets.set(key, bucket);
           }
           const dominant = [...buckets.values()].sort((a, b) => b.score - a.score)[0];
-          if (!dominant) return;
+          if (!dominant) {
+            if (desktopNavigation.matches) setHomeTint('#302b35');
+            return;
+          }
           const average = [dominant.r, dominant.g, dominant.b].map((channel) => channel / dominant.count);
           const brightness = average.reduce((sum, channel) => sum + channel, 0) / 3;
           const channels = average.map((channel) =>
@@ -2424,7 +2731,7 @@
             .join('');
           setHomeTint(`#${hex}`);
         } catch {
-          // Keep the default tint.
+          if (desktopNavigation.matches) setHomeTint('#302b35');
         }
       };
       probe.src = url;
@@ -2460,15 +2767,111 @@
       updateHomeTint(firstArtwork ? [{ artworkUrl100: firstArtwork }] : []);
     }
 
+    function updateDesktopHomeTint() {
+      if (!desktopNavigation.matches) return;
+      const firstArtwork = [...document.querySelectorAll(
+        '#mobileGenreShelves .mobile-genre-track-art img'
+      )]
+        .map((image) => image.currentSrc || image.src)
+        .find((url) => url && !url.includes('album-placeholder.svg'));
+      updateHomeTint(firstArtwork ? [{ artworkUrl100: firstArtwork }] : []);
+    }
+
+    function updateDesktopLibraryHero() {
+      const name = activeDesktopLibraryFolder.name || 'Liked Songs';
+      const artworkUrl = String(activeDesktopLibraryFolder.artworkUrl || '').replace(/^http:/, 'https:');
+      const count = Number.isFinite(Number(activeDesktopLibraryFolder.songCount))
+        ? Number(activeDesktopLibraryFolder.songCount)
+        : currentFavouriteSongs.length;
+      const image = document.getElementById('likedFolderHeroImage');
+      const artwork = document.getElementById('likedFolderHeroArt');
+      document.querySelector('#likedSongsHeader h1').textContent = name;
+      document.getElementById('likedFolderSubtitle').textContent = name === 'Liked Songs'
+        ? 'Your most favourite tracks'
+        : `Songs in ${name}.`;
+      document.querySelector('.liked-songs-view-title h2').textContent = name;
+      document.getElementById('likedFolderSongCount').textContent = `${count} ${count === 1 ? 'song' : 'songs'}`;
+      document.getElementById('likedFolderHeroSource').textContent = activeDesktopLibraryFolder.sourceLabel || 'On this device';
+      document.getElementById('likedFolderPlayAll').disabled = count === 0;
+      document.getElementById('likedFolderShuffle').disabled = count === 0;
+      document.getElementById('likedFolderShuffle').setAttribute('aria-label', `Shuffle ${name.toLocaleLowerCase()}`);
+      if (!image || !artwork) return;
+      if (!artworkUrl) {
+        image.removeAttribute('src');
+        image.hidden = true;
+        artwork.classList.remove('has-artwork');
+        return;
+      }
+      image.onerror = () => {
+        image.hidden = true;
+        artwork.classList.remove('has-artwork');
+      };
+      image.onload = () => artwork.classList.add('has-artwork');
+      image.src = artworkUrl;
+      image.hidden = false;
+    }
+
+    function updateDesktopLibraryFolder() {
+      const shelves = document.getElementById('mobileGenreShelves');
+      if (!shelves) return;
+      if (document.body.classList.contains('desktop-library-active')) updateDesktopLibraryHero();
+      const existingSection = shelves.querySelector('.desktop-library-row');
+      if (!desktopNavigation.matches || !currentFavouriteSongs.length) {
+        existingSection?.remove();
+        return;
+      }
+
+      const genreShelves = [...shelves.children].filter((shelf) =>
+        mobileHomeGenreRows.some((category) =>
+          shelf.getAttribute('aria-label') === `${category.title} songs`
+        )
+      );
+      if (genreShelves.length < 2) {
+        existingSection?.remove();
+        return;
+      }
+      existingSection?.remove();
+
+      const section = document.createElement('section');
+      section.className = 'mobile-genre-row desktop-library-row';
+      section.setAttribute('aria-label', 'From your library');
+      const heading = document.createElement('h2');
+      heading.textContent = 'From your library';
+      const trackRow = document.createElement('div');
+      trackRow.className = 'mobile-genre-track-row';
+      const folder = document.createElement('button');
+      folder.type = 'button';
+      folder.className = 'desktop-liked-folder';
+      folder.dataset.folderName = 'Liked Songs';
+      folder.dataset.folderArtwork = '';
+      folder.dataset.folderSource = 'On this device';
+      folder.setAttribute('aria-label', `Open Liked Songs, ${currentFavouriteSongs.length} songs`);
+      folder.innerHTML = '<span class="desktop-liked-folder-art" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78Z"/></svg></span><span class="desktop-liked-folder-title">Liked Songs</span>';
+      folder.addEventListener('click', () => openDesktopLibraryFolder(folder));
+      trackRow.appendChild(folder);
+      section.append(heading, trackRow);
+      genreShelves[1].after(section);
+    }
+
     function renderGenreResults(songs) {
       if (activeGenre.startsWith('search:')) genreResults.scrollTop = 0;
-      lastGenreResultsSongs = songs;
+      storeTrackDurations(songs);
       songs = window.filterUnavailableOnDemandSongs?.(songs) || songs;
+      const durationCache = readTrackDurationCache();
+      songs = songs.map((song) => {
+        if (song.trackTimeMillis || song.durationSeconds) return song;
+        const trackTimeMillis = cachedTrackDurationMillis(song, durationCache);
+        return trackTimeMillis ? { ...song, trackTimeMillis, durationSeconds: trackTimeMillis / 1000 } : song;
+      });
+      lastGenreResultsSongs = songs;
       const wasBusy = genreResults.getAttribute('aria-busy') === 'true';
       genreResults.setAttribute('aria-busy', 'false');
       genreResults.classList.toggle(
         'favourites-list-layout',
         activeGenre === 'you-like' && favouriteLayout === 'list'
+      );
+      document.getElementById('likedFolderTableHeader').hidden = !(
+        desktopNavigation.matches && activeGenre === 'you-like' && favouriteLayout === 'list'
       );
       genreResults.classList.toggle('favourites-view', activeGenre === 'you-like');
       const recentHistoryLayout = activeGenre === 'recently-played';
@@ -2666,6 +3069,8 @@
         infoButton.type = 'button';
         infoButton.setAttribute('aria-label', `Song information for ${song.trackName || 'song'}`);
         infoButton.title = 'Song information';
+        const desktopFavouriteList = activeGenre === 'you-like' &&
+          favouriteLayout === 'list' && desktopNavigation.matches;
         infoButton.textContent = 'i';
         infoButton.addEventListener('click', () => openCatalogSongInfo(song, infoButton));
 
@@ -2745,6 +3150,14 @@
         } else {
           media.append(artworkFrame, playButton, infoButton);
         }
+        // In the desktop discovery grid the play action belongs inside the
+        // artwork itself. Keeping it in the frame avoids any grid/list chrome
+        // from covering or suppressing the overlay.
+        if (window.matchMedia('(min-width: 56.25rem)').matches &&
+            !isFavouriteList && !recentHistoryLayout && !desktopSearchListLayout) {
+          playButton.classList.add('desktop-album-play-overlay');
+          artworkFrame.appendChild(playButton);
+        }
 
         const details = document.createElement('div');
         details.className = 'genre-card-details';
@@ -2759,7 +3172,48 @@
         // Search rows skip the iTunes Store link: the metadata tap plays the
         // song instead of navigating away.
         const mobileFavourite = activeGenre === 'you-like' && !desktopNavigation.matches;
-        if (mobileFavourite) {
+        if (desktopFavouriteList) {
+          details.replaceChildren(title);
+          const rowNumber = document.createElement('span');
+          rowNumber.className = 'favourite-row-number';
+          rowNumber.textContent = String(cardIndex + 1);
+          const artistColumn = document.createElement('span');
+          artistColumn.className = 'favourite-row-artist';
+          artistColumn.textContent = song.artistName || 'Unknown artist';
+          const durationColumn = document.createElement('span');
+          durationColumn.className = 'favourite-row-duration';
+          const nowPlaying = window.latestNowPlayingData?.now_playing;
+          const nowPlayingSong = nowPlaying?.song || window.currentNowPlayingSong;
+          const normalizeTrackPart = (value) => String(value || '').trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+          const matchesNowPlaying = normalizeTrackPart(song.trackName) === normalizeTrackPart(nowPlayingSong?.title || nowPlayingSong?.trackName) &&
+            normalizeTrackPart(song.artistName) === normalizeTrackPart(nowPlayingSong?.artist || nowPlayingSong?.artistName);
+          const durationSeconds = Math.floor(
+            (Number(song.trackTimeMillis) || Number(song.durationSeconds) * 1000 ||
+              (matchesNowPlaying ? Number(nowPlaying?.duration) * 1000 : 0)) / 1000
+          );
+          durationColumn.textContent = durationSeconds
+            ? `${Math.floor(durationSeconds / 60)}:${String(durationSeconds % 60).padStart(2, '0')}`
+            : '—';
+          let titleCell = details;
+          if (song.trackViewUrl) {
+            const link = document.createElement('a');
+            link.className = 'genre-card-link';
+            link.href = song.trackViewUrl.replace(/^http:/, 'https:');
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.setAttribute('aria-label', `Open ${song.trackName || 'song'} in the iTunes Store`);
+            link.append(details);
+            titleCell = link;
+          }
+          card.append(
+            rowNumber,
+            media,
+            titleCell,
+            artistColumn,
+            durationColumn,
+            removeFavouriteButton
+          );
+        } else if (mobileFavourite) {
           const metadataPlayButton = document.createElement('button');
           metadataPlayButton.className = 'genre-card-meta-tap';
           metadataPlayButton.type = 'button';
@@ -2799,7 +3253,7 @@
         } else if (!mobileFavourite) {
           card.append(media, details);
         }
-        if (isFavouriteList) card.append(listActions);
+        if (isFavouriteList && !desktopFavouriteList) card.append(listActions);
         if (searchListLayout) {
           // Tap anywhere on the row plays. The handler cannot live on the card
           // itself: script.js installs a capture-phase document click guard
@@ -3144,7 +3598,33 @@
       return nextOrder.map((key) => songsByKey.get(key)).filter(Boolean);
     }
 
-    function renderMobileGenrePlaceholders(category) {
+    function appendMobileGenreLoadingCards(section, targetCount) {
+      const trackRow = section.querySelector('.mobile-genre-track-row');
+      if (!trackRow) return;
+      for (let index = trackRow.children.length; index < targetCount; index += 1) {
+        const card = document.createElement('article');
+        card.className = 'mobile-genre-track mobile-genre-loading-card';
+        card.setAttribute('aria-hidden', 'true');
+        const artwork = document.createElement('div');
+        artwork.className = 'mobile-genre-loading-art';
+        artwork.setAttribute('aria-hidden', 'true');
+        card.appendChild(artwork);
+        trackRow.appendChild(card);
+      }
+    }
+
+    function getMobileHomePlaceholderCount(shelves) {
+      if (!desktopNavigation.matches) return 4;
+      const width = shelves.clientWidth ||
+        shelves.parentElement?.clientWidth ||
+        document.getElementById('homePage')?.clientWidth ||
+        window.innerWidth;
+      const artSize = Math.min(176, Math.max(136, window.innerWidth * 0.11));
+      const gap = 16;
+      return Math.max(4, Math.ceil((width + gap) / (artSize + gap)));
+    }
+
+    function renderMobileGenrePlaceholders(category, count = 4) {
       const section = document.createElement('section');
       section.className = 'mobile-genre-row';
       section.setAttribute('aria-label', `${category.title} songs`);
@@ -3152,22 +3632,16 @@
       heading.textContent = category.title;
       const trackRow = document.createElement('div');
       trackRow.className = 'mobile-genre-track-row';
-      for (let index = 0; index < 4; index += 1) {
-        const card = document.createElement('article');
-        card.className = 'mobile-genre-track mobile-genre-loading-card';
-        const artwork = document.createElement('div');
-        artwork.className = 'mobile-genre-loading-art';
-        artwork.setAttribute('aria-hidden', 'true');
-        card.appendChild(artwork);
-        trackRow.appendChild(card);
-      }
       section.append(heading, trackRow);
+      appendMobileGenreLoadingCards(section, count);
       return section;
     }
 
     function renderMobileHomeGenreRow(category, songs, { shuffle = true, all = false } = {}) {
       if (!songs.length) return renderMobileGenrePlaceholders(category);
-      songs = window.filterUnavailableOnDemandSongs?.(songs) || songs;
+      if (category.title !== 'Recents' || !desktopNavigation.matches) {
+        songs = window.filterUnavailableOnDemandSongs?.(songs) || songs;
+      }
       if (category.key && Object.prototype.hasOwnProperty.call(genreFeedIds, category.key)) {
         window.prefetchCatalogSongInfo?.(songs);
       }
@@ -3191,14 +3665,19 @@
             ? 'liked-folder'
             : `${song.providerTrackId || song.trackId || ''}:${song.trackName || ''}:${song.artistName || ''}`.toLocaleLowerCase();
         }
-        const play = document.createElement('button');
-        play.type = 'button';
+        const desktopShelfPlayControl = category.title !== 'Recents' &&
+          window.matchMedia('(min-width: 56.25rem)').matches;
+        const play = document.createElement(desktopShelfPlayControl ? 'div' : 'button');
+        if (!desktopShelfPlayControl) play.type = 'button';
         play.className = 'mobile-genre-track-art';
+        let playAction = play;
         const isLikedFolderRecent = category.title === 'Recents' && song.recentDisplayType === 'liked-folder';
         if (isLikedFolderRecent) card.classList.add('is-liked-folder-recent');
-        play.setAttribute('aria-label', isLikedFolderRecent
-          ? 'Play Liked Songs'
-          : `Play ${song.trackName || 'song'} on demand`);
+        if (!desktopShelfPlayControl) {
+          play.setAttribute('aria-label', isLikedFolderRecent
+            ? 'Play Liked Songs'
+            : `Play ${song.trackName || 'song'} on demand`);
+        }
         if (isLikedFolderRecent) {
           play.classList.add('is-liked-folder-recent');
           play.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 4.6a5.4 5.4 0 0 0-7.6 0L12 5.8l-1.2-1.2a5.4 5.4 0 0 0-7.6 7.6l1.2 1.2L12 21l7.6-7.6 1.2-1.2a5.4 5.4 0 0 0 0-7.6Z"/></svg>';
@@ -3227,13 +3706,42 @@
             badge.textContent = 'New';
             play.appendChild(badge);
           }
+          if (desktopShelfPlayControl) {
+            const playOverlay = document.createElement('button');
+            playOverlay.className = 'desktop-home-play-overlay';
+            playOverlay.type = 'button';
+            playOverlay.setAttribute('aria-label', `Play ${song.trackName || 'song'} on demand`);
+            playOverlay.title = `Play ${song.trackName || 'song'} on demand`;
+            playOverlay.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+            play.appendChild(playOverlay);
+            playAction = playOverlay;
+          }
         }
-        play.addEventListener('click', () => {
+        playAction.addEventListener('click', () => {
           if (isLikedFolderRecent) {
-            play.disabled = true;
+            playAction.disabled = true;
             void window.playLikedSongsQueue?.()
               .catch((error) => console.warn('Could not start the Liked Songs queue.', error))
-              .finally(() => { play.disabled = false; });
+              .finally(() => { playAction.disabled = false; });
+            return;
+          }
+          if (desktopShelfPlayControl) {
+            const current = window.onDemandPlaybackActive ? window.getCurrentOnDemandSong?.() : null;
+            const normalize = (value) => String(value || '').trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+            const sameTrack = normalize(song.trackName) === normalize(current?.trackName) &&
+              normalize(song.artistName) === normalize(current?.artistName);
+            if (sameTrack) {
+              window.toggleOnDemandPlayback?.();
+              return;
+            }
+            // This only changes the button immediately; it never delays the
+            // track request. Playback starts on the next line.
+            playAction.classList.add('is-loading');
+            playAction.dataset.loadingUntil = String(Date.now() + 500);
+            window.startOnDemandSong?.(song, { openNowPlaying: false });
+            window.setTimeout(() => {
+              refreshDesktopHomePlayButtons();
+            }, 500);
             return;
           }
           window.startOnDemandSong?.(song, { openNowPlaying: false });
@@ -3248,15 +3756,59 @@
         trackRow.appendChild(card);
       });
       section.append(heading, trackRow);
+      requestAnimationFrame(refreshDesktopHomePlayButtons);
       return section;
     }
+
+    function refreshDesktopHomePlayButtons() {
+      const normalize = (value) => String(value || '').trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+      const current = window.onDemandPlaybackActive ? window.getCurrentOnDemandSong?.() : null;
+      document.querySelectorAll('.desktop-home-play-overlay').forEach((button) => {
+        const song = button.closest('.mobile-genre-track')?.__onDemandSong;
+        const active = Boolean(song && current &&
+          normalize(song.trackName) === normalize(current.trackName) &&
+          normalize(song.artistName) === normalize(current.artistName));
+        const loading = button.classList.contains('is-loading') &&
+          Number(button.dataset.loadingUntil) > Date.now();
+        if (loading && active && window.onDemandPlaying === true &&
+            Date.now() >= Number(button.dataset.loadingUntil)) {
+          button.classList.remove('is-loading');
+          delete button.dataset.loadingUntil;
+        }
+        const stillLoading = button.classList.contains('is-loading') &&
+          Number(button.dataset.loadingUntil) > Date.now();
+        button.classList.toggle('is-playing', !stillLoading && active && window.onDemandPlaying === true);
+        if (stillLoading) return;
+        button.classList.remove('is-loading');
+        button.innerHTML = active && window.onDemandPlaying === true
+          ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>'
+          : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+        button.setAttribute('aria-label', active && window.onDemandPlaying === true
+          ? `Pause ${song.trackName || 'song'}`
+          : `Play ${song.trackName || 'song'} on demand`);
+      });
+    }
+
+    window.addEventListener('thaalam:on-demand-playback-state', refreshDesktopHomePlayButtons);
+    window.addEventListener('thaalam:nowplaying', refreshDesktopHomePlayButtons);
 
     let mobileRecentsRenderSignature = null;
     function updateMobileRecents() {
       const shelves = document.getElementById('mobileGenreShelves');
-      if (!shelves || desktopNavigation.matches) return;
+      if (!shelves) return;
       const songs = window.getOnDemandHistory?.() || [];
-      const visibleSongs = songs.slice(0, 10);
+      const isDesktop = window.matchMedia('(min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine)').matches;
+      let visibleSongs = songs.slice(0, 10);
+      if (isDesktop) {
+        const rowWidth = shelves.clientWidth ||
+          shelves.parentElement?.clientWidth ||
+          document.getElementById('homePage')?.clientWidth ||
+          window.innerWidth;
+        const cardWidth = 96;
+        const cardGap = 12.8;
+        const songsThatFit = Math.max(1, Math.floor((rowWidth + cardGap) / (cardWidth + cardGap)));
+        visibleSongs = songs.slice(0, Math.min(20, songsThatFit));
+      }
       const signature = visibleSongs.map((song) => [
         song.recentDisplayType || '',
         song.providerTrackId || song.trackId || '',
@@ -3303,7 +3855,14 @@
         }
       }
       updateMobileHomeTint();
+      updateDesktopHomeTint();
+      updateDesktopLibraryFolder();
     }
+
+    window.addEventListener('resize', () => {
+      mobileRecentsRenderSignature = null;
+      updateMobileRecents();
+    }, { passive: true });
 
     function orderRecentPlaybackHistory(songs) {
       const dates = new Map();
@@ -3396,7 +3955,11 @@
     async function loadMobileHomeGenres() {
       const shelves = document.getElementById('mobileGenreShelves');
       const today = localCalendarDayKey();
-      if (!shelves || (mobileHomeGenresLoaded && mobileHomeGenresDay === today)) return;
+      if (!shelves || (
+        mobileHomeGenresLoaded &&
+        mobileHomeGenresDay === today &&
+        shelves.querySelector('.mobile-genre-row')
+      )) return;
       mobileHomeGenresLoaded = true;
       mobileHomeGenresDay = today;
       const requestId = ++mobileHomeGenresRequest;
@@ -3404,15 +3967,19 @@
         .map((key) => mobileHomeGenreRows.find((category) => category.key === key))
         .filter(Boolean);
       shelves.replaceChildren();
-      updateMobileRecents();
       const placeholders = categories.map((category) => {
         const cachedSongs = getAnyCachedGenreChart(category.key);
+        const placeholderCount = getMobileHomePlaceholderCount(shelves);
         const section = cachedSongs.length
           ? renderMobileHomeGenreRow(category, cachedSongs)
-          : renderMobileGenrePlaceholders(category);
+          : renderMobileGenrePlaceholders(category, placeholderCount);
+        if (cachedSongs.length && desktopNavigation.matches) {
+          appendMobileGenreLoadingCards(section, placeholderCount);
+        }
         shelves.appendChild(section);
         return section;
       });
+      updateMobileRecents();
       const results = await Promise.allSettled(categories.map((category) =>
         loadDailyGenreChart(category.key)
       ));
@@ -3427,10 +3994,21 @@
       });
       mobileHomeGenresLoaded = everyCategoryLoaded;
       updateMobileRecents();
+      updateDesktopHomeTint();
+      updateDesktopLibraryFolder();
+    }
+
+    // A view/history transition can clear the shelf container after today's
+    // charts have been marked as loaded. Treat an empty container as needing
+    // a rebuild instead of leaving Home blank.
+    function ensureMobileHomeShelves() {
+      const shelves = document.getElementById('mobileGenreShelves');
+      if (!shelves) return;
+      if (!shelves.querySelector('.mobile-genre-row')) mobileHomeGenresLoaded = false;
+      void loadMobileHomeGenres();
     }
 
     function reorderMobileGenreRowsFromHistory() {
-      if (desktopNavigation.matches) return;
       const shelves = document.getElementById('mobileGenreShelves');
       if (!shelves) return;
       getGenreOrderFromHistory().forEach((key) => {
@@ -3439,12 +4017,14 @@
           item.getAttribute('aria-label') === `${category.title} songs`);
         if (section) shelves.append(section);
       });
+      updateDesktopLibraryFolder();
     }
 
     window.addEventListener('thaalam-on-demand-history-change', () => {
-      updateMobileRecents();
       reorderMobileGenreRowsFromHistory();
     });
+
+    window.addEventListener('thaalam-on-demand-recents-change', updateMobileRecents);
 
     window.addEventListener('thaalam-personalized-recommendations-update', async () => {
       recommendationTasteRevision += 1;
@@ -3458,33 +4038,31 @@
       });
       try { localStorage.setItem(GENRE_CACHE_KEY, JSON.stringify(cache)); }
       catch { /* The updated charts remain available in memory. */ }
-      const results = await Promise.allSettled(Object.keys(genreFeedIds).map((key) =>
+      await Promise.allSettled(Object.keys(genreFeedIds).map((key) =>
         loadDailyGenreChart(key)
       ));
       if (revision !== recommendationTasteRevision) return;
-      if (desktopNavigation.matches && Object.prototype.hasOwnProperty.call(genreFeedIds, activeGenre)) {
-        const index = Object.keys(genreFeedIds).indexOf(activeGenre);
-        if (results[index]?.status === 'fulfilled') {
-          const previousPositions = captureRecommendationCardPositions(genreResults, '.genre-card');
-          renderGenreResults(results[index].value);
-          animateRecommendationCards(genreResults, '.genre-card', previousPositions);
+      if (desktopNavigation.matches &&
+          document.body.classList.contains('desktop-library-active') &&
+          activeGenre === 'you-like') {
+        void loadLikedSongs(++genreRequestId);
+      }
+      const shelves = document.getElementById('mobileGenreShelves');
+      if (!shelves) return;
+      mobileHomeGenreRows.forEach((category) => {
+        const section = [...shelves.children].find((item) =>
+          item.getAttribute('aria-label') === `${category.title} songs`);
+        const songs = getAnyCachedGenreChart(category.key);
+        if (section && songs.length) {
+          const previousPositions = captureRecommendationCardPositions(section, '.mobile-genre-track');
+          const updatedSection = renderMobileHomeGenreRow(category, songs);
+          section.replaceWith(updatedSection);
+          animateRecommendationCards(updatedSection, '.mobile-genre-track', previousPositions);
         }
-      }
-      if (!desktopNavigation.matches) {
-        const shelves = document.getElementById('mobileGenreShelves');
-        if (!shelves) return;
-        mobileHomeGenreRows.forEach((category) => {
-          const section = [...shelves.children].find((item) =>
-            item.getAttribute('aria-label') === `${category.title} songs`);
-          const songs = getAnyCachedGenreChart(category.key);
-          if (section && songs.length) {
-            const previousPositions = captureRecommendationCardPositions(section, '.mobile-genre-track');
-            const updatedSection = renderMobileHomeGenreRow(category, songs);
-            section.replaceWith(updatedSection);
-            animateRecommendationCards(updatedSection, '.mobile-genre-track', previousPositions);
-          }
-        });
-      }
+      });
+      updateMobileRecents();
+      updateDesktopHomeTint();
+      updateDesktopLibraryFolder();
     });
 
     window.addEventListener('thaalam-unavailable-tracks-change', () => {
@@ -3496,6 +4074,7 @@
         if (row && !row.querySelector('.mobile-genre-track')) row.remove();
       });
       if (!desktopNavigation.matches) updateMobileHomeTint();
+      else updateDesktopHomeTint();
     });
 
     // The daily cache is keyed to the listener's local calendar day. Refresh
@@ -3508,10 +4087,14 @@
       genreResultCache.clear();
       genreResultCacheDay.clear();
       mobileHomeGenresLoaded = false;
-      if (desktopNavigation.matches && Object.prototype.hasOwnProperty.call(genreFeedIds, activeGenre)) {
-        void loadCatalog(activeGenre, '', genreFeedIds[activeGenre]);
-      } else if (!desktopNavigation.matches && !document.body.classList.contains('mobile-search-active')) {
+      if (!document.body.classList.contains('desktop-catalog-active') &&
+          !document.body.classList.contains('mobile-search-active')) {
         void loadMobileHomeGenres();
+      }
+      if (desktopNavigation.matches && document.body.classList.contains('desktop-library-active')) {
+        void loadLikedSongs(++genreRequestId);
+      } else if (desktopNavigation.matches) {
+        void loadLikedSongs(++desktopLibraryRequestId, { quiet: true, render: false });
       }
     }, 60 * 1000);
 
@@ -3684,6 +4267,18 @@
       hideCatalogSuggestions();
       if (activeGenre === 'you-like') renderGenreResults(currentFavouriteSongs);
       else if (activeGenre === 'recently-played') renderGenreResults(window.getOnDemandPlaybackHistory?.() || []);
+      else if (activeGenre.startsWith('search:')) {
+        // Desktop returns to its Home shelf without the default International
+        // scroll. Mobile keeps its existing search-clear behaviour.
+        activeSearchTerm = '';
+        if (desktopNavigation.matches) {
+          loadGenre('international', { scrollDesktopShelf: false });
+          return;
+        }
+        const firstGenre = [...genreTabList.querySelectorAll('[data-genre]')]
+          .find((tab) => Object.prototype.hasOwnProperty.call(genreFeedIds, tab.dataset.genre));
+        loadGenre(firstGenre?.dataset.genre || 'international');
+      }
       else {
         activeSearchTerm = '';
         const firstGenre = [...genreTabList.querySelectorAll('[data-genre]')]
@@ -3991,6 +4586,8 @@
             providerTrackId: info.providerTrackId || (trackKey.startsWith('youtube:') ? '' : (entry.track_id || entry.provider_track_id || '')),
             artworkUrl100: info.artworkUrl100 || info.artwork || entry.artwork || entry.artworkUrl100 ||
               (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : ''),
+              trackTimeMillis: Number(entry.duration_seconds) * 1000 || Number(info.durationSeconds) * 1000 ||
+                cachedTrackDurationMillis({ trackName: info.track || entry.title || keyTitle, artistName: info.artist || entry.artist || keyArtist }),
             ...(videoId ? { youtubeVideoId: videoId } : {})
           };
         }));
@@ -4023,7 +4620,15 @@
     }
     window.playLikedSongsQueue = playLikedSongsQueue;
 
-    async function loadLikedSongs(requestId, { quiet = false } = {}) {
+    async function loadLikedSongs(requestId, { quiet = false, render = true } = {}) {
+      const isCurrentRequest = () => render
+        ? requestId === genreRequestId && activeGenre === 'you-like'
+        : requestId === desktopLibraryRequestId;
+      const showSongs = (songs) => {
+        currentFavouriteSongs = songs;
+        if (render) renderGenreResults(songs);
+        updateDesktopLibraryFolder();
+      };
       try { await window.thaalamGoogleSessionReady; } catch { /* Keep local likes available if session restore is offline. */ }
       const token = window.getThaalamGoogleAccessToken?.();
       const userId = window.getThaalamGoogleUserId?.();
@@ -4031,7 +4636,7 @@
       if (userId) {
         try {
           const cached = JSON.parse(localStorage.getItem(`thaalam.favourites:${userId}`) || 'null');
-          if (!quiet && Array.isArray(cached?.ratings)) {
+          if ((!quiet || !render) && Array.isArray(cached?.ratings)) {
             const cachedRatings = mergePendingFavouriteRatingChanges(cached.ratings, userId, { acknowledge: false });
             currentFavouriteSongs = songsFromRatingEntries(cachedRatings, cached.artworkByTrackKey || {});
             if (cachedRatings.length !== cached.ratings.length ||
@@ -4043,18 +4648,23 @@
                 }));
               } catch { /* Continue showing the merged in-memory list. */ }
             }
-            renderGenreResults(currentFavouriteSongs);
-            genreResults.setAttribute('aria-busy', 'false');
+            if (render) {
+              renderGenreResults(currentFavouriteSongs);
+              updateDesktopLibraryFolder();
+              genreResults.setAttribute('aria-busy', 'false');
+            } else {
+              updateDesktopLibraryFolder();
+            }
             renderedAccountCache = true;
           }
         } catch { /* Fetch the account list if its browser cache is unavailable. */ }
       }
-      if (!quiet && !renderedAccountCache) {
+      if (render && !quiet && !renderedAccountCache) {
         genreResults.replaceChildren();
         genreResults.setAttribute('aria-busy', 'true');
       }
       if (!userId) {
-        genreResults.setAttribute('aria-busy', 'false');
+        if (render) genreResults.setAttribute('aria-busy', 'false');
         let localRatings = {};
         let accountCache = null;
         let songInfo = {};
@@ -4096,8 +4706,7 @@
               ...(videoId ? { youtubeVideoId: videoId } : {})
             };
           });
-        currentFavouriteSongs = songs;
-        renderGenreResults(songs);
+        showSongs(songs);
         // Rescue pass for likes saved before metadata snapshots existed:
         // a `youtube:ID` with no cached title can often be recovered from the
         // public oEmbed endpoint, so old rows heal instead of staying blank.
@@ -4124,7 +4733,7 @@
               if (artist) song.artistName = artist;
             } catch { /* Keep the fallback text if the lookup fails. */ }
           })).then(() => {
-            if (requestId !== genreRequestId || activeGenre !== 'you-like') return;
+            if (!isCurrentRequest()) return;
             songs.forEach((song) => {
               const key = song.youtubeVideoId
                 ? `youtube:${song.youtubeVideoId}`
@@ -4132,7 +4741,8 @@
               songInfo[key] = { ...songInfo[key], track: song.trackName, artist: song.artistName, artworkUrl100: song.artworkUrl100 };
             });
             try { localStorage.setItem('thaalam24x7-song-info-v1', JSON.stringify(songInfo)); } catch { /* Keep the resolved covers for this view. */ }
-            renderGenreResults(songs);
+            if (render) renderGenreResults(songs);
+            else updateDesktopLibraryFolder();
           });
         }
         const missingArtwork = songs.filter((song) => !song.artworkUrl100);
@@ -4140,7 +4750,7 @@
           void Promise.all(missingArtwork.map(async (song) => {
             song.artworkUrl100 = await window.lookupAlbumArtwork(song.trackName, song.artistName) || '';
           })).then(() => {
-            if (requestId !== genreRequestId || activeGenre !== 'you-like') return;
+            if (!isCurrentRequest()) return;
             songs.forEach((song) => {
               const key = song.youtubeVideoId
                 ? `youtube:${song.youtubeVideoId}`
@@ -4154,10 +4764,11 @@
               };
             });
             try { localStorage.setItem('thaalam24x7-song-info-v1', JSON.stringify(songInfo)); } catch { /* Keep the resolved covers for this view. */ }
-            renderGenreResults(songs);
+            if (render) renderGenreResults(songs);
+            else updateDesktopLibraryFolder();
           });
         }
-        if (!songs.length) {
+        if (render && !songs.length) {
           const empty = genreResults.querySelector('.genre-empty');
           if (empty) empty.textContent = 'No liked songs';
         }
@@ -4181,7 +4792,7 @@
         if (!response.ok) throw new Error(`Could not load liked songs (${response.status}).`);
         const data = await response.json();
         const ratings = mergePendingFavouriteRatingChanges(data.ratings, userId);
-        if (requestId !== genreRequestId || activeGenre !== 'you-like') return;
+        if (!isCurrentRequest()) return;
         let cachedArtworkByTrackKey = {};
         try {
           const cached = JSON.parse(localStorage.getItem(`thaalam.favourites:${userId}`) || 'null');
@@ -4193,8 +4804,12 @@
           const nextCache = JSON.stringify({ ratings, artworkByTrackKey: cachedArtworkByTrackKey });
           if (localStorage.getItem(cacheKey) !== nextCache) localStorage.setItem(cacheKey, nextCache);
         } catch { /* The database remains authoritative if browser caching is unavailable. */ }
-        currentFavouriteSongs = songs;
-        renderGenreResults(songs);
+        showSongs(songs);
+        void backfillFavouriteDurations(userId, ratings, songs).then(() => {
+          if (!isCurrentRequest()) return;
+          if (render) renderGenreResults(currentFavouriteSongs);
+          else updateDesktopLibraryFolder();
+        });
         // Liked tracks come from the ratings service without catalog artwork.
         // Resolve missing covers once and keep them beside the cached ratings
         // so later visits can paint the cards without another iTunes request.
@@ -4203,26 +4818,32 @@
           void Promise.all(missingArtwork.map(async (song) => {
             song.artworkUrl100 = await window.lookupAlbumArtwork(song.trackName, song.artistName) || '';
           })).then(() => {
-            if (requestId !== genreRequestId || activeGenre !== 'you-like') return;
+            if (!isCurrentRequest()) return;
             persistFavouriteArtwork(userId, songs, ratings);
             currentFavouriteSongs = songs;
-            patchFavouriteArtworkInPlace(songs);
+            if (render) patchFavouriteArtworkInPlace(songs);
+            else updateDesktopLibraryFolder();
           });
         }
-        if (!songs.length) {
+        if (render && !songs.length) {
           const empty = genreResults.querySelector('.genre-empty');
           if (empty) empty.textContent = 'No liked songs';
         }
       } catch (error) {
-        if (requestId !== genreRequestId || activeGenre !== 'you-like') return;
+        if (!isCurrentRequest()) return;
+        if (!render) {
+          currentFavouriteSongs = getLocalLikedSongs(userId);
+          updateDesktopLibraryFolder();
+          console.warn('Could not sync liked songs for the desktop Home library shelf.', error);
+          return;
+        }
         if (quiet) return;
         if (renderedAccountCache) {
           genreResults.setAttribute('aria-busy', 'false');
           return;
         }
         genreResults.setAttribute('aria-busy', 'false');
-        currentFavouriteSongs = getLocalLikedSongs(userId);
-        renderGenreResults(currentFavouriteSongs);
+        showSongs(getLocalLikedSongs(userId));
         const empty = genreResults.querySelector('.genre-empty');
         if (empty) {
           if (error?.message?.includes('expired') ||
@@ -4254,7 +4875,7 @@
         persistPendingFavouriteRatingChanges();
       }
 
-      if (activeGenre !== 'you-like') return;
+      if (activeGenre !== 'you-like' && !desktopNavigation.matches) return;
       const existingIndex = currentFavouriteSongs.findIndex((item) =>
         item.trackKey === trackKey || item.duplicateTrackKeys?.includes(trackKey));
       if (rating === 'up') {
@@ -4291,19 +4912,22 @@
           currentFavouriteSongs.splice(existingIndex, 1);
         }
       }
-      renderGenreResults(currentFavouriteSongs);
-      if (!currentFavouriteSongs.length) {
+      if (activeGenre === 'you-like') renderGenreResults(currentFavouriteSongs);
+      updateDesktopLibraryFolder();
+      if (activeGenre === 'you-like' && !currentFavouriteSongs.length) {
         const empty = genreResults.querySelector('.genre-empty');
         if (empty) empty.textContent = 'No liked songs';
       }
     });
 
-    function loadGenre(genre) {
-      genreResults.scrollTop = 0;
-      if (activeGenre !== genre && catalogSearchInput.value) {
-        catalogSearchInput.value = '';
-        catalogClearButton.hidden = true;
-        hideCatalogSuggestions();
+    function loadGenre(genre, { scrollDesktopShelf = true } = {}) {
+      if (activeGenre !== genre) {
+        genreResults.scrollTop = 0;
+        if (catalogSearchInput.value) {
+          catalogSearchInput.value = '';
+          catalogClearButton.hidden = true;
+          hideCatalogSuggestions();
+        }
       }
       catalogSearchInput.placeholder = genre === 'you-like'
         ? 'Search your library'
@@ -4318,17 +4942,36 @@
       );
       if (desktopNavigation.matches) {
         if (genre === 'you-like') homeSubtitle.textContent = 'Explore songs from your library';
-        else if (genre === 'recently-played') homeSubtitle.textContent = 'Your playback history';
         else setPersonalisedPicksSubtitle();
       }
       genreTabList.hidden = false;
       genreTabs.forEach((tab) => {
         const selected = tab.dataset.genre === genre;
         tab.classList.toggle('is-selected', selected);
-        tab.setAttribute('aria-selected', String(selected));
-        tab.tabIndex = selected ? 0 : -1;
+        tab.setAttribute('aria-pressed', String(selected));
       });
+      if (desktopNavigation.matches && Object.prototype.hasOwnProperty.call(genreFeedIds, genre)) {
+        activeGenre = genre;
+        document.body.classList.remove('desktop-catalog-active');
+        favouriteSortControl.hidden = true;
+        void loadMobileHomeGenres();
+        const shelves = document.getElementById('mobileGenreShelves');
+        const category = mobileHomeGenreRows.find((item) => item.key === genre);
+        const section = [...shelves.children].find(
+          (item) => item.getAttribute('aria-label') === `${category?.title || ''} songs`
+        );
+        if (section && scrollDesktopShelf) {
+          const sectionTop = section.getBoundingClientRect().top - shelves.getBoundingClientRect().top;
+          const shelfPadding = parseFloat(getComputedStyle(shelves).paddingTop) || 0;
+          shelves.scrollTo({
+            top: shelves.scrollTop + sectionTop - shelfPadding,
+            behavior: 'smooth'
+          });
+        }
+        return;
+      }
       if (genre === 'you-like') {
+        document.body.classList.add('desktop-catalog-active');
         favouriteSortControl.hidden = false;
         const requestId = ++genreRequestId;
         activeGenre = genre;
@@ -4341,6 +4984,70 @@
         return renderGenreResults(window.getOnDemandPlaybackHistory?.() || []);
       }
       return loadCatalog(genre, '', genreFeedIds[genre]);
+    }
+
+    function openDesktopLibraryFolder(folder = null) {
+      if (!desktopNavigation.matches) return;
+      activeDesktopLibraryFolder = {
+        name: typeof folder === 'string' ? folder : folder?.dataset.folderName || 'Liked Songs',
+        artworkUrl: typeof folder === 'string' ? '' : folder?.dataset.folderArtwork || '',
+        sourceLabel: typeof folder === 'string' ? 'On this device' : folder?.dataset.folderSource || 'On this device',
+        songCount: typeof folder === 'string' ? undefined : folder?.dataset.songCount
+      };
+      const likedSongsHeader = document.getElementById('likedSongsHeader');
+      likedSongsHeader.insertBefore(
+        document.getElementById('closeLikedSongs'),
+        likedSongsHeader.firstChild
+      );
+      document.body.classList.add('desktop-library-active', 'desktop-catalog-active');
+      likedSongsHeader.hidden = false;
+      updateDesktopLibraryHero();
+      moveLikedFolderControls(true);
+      loadGenre('you-like');
+    }
+
+    function restoreMobileLikedSongsHeading() {
+      document.querySelector('#likedSongsHeader h1').textContent = 'Your Library';
+      let hasGoogleAccount = false;
+      try {
+        hasGoogleAccount = Boolean(JSON.parse(localStorage.getItem('thaalam.googleProfile') || 'null'));
+      } catch { /* Treat unreadable storage as an on-device library. */ }
+      document.getElementById('likedFolderSubtitle').textContent = hasGoogleAccount
+        ? 'Liked songs sync with Google'
+        : 'Liked songs are saved on this device';
+      document.querySelector('.liked-songs-view-title h2').textContent = 'Liked Songs';
+    }
+
+    function returnLikedSongsBackButtonToRow() {
+      const row = document.querySelector('.liked-songs-view-title');
+      const button = document.getElementById('closeLikedSongs');
+      if (row && button && button.parentElement !== row) row.prepend(button);
+    }
+
+    function closeDesktopLikedSongs() {
+      if (!desktopNavigation.matches) return;
+      returnLikedSongsBackButtonToRow();
+      document.body.classList.remove('desktop-library-active', 'desktop-catalog-active');
+      document.getElementById('likedSongsHeader').hidden = true;
+      moveLikedFolderControls(false);
+      catalogSearchInput.value = '';
+      catalogClearButton.hidden = true;
+      hideCatalogSuggestions();
+      activeGenre = 'international';
+      favouriteSortControl.hidden = true;
+      setPersonalisedPicksSubtitle();
+      // The Library detail is rendered within Home, so showView('home') would
+      // treat it as the already-active page. Replay Home's existing entrance
+      // animation explicitly to give this back action the same transition as
+      // navigating to Home from another desktop view.
+      const homePage = document.getElementById('homePage');
+      if (homePage) {
+        homePage.style.animation = 'none';
+        void homePage.offsetWidth;
+        homePage.style.animation = '';
+      }
+      scheduleHomeRefresh();
+      void loadMobileHomeGenres();
     }
 
     window.addEventListener('thaalam-on-demand-playback-history-change', () => {
@@ -4397,14 +5104,21 @@
 
     window.addEventListener('thaalam:authenticated', () => {
       if (activeGenre === 'you-like') loadGenre('you-like');
+      else if (desktopNavigation.matches) {
+        void loadLikedSongs(++desktopLibraryRequestId, { quiet: true, render: false });
+      }
     });
     window.addEventListener('thaalam:profile-ready', () => {
       if (activeGenre === 'you-like') loadGenre('you-like');
+      else if (desktopNavigation.matches) {
+        void loadLikedSongs(++desktopLibraryRequestId, { quiet: true, render: false });
+      }
     });
 
     function searchCatalog(term) {
       const normalizedTerm = term.trim();
       if (!normalizedTerm) return;
+      if (desktopNavigation.matches) document.body.classList.add('desktop-catalog-active');
       genreResults.scrollTop = 0;
       if (activeGenre === 'you-like') {
         const query = normalizedTerm.toLocaleLowerCase();
@@ -4579,7 +5293,7 @@
       document.body.classList.add(`view-${view}`);
       if (view === 'library') document.body.classList.add('view-home');
       if (view !== 'home') document.body.classList.remove('library-playlist-open');
-      if (view !== 'home') document.getElementById('likedSongsHeader').hidden = true;
+      if (view !== 'home' && view !== 'library') document.getElementById('likedSongsHeader').hidden = true;
       markCurrentView(view);
       if (view === 'now-playing') setMobileDestination('');
     }
@@ -4598,13 +5312,13 @@
       genreTabs.forEach((tab) => {
         const selected = tab.dataset.genre === activeGenre;
         tab.classList.toggle('is-selected', selected);
-        tab.setAttribute('aria-selected', String(selected));
-        tab.tabIndex = selected ? 0 : -1;
+        tab.setAttribute('aria-pressed', String(selected));
       });
       if (activeGenre === 'you-like') homeSubtitle.textContent = 'Explore songs from your library';
       else if (activeGenre.startsWith('search:')) homeSubtitle.textContent = 'Explore songs by search';
       else setPersonalisedPicksSubtitle();
       applyView(storedView);
+      if (storedView === 'home') void loadMobileHomeGenres();
       requestAnimationFrame(() => {
         window.updateMiniPlayerMarquees?.();
         // Same zero-width measurement issue as showView(): re-measure the
@@ -4615,7 +5329,7 @@
         // first applied). Rewind and resume active marquee animations after
         // the visible layout has been measured.
         requestAnimationFrame(() => {
-          if (view === 'now-playing') {
+          if (storedView === 'now-playing') {
             window.refreshActiveLyricPosition?.();
           }
           document.getElementById('playerView')?.getAnimations({ subtree: true })
@@ -4627,8 +5341,16 @@
         });
       });
       if (storedView === 'home') {
-        if (activeGenre.startsWith('search:')) loadCatalog(activeGenre, activeSearchTerm);
-        else loadGenre(activeGenre);
+        if (activeGenre.startsWith('search:')) {
+          document.body.classList.add('desktop-catalog-active');
+          loadCatalog(activeGenre, activeSearchTerm);
+        } else if (activeGenre === 'you-like') {
+          openDesktopLibraryFolder();
+        } else {
+          activeGenre = 'international';
+          void loadMobileHomeGenres();
+          void loadLikedSongs(++desktopLibraryRequestId, { quiet: true, render: false });
+        }
       }
     }
 
@@ -4645,7 +5367,7 @@
       homeRefreshTimer = window.setTimeout(() => {
         homeRefreshTimer = 0;
         if (activeGenre.startsWith('search:')) loadCatalog(activeGenre, activeSearchTerm);
-        else loadGenre(activeGenre);
+        else loadGenre(activeGenre, { scrollDesktopShelf: false });
       }, VIEW_SLIDE_MS);
     }
 
@@ -4667,6 +5389,15 @@
       const isAlreadyOnView = document.body.classList.contains(`view-${view}`) &&
         !(view === 'home' && document.body.classList.contains('view-library'));
       if (isAlreadyOnView) {
+        const homeDestinationIsActive = document.querySelector(
+          '[data-mobile-destination="home"]'
+        )?.classList.contains('is-current');
+        if (view === 'home' && !desktopNavigation.matches && homeDestinationIsActive) {
+          document.body.classList.remove('mobile-search-active', 'library-playlist-open');
+          document.getElementById('likedSongsHeader').hidden = true;
+          moveLikedFolderControls(false);
+          ensureMobileHomeShelves();
+        }
         return Promise.resolve();
       }
 
@@ -4727,7 +5458,16 @@
       if (view === 'about') loadAboutArtistPortraits();
       if (view === 'home') {
         scheduleHomeRefresh();
-        if (!desktopNavigation.matches) void loadMobileHomeGenres();
+        ensureMobileHomeShelves();
+        // Restore Liked Songs hero when returning to Home from Now Playing
+        if (
+          desktopNavigation.matches &&
+          document.body.classList.contains('desktop-library-active')
+        ) {
+          const likedSongsHeader = document.getElementById('likedSongsHeader');
+          if (likedSongsHeader) likedSongsHeader.hidden = false;
+          updateDesktopLibraryHero();
+        }
       }
       document.getElementById(
         view === 'home'
@@ -4766,6 +5506,17 @@
         if (selected) button.setAttribute('aria-current', 'page');
         else button.removeAttribute('aria-current');
       });
+      if (destination === 'home' && !desktopNavigation.matches) {
+        document.body.classList.remove(
+          'mobile-search-active',
+          'library-playlist-open',
+          'desktop-catalog-active',
+          'desktop-library-active'
+        );
+        document.getElementById('likedSongsHeader').hidden = true;
+        moveLikedFolderControls(false);
+        ensureMobileHomeShelves();
+      }
     }
     function getMobileNavigationSnapshot() {
       const view = document.body.classList.contains('view-now-playing')
@@ -4791,6 +5542,7 @@
     }
     function restoreMobileNavigationSnapshot(snapshot) {
       const state = snapshot || {};
+      restoreMobileLikedSongsHeading();
       const view = ['home', 'library', 'now-playing'].includes(state.view) ? state.view : 'home';
       const destination = ['home', 'search', 'library'].includes(state.destination)
         ? state.destination
@@ -4856,6 +5608,7 @@
             loadGenre('international');
           }
           setPersonalisedPicksSubtitle();
+          ensureMobileHomeShelves();
           showView('home');
         } else if (destination === 'search') {
           moveLikedFolderControls(false);
@@ -4879,6 +5632,7 @@
     });
 
     document.getElementById('openLikedPlaylist')?.addEventListener('click', () => {
+      restoreMobileLikedSongsHeading();
       setMobileDestination('library');
       document.getElementById('likedSongsHeader').hidden = false;
       document.body.classList.add('library-playlist-open');
@@ -4890,10 +5644,38 @@
       saveMobileNavigationSnapshot();
     });
     document.getElementById('closeLikedSongs')?.addEventListener('click', () => {
+      if (desktopNavigation.matches) {
+        closeDesktopLikedSongs();
+        return;
+      }
       moveLikedFolderControls(false);
       showView('library');
       animateMobilePanel(-1);
       saveMobileNavigationSnapshot();
+    });
+    const startDesktopLibraryQueue = (shuffle = false) => {
+      const queue = sortFavouriteSongs(currentFavouriteSongs);
+      if (shuffle) {
+        for (let index = queue.length - 1; index > 0; index -= 1) {
+          const swapIndex = Math.floor(Math.random() * (index + 1));
+          [queue[index], queue[swapIndex]] = [queue[swapIndex], queue[index]];
+        }
+      }
+      if (queue.length) {
+        window.startOnDemandQueue?.(queue, 0, { openNowPlaying: false });
+      }
+    };
+    document.getElementById('likedFolderPlayAll')?.addEventListener('click', () => {
+      startDesktopLibraryQueue(false);
+    });
+    const likedFolderShuffle = document.getElementById('likedFolderShuffle');
+    likedFolderShuffle?.addEventListener('click', () => {
+      const isActive = !likedFolderShuffle.classList.contains('is-active');
+      likedFolderShuffle.classList.toggle('is-active', isActive);
+      likedFolderShuffle.setAttribute('aria-pressed', String(isActive));
+      likedFolderShuffle.setAttribute('aria-label', `Shuffle ${isActive ? 'on' : 'off'}`);
+      if (typeof setOnDemandShuffle === 'function') setOnDemandShuffle(isActive);
+      startDesktopLibraryQueue(isActive);
     });
     document.getElementById('mobilePlayerMinimize')?.addEventListener('click', () => {
       if (mobileFolderToolbarQuery.matches && history.state?.thaalamMobileNavigation?.view === 'now-playing') {
@@ -5102,14 +5884,46 @@
       const likedFolderSubtitle = document.getElementById('likedFolderSubtitle');
       const profileDialog = document.getElementById('profileDialog');
       const signInButton = document.getElementById('googleSignInButton');
-      const status = document.getElementById('profileDialogStatus');
-      const guestView = document.getElementById('profileGuestView');
+      const loginStatus = document.getElementById('loginStatus');
       const accountView = document.getElementById('profileAccountView');
       const accountAvatar = document.getElementById('profileAccountAvatar');
       const accountName = document.getElementById('profileAccountName');
       const accountEmail = document.getElementById('profileAccountEmail');
       const logoutButton = document.getElementById('profileLogoutButton');
-      if (!profileButton || !profileDialog || !signInButton || !status || !guestView || !accountView) return;
+      const loginScreen = document.getElementById('loginScreen');
+      const appLoader = document.getElementById('appLoader');
+      if (!profileButton || !profileDialog || !signInButton || !loginStatus || !accountView || !loginScreen) return;
+
+      const showLoginScreen = () => { loginScreen.hidden = false; };
+      const hideLoginScreen = () => { loginScreen.hidden = true; };
+      const showAppLoader = () => {
+        window.__thaalamLoaderStartedAt = performance.now();
+        document.documentElement.classList.add('is-restoring-session');
+        appLoader?.removeAttribute('hidden');
+      };
+      const hideAppLoader = () => {
+        const elapsed = performance.now() - (window.__thaalamLoaderStartedAt || performance.now());
+        const delay = Math.max(0, 420 - elapsed);
+        window.setTimeout(() => {
+          document.documentElement.classList.remove('is-restoring-session');
+          appLoader?.setAttribute('hidden', '');
+        }, delay);
+      };
+
+      // Animate "100 million" counter from 30 up to 100 on the login screen.
+      const loginCount = document.getElementById('loginCount');
+      if (loginCount) {
+        const start = 30;
+        const end = 100;
+        const duration = 700;
+        const startTime = performance.now();
+        function tick(now) {
+          const progress = Math.min((now - startTime) / duration, 1);
+          loginCount.textContent = Math.round(start + (end - start) * progress);
+          if (progress < 1) requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+      }
 
       const clientId = window.THAALAM_GOOGLE_CLIENT_ID || '';
       const profileStorageKey = 'thaalam.googleProfile';
@@ -5137,6 +5951,10 @@
       } catch (_) {
         localStorage.removeItem(profileStorageKey);
       }
+      if (!savedProfile || typeof savedProfile !== 'object') {
+        document.documentElement.classList.remove('has-saved-login');
+        document.documentElement.classList.remove('is-restoring-session');
+      }
       window.getThaalamGoogleUserId = () => savedProfile?.sub || '';
 
       const getTimeGreeting = () => {
@@ -5146,7 +5964,8 @@
         return 'Good evening';
       };
 
-      const showProfile = (user) => {
+      const showProfile = (user, showTransitionLoader = false) => {
+        if (showTransitionLoader) showAppLoader();
         if (librarySubtitle) librarySubtitle.textContent = 'Liked songs sync with Google';
         if (likedFolderSubtitle) likedFolderSubtitle.textContent = 'Liked songs sync with Google';
         profileButton.classList.add('is-signed-in');
@@ -5171,29 +5990,20 @@
         accountAvatar.onerror = () => { accountAvatar.hidden = true; };
         accountName.textContent = user.name || '';
         accountEmail.textContent = user.email || '';
-        guestView.hidden = true;
         accountView.hidden = false;
         document.getElementById('profileDialogTitle').hidden = true;
         profileDialog.classList.add('is-signed-in');
+        hideLoginScreen();
+        hideAppLoader();
       };
 
-      const showGuest = () => {
-        if (librarySubtitle) librarySubtitle.textContent = 'Liked songs are saved on this device';
-        if (likedFolderSubtitle) likedFolderSubtitle.textContent = 'Liked songs are saved on this device';
-        profileButton.classList.remove('is-signed-in');
-        welcomeGreeting.hidden = true;
-        profileButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"></path></svg>';
-        profileButton.setAttribute('aria-label', 'Account and sync information');
-        accountView.hidden = true;
-        guestView.hidden = false;
-        document.getElementById('profileDialogTitle').hidden = false;
-        profileDialog.classList.remove('is-signed-in');
-        status.hidden = Boolean(clientId);
-        if (!clientId) status.textContent = 'Google sign-in needs a Google OAuth client ID before it can be used.';
-      };
-
-      if (savedProfile && typeof savedProfile === 'object') showProfile(savedProfile);
-      else showGuest();
+      if (savedProfile && typeof savedProfile === 'object') {
+        showProfile(savedProfile);
+        hideLoginScreen();
+      } else {
+        showLoginScreen();
+        hideAppLoader();
+      }
 
       let tokenClient = null;
       const keepSavedAccountVisible = () => {
@@ -5256,8 +6066,8 @@
 
       const finishGoogleSignIn = (response) => {
         if (response.error || !response.access_token) {
-          status.hidden = false;
-          status.textContent = 'Google sign-in failed. Please try again.';
+          loginStatus.hidden = false;
+          loginStatus.textContent = 'Google sign-in failed. Please try again.';
           return;
         }
         fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
@@ -5280,15 +6090,15 @@
             profile = { sub: profile.sub || '', name: profile.name || '', email: profile.email || '', picture: profile.picture || '' };
             localStorage.setItem(profileStorageKey, JSON.stringify(profile));
             savedProfile = profile;
-            showProfile(profile);
+            showProfile(profile, true);
             window.dispatchEvent(new Event('thaalam:authenticated'));
             if (profileDialog.open) profileDialog.close();
           })
           .catch(() => {
             if (savedProfile) keepSavedAccountVisible();
             else {
-              status.hidden = false;
-              status.textContent = 'Signed in with Google, but the profile could not be loaded.';
+              loginStatus.hidden = false;
+              loginStatus.textContent = 'Signed in with Google, but the profile could not be loaded.';
             }
           });
       };
@@ -5308,14 +6118,12 @@
       const requestGoogleAccess = () => {
         const client = getTokenClient();
         if (!client) {
-          status.hidden = false;
-          status.textContent = 'Google sign-in is not available. Check the OAuth client configuration and reload.';
+          loginStatus.hidden = false;
+          loginStatus.textContent = 'Google sign-in is not available. Check the OAuth client configuration and reload.';
           return;
         }
         client.requestAccessToken();
       };
-
-      if (savedProfile && typeof savedProfile === 'object') keepSavedAccountVisible();
 
       window.addEventListener('thaalam:auth-expired', () => {
         sessionStorage.removeItem(accessTokenStorageKey);
@@ -5339,6 +6147,7 @@
           }
           localStorage.setItem('thaalam24x7-ratings-owner', 'anonymous');
         } catch { /* Keep the active device ratings if storage is unavailable. */ }
+        savedProfile = null;
         localStorage.removeItem(profileStorageKey);
         sessionStorage.removeItem(accessTokenStorageKey);
         localStorage.removeItem(accessTokenStorageKey);
