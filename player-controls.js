@@ -447,7 +447,6 @@ function notifyRatingChanged(trackKey, rating) {
         artworkUrl100: info.artworkUrl100 || info.artwork || details.artwork || '',
         collectionName: info.album || details.album || '',
         providerTrackId: info.providerTrackId || details.providerTrackId || '',
-        durationSeconds: Number(info.durationSeconds) || details.durationSeconds || 0,
         ...(details.videoId ? { youtubeVideoId: details.videoId } : {})
       }
     }
@@ -530,9 +529,7 @@ function getRatingTrackDetails(trackKey) {
       primaryGenreName: onDemandSong.primaryGenreName,
       art: onDemandSong.artworkUrl100,
       providerTrackId: onDemandSong.providerTrackId,
-      youtubeVideoId: onDemandSong.youtubeVideoId,
-      trackTimeMillis: onDemandSong.trackTimeMillis,
-      durationSeconds: onDemandSong.durationSeconds
+      youtubeVideoId: onDemandSong.youtubeVideoId
     }
     : (liveSong?.title ? liveSong : null) || {};
   const rawTitle = song.title || song.trackName || '';
@@ -551,19 +548,13 @@ function getRatingTrackDetails(trackKey) {
     } catch { /* Keep artwork empty; renderers fall back to YouTube thumbnails. */ }
   }
   if (!artwork && videoId) artwork = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
-  const cachedDuration = Number(getStoredSongInfo(trackKey)?.durationSeconds) || 0;
-  const durationSeconds = Math.max(0, Math.floor(
-    Number(song.durationSeconds) || Number(song.trackTimeMillis) / 1000 || cachedDuration ||
-    (onDemandActive ? 0 : Number(window.latestNowPlayingData?.now_playing?.duration)) || 0
-  ));
   return {
     title: String(rawTitle || '').trim(),
     artist: rawArtist,
     album: String(song.album || song.collectionName || '').trim(),
     providerTrackId: String(song.providerTrackId || '').trim(),
     videoId,
-    artwork: String(artwork || '').trim(),
-    durationSeconds
+    artwork: String(artwork || '').trim()
   };
 }
 
@@ -713,8 +704,7 @@ async function syncRatingsFromCloud() {
       let videoId = trackKey.startsWith('youtube:') ? trackKey.slice('youtube:'.length) : '';
       if (!/^[\w-]{11}$/.test(videoId)) videoId = '';
       const artwork = cached.artworkUrl100 || cached.artwork || (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '');
-      const durationSeconds = Math.max(0, Math.floor(Number(cached.durationSeconds) || 0));
-      uploads.push({ trackKey, rating, title, artist, album, providerTrackId, videoId, artwork, durationSeconds });
+      uploads.push({ trackKey, rating, title, artist, album, providerTrackId, videoId, artwork });
       remoteRatings[trackKey] = rating;
     }
     if (uploads.length) await requestCloudRatings('PUT', { ratings: uploads });
@@ -985,10 +975,6 @@ function setStoredRating(
         artist: cleanArtist,
         album: source?.album || existingInfo.album || '',
         providerTrackId: source?.providerTrackId || existingInfo.providerTrackId || '',
-        durationSeconds: Math.max(0, Math.floor(
-          Number(source?.durationSeconds) || Number(source?.trackTimeMillis) / 1000 ||
-          Number(window.latestNowPlayingData?.now_playing?.duration) || 0
-        )),
         ...(artworkUrl100 ? { artworkUrl100 } : {}),
         details
       }, { refreshSavedAt: true });
