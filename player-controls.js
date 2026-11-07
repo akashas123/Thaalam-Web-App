@@ -19,6 +19,15 @@ const songInfoArtist =
 const songInfoDetails =
   document.getElementById('songInfoDetails');
 
+function formatSongInfoArtists(artist) {
+  const artists = [...new Set(String(artist || '')
+    .split(/,|&|\bfeat(?:uring)?\b|\bwith\b|\bx\b|×/i)
+    .map((name) => name.trim())
+    .filter(Boolean))];
+  if (artists.length <= 2) return artists.join(', ');
+  return `${artists.slice(0, 2).join(', ')}, ...`;
+}
+
 const sleepTimerButton =
   document.getElementById('sleepTimerButton');
 
@@ -105,8 +114,7 @@ function showSongInfo(
   songInfoTrack.textContent =
     track || '';
 
-  songInfoArtist.textContent =
-    artist || '';
+  songInfoArtist.textContent = formatSongInfoArtists(artist);
 
   songInfoDetails.replaceChildren();
   String(details || '').split('\n').forEach((line, index) => {
