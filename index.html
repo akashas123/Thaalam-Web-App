@@ -49,7 +49,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=663">
+  <link rel="stylesheet" href="style.css?v=664">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -1027,7 +1027,7 @@
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=18"></script>
-  <script src="player-controls.js?v=60"></script>
+  <script src="player-controls.js?v=61"></script>
   <script src="lyrics.js?v=56"></script>
   <script src="/google-auth-config.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -2769,6 +2769,17 @@
 
     function updateDesktopHomeTint() {
       if (!desktopNavigation.matches) return;
+      const shelves = document.getElementById('mobileGenreShelves');
+      const firstRecentTrack = shelves?.querySelector('.mobile-recents-row .mobile-genre-track');
+      const likedFolderIsFirst = Boolean(firstRecentTrack?.classList.contains('is-liked-folder-recent'));
+      document.body.classList.toggle('has-liked-home-glow', likedFolderIsFirst);
+      if (likedFolderIsFirst) {
+        setHomeArt('');
+        const likedFolderColor = getComputedStyle(document.documentElement)
+          .getPropertyValue('--liked-folder-color').trim();
+        setHomeTint(likedFolderColor || '#ff1744');
+        return;
+      }
       const firstArtwork = [...document.querySelectorAll(
         '#mobileGenreShelves .mobile-genre-track-art img'
       )]

@@ -4440,6 +4440,16 @@ body.on-demand-active #onDemandNextButton svg {
   line-height: 1.5;
 }
 
+#songInfoTrack {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden !important;
+  max-width: 100%;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
 .song-info-artist {
   margin:
     0 0 0.8rem;
