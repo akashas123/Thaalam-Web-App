@@ -6959,7 +6959,7 @@ img {
   }
 
   body.view-now-playing .album-art-card {
-    width: var(--mobile-player-content-width);
+    width: calc(var(--mobile-player-content-width) - clamp(0.5rem, 2vw, 0.75rem));
   }
 
   body.view-now-playing .now-playing-track,
@@ -6970,6 +6970,10 @@ img {
     width: var(--mobile-player-content-width);
     max-width: 100%;
     margin-inline: auto;
+  }
+
+  body.view-now-playing .player-controls {
+    padding-inline: 0;
   }
 }
 
