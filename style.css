@@ -6959,7 +6959,7 @@ img {
   }
 
   body.view-now-playing .album-art-card {
-    width: var(--mobile-player-content-width);
+    width: calc(var(--mobile-player-content-width) - clamp(1.5rem, 5vw, 2.5rem));
   }
 
   body.view-now-playing .now-playing-track,
