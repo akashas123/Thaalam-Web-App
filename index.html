@@ -38,7 +38,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=660">
+  <link rel="stylesheet" href="style.css?v=662">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -953,7 +953,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=92"></script>
-  <script src="ondemand-player.js?v=200"></script>
+  <script src="ondemand-player.js?v=201"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=18"></script>
@@ -2230,7 +2230,7 @@
 
     function songsFromRatingEntries(entries, artworkByTrackKey = {}) {
       const durationCache = readTrackDurationCache();
-      return dedupeFavouriteSongs((Array.isArray(entries) ? entries : [])
+      const songs = dedupeFavouriteSongs((Array.isArray(entries) ? entries : [])
         .filter((entry) => entry.rating === 'up')
         .map((entry) => {
           const trackKey = entry.track_key || '';
@@ -2239,6 +2239,7 @@
             ? (entry.track_id || entry.video_id || trackKey.slice('youtube:'.length))
             : (entry.video_id || '');
           const videoId = /^[\w-]{11}$/.test(candidateVideoId) ? candidateVideoId : '';
+          const durationSeconds = Math.max(0, Math.floor(Number(entry.duration_seconds) || 0));
           return {
             trackKey,
             trackId: entry.track_id || '',
@@ -2251,13 +2252,15 @@
               : (entry.track_id || entry.provider_track_id || ''),
             artworkUrl100: entry.artwork || entry.artworkUrl100 || artworkByTrackKey[trackKey] ||
               (!entry.artwork && videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : ''),
-            trackTimeMillis: cachedTrackDurationMillis({
+            trackTimeMillis: durationSeconds * 1000 || cachedTrackDurationMillis({
               trackName: entry.title,
               artistName: entry.artist
             }, durationCache),
             ...(videoId ? { youtubeVideoId: videoId } : {})
           };
         }));
+      storeTrackDurations(songs);
+      return songs;
     }
 
     function mergePendingFavouriteRatingChanges(entries, userId, { acknowledge = true } = {}) {
@@ -2289,6 +2292,9 @@
           artist: song.artistName || remote?.artist || 'Unknown artist',
           album: song.collectionName || remote?.album || '',
           artwork: song.artworkUrl100 || remote?.artwork || '',
+          duration_seconds: Math.max(0, Math.floor(
+            Number(song.trackTimeMillis) / 1000 || Number(song.durationSeconds) || Number(remote?.duration_seconds) || 0
+          )),
           updated_at: Math.floor(change.changedAt / 1000)
         };
         if (index >= 0) merged[index] = optimisticEntry;
@@ -2329,6 +2335,102 @@
           artworkByTrackKey
         }));
       } catch { /* The database remains authoritative if browser caching is unavailable. */ }
+    }
+
+    const favouriteDurationBackfills = new Set();
+
+    function durationSecondsFromSong(song) {
+      return Math.max(0, Math.min(86400, Math.floor(
+        Number(song?.trackTimeMillis) / 1000 || Number(song?.durationSeconds) || 0
+      )));
+    }
+
+    function normalizeDurationMatch(value) {
+      return String(value || '').toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+    }
+
+    async function resolveFavouriteDuration(song) {
+      const trackId = String(song?.providerTrackId || song?.trackId || '').trim();
+      try {
+        if (trackId) {
+          const url = new URL('/api/music-song', window.location.origin);
+          url.searchParams.set('id', trackId);
+          const response = await fetch(url, { cache: 'no-store' });
+          const data = await response.json().catch(() => null);
+          const seconds = Math.floor(Number(data?.results?.[0]?.durationSeconds) || 0);
+          if (response.ok && seconds > 0) return seconds;
+        }
+        const title = String(song?.trackName || '').trim();
+        const artist = String(song?.artistName || '').trim();
+        if (!title || !artist || title === 'Liked song' || artist === 'Unknown artist') return 0;
+        const url = new URL('/api/music-search', window.location.origin);
+        url.searchParams.set('q', `${title} ${artist}`);
+        url.searchParams.set('limit', '5');
+        const response = await fetch(url, { cache: 'no-store' });
+        const data = await response.json().catch(() => null);
+        if (!response.ok) return 0;
+        const wantedTitle = normalizeDurationMatch(title);
+        const wantedArtist = normalizeDurationMatch(artist);
+        const match = (data?.results || []).find((candidate) =>
+          normalizeDurationMatch(candidate?.title) === wantedTitle &&
+          (normalizeDurationMatch(candidate?.artist).includes(wantedArtist) || wantedArtist.includes(normalizeDurationMatch(candidate?.artist)))
+        ) || data?.results?.[0];
+        return Math.max(0, Math.floor(Number(match?.durationSeconds) || 0));
+      } catch {
+        return 0;
+      }
+    }
+
+    async function backfillFavouriteDurations(userId, ratings, songs) {
+      if (!userId || !Array.isArray(ratings) || !Array.isArray(songs)) return;
+      const ratingsByKey = new Map(ratings.map((entry) => [entry.track_key, entry]));
+      const missing = songs.filter((song) => {
+        const entry = ratingsByKey.get(song.trackKey);
+        return entry?.rating === 'up' && !durationSecondsFromSong(song) && !Number(entry.duration_seconds);
+      }).slice(0, 30);
+      if (!missing.length) return;
+      const token = window.getThaalamGoogleAccessToken?.();
+      const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+      const updates = [];
+      for (let index = 0; index < missing.length; index += 3) {
+        const batch = await Promise.all(missing.slice(index, index + 3).map(async (song) => {
+          if (favouriteDurationBackfills.has(song.trackKey)) return null;
+          favouriteDurationBackfills.add(song.trackKey);
+          const durationSeconds = await resolveFavouriteDuration(song);
+          favouriteDurationBackfills.delete(song.trackKey);
+          return durationSeconds ? { song, durationSeconds } : null;
+        }));
+        updates.push(...batch.filter(Boolean));
+      }
+      if (!updates.length) return;
+      for (const { song, durationSeconds } of updates) {
+        song.durationSeconds = durationSeconds;
+        song.trackTimeMillis = durationSeconds * 1000;
+        const entry = ratingsByKey.get(song.trackKey);
+        if (entry) entry.duration_seconds = durationSeconds;
+      }
+      storeTrackDurations(updates.map(({ song }) => song));
+      persistFavouriteArtwork(userId, songs, ratings);
+      try {
+        const response = await fetch('/api/ratings', {
+          method: 'PUT', credentials: 'same-origin', headers,
+          body: JSON.stringify({ ratings: updates.map(({ song, durationSeconds }) => ({
+            trackKey: song.trackKey,
+            rating: 'up',
+            title: song.trackName,
+            artist: song.artistName,
+            album: song.collectionName || '',
+            trackId: song.trackId || song.providerTrackId || '',
+            providerTrackId: song.providerTrackId || '',
+            artwork: song.artworkUrl100 || '',
+            videoId: song.youtubeVideoId || '',
+            durationSeconds
+          })) })
+        });
+        if (!response.ok) throw new Error(`Duration sync failed (${response.status}).`);
+      } catch (error) {
+        console.warn('Could not save liked-song durations to the account.', error);
+      }
     }
 
     function patchFavouriteArtworkInPlace(songs) {
@@ -2978,6 +3080,14 @@
         } else {
           media.append(artworkFrame, playButton, infoButton);
         }
+        // In the desktop discovery grid the play action belongs inside the
+        // artwork itself. Keeping it in the frame avoids any grid/list chrome
+        // from covering or suppressing the overlay.
+        if (window.matchMedia('(min-width: 56.25rem)').matches &&
+            !isFavouriteList && !recentHistoryLayout && !desktopSearchListLayout) {
+          playButton.classList.add('desktop-album-play-overlay');
+          artworkFrame.appendChild(playButton);
+        }
 
         const details = document.createElement('div');
         details.className = 'genre-card-details';
@@ -3485,14 +3595,19 @@
             ? 'liked-folder'
             : `${song.providerTrackId || song.trackId || ''}:${song.trackName || ''}:${song.artistName || ''}`.toLocaleLowerCase();
         }
-        const play = document.createElement('button');
-        play.type = 'button';
+        const desktopShelfPlayControl = category.title !== 'Recents' &&
+          window.matchMedia('(min-width: 56.25rem)').matches;
+        const play = document.createElement(desktopShelfPlayControl ? 'div' : 'button');
+        if (!desktopShelfPlayControl) play.type = 'button';
         play.className = 'mobile-genre-track-art';
+        let playAction = play;
         const isLikedFolderRecent = category.title === 'Recents' && song.recentDisplayType === 'liked-folder';
         if (isLikedFolderRecent) card.classList.add('is-liked-folder-recent');
-        play.setAttribute('aria-label', isLikedFolderRecent
-          ? 'Play Liked Songs'
-          : `Play ${song.trackName || 'song'} on demand`);
+        if (!desktopShelfPlayControl) {
+          play.setAttribute('aria-label', isLikedFolderRecent
+            ? 'Play Liked Songs'
+            : `Play ${song.trackName || 'song'} on demand`);
+        }
         if (isLikedFolderRecent) {
           play.classList.add('is-liked-folder-recent');
           play.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 4.6a5.4 5.4 0 0 0-7.6 0L12 5.8l-1.2-1.2a5.4 5.4 0 0 0-7.6 7.6l1.2 1.2L12 21l7.6-7.6 1.2-1.2a5.4 5.4 0 0 0 0-7.6Z"/></svg>';
@@ -3521,13 +3636,42 @@
             badge.textContent = 'New';
             play.appendChild(badge);
           }
+          if (desktopShelfPlayControl) {
+            const playOverlay = document.createElement('button');
+            playOverlay.className = 'desktop-home-play-overlay';
+            playOverlay.type = 'button';
+            playOverlay.setAttribute('aria-label', `Play ${song.trackName || 'song'} on demand`);
+            playOverlay.title = `Play ${song.trackName || 'song'} on demand`;
+            playOverlay.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+            play.appendChild(playOverlay);
+            playAction = playOverlay;
+          }
         }
-        play.addEventListener('click', () => {
+        playAction.addEventListener('click', () => {
           if (isLikedFolderRecent) {
-            play.disabled = true;
+            playAction.disabled = true;
             void window.playLikedSongsQueue?.()
               .catch((error) => console.warn('Could not start the Liked Songs queue.', error))
-              .finally(() => { play.disabled = false; });
+              .finally(() => { playAction.disabled = false; });
+            return;
+          }
+          if (desktopShelfPlayControl) {
+            const current = window.onDemandPlaybackActive ? window.getCurrentOnDemandSong?.() : null;
+            const normalize = (value) => String(value || '').trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+            const sameTrack = normalize(song.trackName) === normalize(current?.trackName) &&
+              normalize(song.artistName) === normalize(current?.artistName);
+            if (sameTrack) {
+              window.toggleOnDemandPlayback?.();
+              return;
+            }
+            // This only changes the button immediately; it never delays the
+            // track request. Playback starts on the next line.
+            playAction.classList.add('is-loading');
+            playAction.dataset.loadingUntil = String(Date.now() + 500);
+            window.startOnDemandSong?.(song, { openNowPlaying: false });
+            window.setTimeout(() => {
+              refreshDesktopHomePlayButtons();
+            }, 500);
             return;
           }
           window.startOnDemandSong?.(song, { openNowPlaying: false });
@@ -3542,8 +3686,41 @@
         trackRow.appendChild(card);
       });
       section.append(heading, trackRow);
+      requestAnimationFrame(refreshDesktopHomePlayButtons);
       return section;
     }
+
+    function refreshDesktopHomePlayButtons() {
+      const normalize = (value) => String(value || '').trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+      const current = window.onDemandPlaybackActive ? window.getCurrentOnDemandSong?.() : null;
+      document.querySelectorAll('.desktop-home-play-overlay').forEach((button) => {
+        const song = button.closest('.mobile-genre-track')?.__onDemandSong;
+        const active = Boolean(song && current &&
+          normalize(song.trackName) === normalize(current.trackName) &&
+          normalize(song.artistName) === normalize(current.artistName));
+        const loading = button.classList.contains('is-loading') &&
+          Number(button.dataset.loadingUntil) > Date.now();
+        if (loading && active && window.onDemandPlaying === true &&
+            Date.now() >= Number(button.dataset.loadingUntil)) {
+          button.classList.remove('is-loading');
+          delete button.dataset.loadingUntil;
+        }
+        const stillLoading = button.classList.contains('is-loading') &&
+          Number(button.dataset.loadingUntil) > Date.now();
+        button.classList.toggle('is-playing', !stillLoading && active && window.onDemandPlaying === true);
+        if (stillLoading) return;
+        button.classList.remove('is-loading');
+        button.innerHTML = active && window.onDemandPlaying === true
+          ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>'
+          : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+        button.setAttribute('aria-label', active && window.onDemandPlaying === true
+          ? `Pause ${song.trackName || 'song'}`
+          : `Play ${song.trackName || 'song'} on demand`);
+      });
+    }
+
+    window.addEventListener('thaalam:on-demand-playback-state', refreshDesktopHomePlayButtons);
+    window.addEventListener('thaalam:nowplaying', refreshDesktopHomePlayButtons);
 
     let mobileRecentsRenderSignature = null;
     function updateMobileRecents() {
@@ -4006,6 +4183,18 @@
       hideCatalogSuggestions();
       if (activeGenre === 'you-like') renderGenreResults(currentFavouriteSongs);
       else if (activeGenre === 'recently-played') renderGenreResults(window.getOnDemandPlaybackHistory?.() || []);
+      else if (activeGenre.startsWith('search:')) {
+        // Desktop returns to its Home shelf without the default International
+        // scroll. Mobile keeps its existing search-clear behaviour.
+        activeSearchTerm = '';
+        if (desktopNavigation.matches) {
+          loadGenre('international', { scrollDesktopShelf: false });
+          return;
+        }
+        const firstGenre = [...genreTabList.querySelectorAll('[data-genre]')]
+          .find((tab) => Object.prototype.hasOwnProperty.call(genreFeedIds, tab.dataset.genre));
+        loadGenre(firstGenre?.dataset.genre || 'international');
+      }
       else {
         activeSearchTerm = '';
         const firstGenre = [...genreTabList.querySelectorAll('[data-genre]')]
@@ -4313,6 +4502,8 @@
             providerTrackId: info.providerTrackId || (trackKey.startsWith('youtube:') ? '' : (entry.track_id || entry.provider_track_id || '')),
             artworkUrl100: info.artworkUrl100 || info.artwork || entry.artwork || entry.artworkUrl100 ||
               (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : ''),
+              trackTimeMillis: Number(entry.duration_seconds) * 1000 || Number(info.durationSeconds) * 1000 ||
+                cachedTrackDurationMillis({ trackName: info.track || entry.title || keyTitle, artistName: info.artist || entry.artist || keyArtist }),
             ...(videoId ? { youtubeVideoId: videoId } : {})
           };
         }));
@@ -4530,6 +4721,11 @@
           if (localStorage.getItem(cacheKey) !== nextCache) localStorage.setItem(cacheKey, nextCache);
         } catch { /* The database remains authoritative if browser caching is unavailable. */ }
         showSongs(songs);
+        void backfillFavouriteDurations(userId, ratings, songs).then(() => {
+          if (!isCurrentRequest()) return;
+          if (render) renderGenreResults(currentFavouriteSongs);
+          else updateDesktopLibraryFolder();
+        });
         // Liked tracks come from the ratings service without catalog artwork.
         // Resolve missing covers once and keep them beside the cached ratings
         // so later visits can paint the cards without another iTunes request.

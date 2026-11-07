@@ -560,6 +560,36 @@ body.view-about .site-page.about-page {
 }
 
 @media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) {
+  /* Desktop tiles always expose their primary action. This is intentionally
+     not hover-only: the control remains discoverable when using a mouse,
+     trackpad, or keyboard. */
+  body.view-home .genre-results:not(.favourites-list-layout) .genre-card-media > .genre-play-button {
+    position: absolute !important;
+    z-index: 4;
+    display: grid !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    top: 50%;
+    right: auto;
+    bottom: auto;
+    left: 50%;
+    width: clamp(2rem, 32%, 2.8rem);
+    aspect-ratio: 1;
+    border: 1px solid rgba(255, 255, 255, 0.82);
+    border-radius: 50%;
+    background: rgba(8, 10, 14, 0.72);
+    color: #fff;
+    box-shadow: 0 0.25rem 0.8rem rgba(0, 0, 0, 0.45);
+    transform: translate(-50%, -50%);
+  }
+
+  body.view-home .genre-results:not(.favourites-list-layout) .genre-card-media > .genre-play-button:hover,
+  body.view-home .genre-results:not(.favourites-list-layout) .genre-card-media > .genre-play-button:focus-visible {
+    background: rgba(8, 10, 14, 0.9);
+    border-color: #fff;
+    transform: translate(-50%, -50%) scale(1.07);
+  }
+
   /* Now Playing's sideways slide is desktop-only. On mobile the page is the
      launch view — showView() no-ops there and the body class never switches —
      so the global rule only made the player card and lyrics slide in on every
@@ -8024,4 +8054,140 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
   position: fixed;
   right: auto;
   z-index: 9999;
+}
+
+/* The desktop catalogue is viewport-based, not pointer-based: a desktop can
+   report a coarse pointer when it has a touchscreen. Keep this affordance
+   visible in both cases. This final rule deliberately wins over mobile-card
+   declarations earlier in the stylesheet. */
+@media (min-width: 56.25rem) {
+  .home-page .mobile-genre-track-art > .desktop-home-play-overlay {
+    position: absolute;
+    z-index: 3;
+    display: grid;
+    width: clamp(2.2rem, 28%, 3.2rem);
+    aspect-ratio: 1;
+    top: 50%;
+    left: 50%;
+    place-items: center;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.88);
+    border-radius: 50%;
+    background: rgba(8, 10, 14, 0.78);
+    box-shadow: 0 0.25rem 0.8rem rgba(0, 0, 0, 0.5);
+    color: #fff;
+    transform: translate(-50%, -50%);
+  }
+
+  .home-page .mobile-genre-track-art > .desktop-home-play-overlay svg {
+    width: 45%;
+    height: 45%;
+    fill: currentColor;
+  }
+
+  .home-page .mobile-genre-track-art > .desktop-home-play-overlay.is-playing {
+    background: rgba(8, 10, 14, 0.78);
+    border-color: rgba(255, 255, 255, 0.88);
+  }
+
+  .home-page .mobile-genre-track-art > .desktop-home-play-overlay.is-loading svg {
+    opacity: 0;
+  }
+
+  .home-page .mobile-genre-track-art > .desktop-home-play-overlay.is-loading::after {
+    position: absolute;
+    width: 1.35rem;
+    height: 1.35rem;
+    border: 0.15rem solid rgba(255, 255, 255, 0.28);
+    border-top-color: #fff;
+    border-radius: 50%;
+    content: '';
+    animation: streamSpinner 0.8s linear infinite;
+  }
+
+  body.view-home .genre-card-art-frame > .desktop-album-play-overlay {
+    position: absolute !important;
+    z-index: 20 !important;
+    display: grid !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    top: 50% !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: 50% !important;
+    width: clamp(2rem, 32%, 2.8rem) !important;
+    height: auto !important;
+    aspect-ratio: 1;
+    place-items: center;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.88) !important;
+    border-radius: 50% !important;
+    background: rgba(8, 10, 14, 0.78) !important;
+    color: #fff !important;
+    box-shadow: 0 0.25rem 0.8rem rgba(0, 0, 0, 0.52) !important;
+    transform: translate(-50%, -50%) !important;
+  }
+
+  body.view-home .genre-card-art-frame > .desktop-album-play-overlay svg {
+    display: block;
+    width: 45%;
+    height: 45%;
+    fill: currentColor;
+  }
+
+  body.view-home .genre-card-art-frame > .desktop-album-play-overlay:hover,
+  body.view-home .genre-card-art-frame > .desktop-album-play-overlay:focus-visible {
+    background: rgba(8, 10, 14, 0.96) !important;
+    transform: translate(-50%, -50%) scale(1.07) !important;
+  }
+
+  body.view-home .genre-results:not(.favourites-list-layout) .genre-card-media > .genre-play-button {
+    position: absolute !important;
+    z-index: 10 !important;
+    display: grid !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    top: 50% !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: 50% !important;
+    width: clamp(2rem, 32%, 2.8rem) !important;
+    height: auto !important;
+    aspect-ratio: 1;
+    border: 1px solid rgba(255, 255, 255, 0.82) !important;
+    border-radius: 50% !important;
+    background: rgba(8, 10, 14, 0.76) !important;
+    color: #fff !important;
+    box-shadow: 0 0.25rem 0.8rem rgba(0, 0, 0, 0.48) !important;
+    transform: translate(-50%, -50%) !important;
+  }
+
+  body.view-home .genre-results:not(.favourites-list-layout) .genre-card-media > .genre-play-button:hover,
+  body.view-home .genre-results:not(.favourites-list-layout) .genre-card-media > .genre-play-button:focus-visible {
+    background: rgba(8, 10, 14, 0.94) !important;
+    transform: translate(-50%, -50%) scale(1.07) !important;
+  }
+}
+
+/* Mobile Home: keep the first shelf close to the Browse heading and let the
+   Recents rail handle its own horizontal swipe gesture. These intentionally
+   override the desktop-home shelf rules that appear earlier in this file. */
+@media (max-width: 56.1875rem) {
+  body.view-home .home-page .mobile-genre-shelves {
+    margin-top: 1.8rem !important;
+    padding-top: 0.55rem !important;
+  }
+
+  body.view-home .home-page .mobile-recents-row .mobile-genre-track-row {
+    overflow-x: auto !important;
+    overflow-y: hidden;
+    justify-content: flex-start;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+  }
+
+  body.view-home .home-page .mobile-recents-row .mobile-genre-track {
+    flex: 0 0 5.5rem;
+  }
 }

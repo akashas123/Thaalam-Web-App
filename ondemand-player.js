@@ -47,62 +47,13 @@ standbyOnDemandAudio.setAttribute('webkit-playsinline', '');
 let upcomingAudioPrefetchToken = 0;
 const onDemandAudioContextConstructor = window.AudioContext || window.webkitAudioContext;
 const onDemandAudioNodes = new WeakMap();
-const onDemandAudioNodeEntries = new Set();
 let onDemandAudioContext = null;
 let onDemandAudioGraphUnavailable = false;
 let onDemandMasterVolume = 0.5;
 let onDemandMuted = false;
-let onDemandNormalizationTimer = 0;
-const ON_DEMAND_NORMALIZATION_TARGET_RMS = 0.1;
-const ON_DEMAND_NORMALIZATION_MIN_RMS = 0.01;
-const ON_DEMAND_NORMALIZATION_MIN_GAIN = 0.5;
-const ON_DEMAND_NORMALIZATION_MAX_GAIN = 1;
-const ON_DEMAND_NORMALIZATION_SAMPLE_SECONDS = 3;
 const ON_DEMAND_CROSSFADE_SECONDS = 8;
 let activeOnDemandCrossfade = null;
 let onDemandCrossfadeTransitionStarted = false;
-
-function updateOnDemandAudioNormalization() {
-  if (!onDemandAudioContext || onDemandAudioContext.state !== 'running') return;
-
-  onDemandAudioNodeEntries.forEach(({ audio, node }) => {
-    if (audio.paused || audio.ended || node.normalizationLocked) return;
-
-    node.analyser.getFloatTimeDomainData(node.samples);
-    let energy = 0;
-    for (let index = 0; index < node.samples.length; index += 1) {
-      energy += node.samples[index] * node.samples[index];
-    }
-    const rms = Math.sqrt(energy / node.samples.length);
-    if (rms < ON_DEMAND_NORMALIZATION_MIN_RMS) return;
-
-    node.normalizationLogRmsSum += Math.log(rms);
-    node.normalizationSampleCount += 1;
-    if (audio.currentTime < ON_DEMAND_NORMALIZATION_SAMPLE_SECONDS ||
-        node.normalizationSampleCount < 8) return;
-
-    const averageRms = Math.exp(node.normalizationLogRmsSum / node.normalizationSampleCount);
-    const targetGain = Math.max(ON_DEMAND_NORMALIZATION_MIN_GAIN, Math.min(
-      ON_DEMAND_NORMALIZATION_MAX_GAIN,
-      ON_DEMAND_NORMALIZATION_TARGET_RMS / averageRms
-    ));
-    node.normalizationLocked = true;
-    node.normalizationGain.gain.setTargetAtTime(
-      targetGain,
-      onDemandAudioContext.currentTime,
-      1.5
-    );
-  });
-}
-
-function resetOnDemandAudioNormalization(audio) {
-  const node = onDemandAudioNodes.get(audio);
-  if (!node || !onDemandAudioContext) return;
-  node.normalizationLogRmsSum = 0;
-  node.normalizationSampleCount = 0;
-  node.normalizationLocked = false;
-  node.normalizationGain.gain.setValueAtTime(1, onDemandAudioContext.currentTime);
-}
 
 function applyOnDemandAudioOutput(audio) {
   const node = onDemandAudioNodes.get(audio);
@@ -153,28 +104,11 @@ function getOnDemandAudioNode(audio) {
   try {
     onDemandAudioContext ||= new onDemandAudioContextConstructor({ latencyHint: 'playback' });
     const source = onDemandAudioContext.createMediaElementSource(audio);
-    const analyser = onDemandAudioContext.createAnalyser();
-    const normalizationGain = onDemandAudioContext.createGain();
     const gain = onDemandAudioContext.createGain();
-    analyser.fftSize = 2048;
-    source.connect(analyser);
-    analyser.connect(normalizationGain);
-    normalizationGain.connect(gain);
+    source.connect(gain);
     gain.connect(onDemandAudioContext.destination);
-    const node = {
-      analyser,
-      gain,
-      normalizationGain,
-      samples: new Float32Array(analyser.fftSize),
-      normalizationLogRmsSum: 0,
-      normalizationSampleCount: 0,
-      normalizationLocked: false
-    };
+    const node = { gain };
     onDemandAudioNodes.set(audio, node);
-    onDemandAudioNodeEntries.add({ audio, node });
-    if (!onDemandNormalizationTimer) {
-      onDemandNormalizationTimer = window.setInterval(updateOnDemandAudioNormalization, 100);
-    }
     applyOnDemandAudioOutput(audio);
     return node;
   } catch (error) {
@@ -192,8 +126,10 @@ function prepareOnDemandAudioGraph() {
 }
 
 function resumeOnDemandAudioContext() {
-  if (!onDemandAudioContext || onDemandAudioContext.state === 'running') return;
-  void onDemandAudioContext.resume().catch((error) => {
+  if (!onDemandAudioContext || onDemandAudioContext.state === 'running') {
+    return Promise.resolve();
+  }
+  return onDemandAudioContext.resume().catch((error) => {
     console.error('Could not resume the on-demand audio context.', error);
   });
 }
@@ -1776,7 +1712,6 @@ function bindOnDemandAudioEvents(audio) {
     activateOnDemandMediaSession();
   });
   audio.addEventListener('loadedmetadata', () => {
-    resetOnDemandAudioNormalization(audio);
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
     syncAdaptiveDisc(audio, 'paused');
     setOnDemandAudioReady(true);
@@ -2956,7 +2891,10 @@ async function startOnDemandSong(song, {
 } = {}) {
   if (!song?.trackName) return;
   prepareOnDemandAudioGraph();
-  resumeOnDemandAudioContext();
+  // On a fresh mobile visit, the audio context begins suspended. Complete its
+  // user-gesture resume before the asynchronous track lookup so the first
+  // artwork tap is allowed to start audio too.
+  await resumeOnDemandAudioContext();
   setOnDemandAudioReady(false);
   autoplayTrackTransition = crossfade;
   if (!crossfade) {
@@ -3432,6 +3370,7 @@ function returnToLive() {
 }
 
 window.startOnDemandSong = startOnDemandSong;
+window.dispatchEvent(new Event('thaalam:on-demand-ready'));
 window.startOnDemandQueue = startOnDemandQueue;
 window.toggleOnDemandPlayback = toggleOnDemandPlayback;
 window.skipOnDemandSong = skipOnDemandSong;
