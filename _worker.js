@@ -685,27 +685,20 @@ async function handleRatings(request, env) {
     let rows = null;
     try {
       const result = await env.DB.prepare(
-        'SELECT track_key, rating, title, artist, track_id, artwork, album, duration_seconds, updated_at FROM user_ratings WHERE user_id = ? ORDER BY updated_at DESC'
+        'SELECT track_key, rating, title, artist, track_id, artwork, album, updated_at FROM user_ratings WHERE user_id = ? ORDER BY updated_at DESC'
       ).bind(user.sub).all();
       rows = result.results || [];
     } catch {
       try {
         const result = await env.DB.prepare(
-          'SELECT track_key, rating, title, artist, track_id, artwork, album, updated_at FROM user_ratings WHERE user_id = ? ORDER BY updated_at DESC'
+          'SELECT track_key, rating, title, artist, video_id, artwork, updated_at FROM user_ratings WHERE user_id = ? ORDER BY updated_at DESC'
         ).bind(user.sub).all();
         rows = result.results || [];
       } catch {
-        try {
-          const result = await env.DB.prepare(
-            'SELECT track_key, rating, title, artist, video_id, artwork, updated_at FROM user_ratings WHERE user_id = ? ORDER BY updated_at DESC'
-          ).bind(user.sub).all();
-          rows = result.results || [];
-        } catch {
-          const result = await env.DB.prepare(
-            'SELECT track_key, rating, title, artist, video_id, updated_at FROM user_ratings WHERE user_id = ? ORDER BY updated_at DESC'
-          ).bind(user.sub).all();
-          rows = result.results || [];
-        }
+        const result = await env.DB.prepare(
+          'SELECT track_key, rating, title, artist, video_id, updated_at FROM user_ratings WHERE user_id = ? ORDER BY updated_at DESC'
+        ).bind(user.sub).all();
+        rows = result.results || [];
       }
     }
     const ratings = rows.map((row) => ({
@@ -768,10 +761,9 @@ async function handleRatings(request, env) {
         ? entry.videoId : null;
       const trackId = (typeof entry.trackId === 'string' ? entry.trackId.trim().slice(0, 200) : '') ||
         providerTrackId || videoId || (entry.trackKey.startsWith('youtube:') ? entry.trackKey.slice(8) : '');
-      const durationSeconds = Math.max(0, Math.min(86400, Math.floor(Number(entry.durationSeconds) || 0)));
       return env.DB.prepare(`
-        INSERT INTO user_ratings (user_id, track_key, rating, title, artist, track_id, artwork, album, duration_seconds, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
+        INSERT INTO user_ratings (user_id, track_key, rating, title, artist, track_id, artwork, album, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
         ON CONFLICT(user_id, track_key) DO UPDATE SET
           rating = excluded.rating,
           title = CASE WHEN excluded.title = '' THEN user_ratings.title ELSE excluded.title END,
@@ -779,9 +771,8 @@ async function handleRatings(request, env) {
           track_id = CASE WHEN excluded.track_id = '' THEN user_ratings.track_id ELSE excluded.track_id END,
           artwork = CASE WHEN excluded.artwork = '' THEN user_ratings.artwork ELSE excluded.artwork END,
           album = CASE WHEN excluded.album = '' THEN user_ratings.album ELSE excluded.album END,
-          duration_seconds = CASE WHEN excluded.duration_seconds > 0 THEN excluded.duration_seconds ELSE user_ratings.duration_seconds END,
           updated_at = CASE WHEN user_ratings.rating = excluded.rating THEN user_ratings.updated_at ELSE unixepoch() END
-      `).bind(user.sub, entry.trackKey.trim(), entry.rating, title, artist, trackId, artworkInput, album, durationSeconds);
+      `).bind(user.sub, entry.trackKey.trim(), entry.rating, title, artist, trackId, artworkInput, album);
     });
     try {
       if (statements.length) await env.DB.batch(statements);
@@ -835,11 +826,10 @@ async function handleRatings(request, env) {
     : null;
   const trackId = (typeof payload.trackId === 'string' ? payload.trackId.trim().slice(0, 200) : '') ||
     providerTrackId || videoId || (trackKey.startsWith('youtube:') ? trackKey.slice(8) : '');
-  const durationSeconds = Math.max(0, Math.min(86400, Math.floor(Number(payload.durationSeconds) || 0)));
   try {
     await env.DB.prepare(`
-      INSERT INTO user_ratings (user_id, track_key, rating, title, artist, track_id, artwork, album, duration_seconds, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
+      INSERT INTO user_ratings (user_id, track_key, rating, title, artist, track_id, artwork, album, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
       ON CONFLICT(user_id, track_key) DO UPDATE SET
         rating = excluded.rating,
         title = CASE WHEN excluded.title = '' THEN user_ratings.title ELSE excluded.title END,
@@ -847,9 +837,8 @@ async function handleRatings(request, env) {
         track_id = CASE WHEN excluded.track_id = '' THEN user_ratings.track_id ELSE excluded.track_id END,
         artwork = CASE WHEN excluded.artwork = '' THEN user_ratings.artwork ELSE excluded.artwork END,
         album = CASE WHEN excluded.album = '' THEN user_ratings.album ELSE excluded.album END,
-        duration_seconds = CASE WHEN excluded.duration_seconds > 0 THEN excluded.duration_seconds ELSE user_ratings.duration_seconds END,
         updated_at = CASE WHEN user_ratings.rating = excluded.rating THEN user_ratings.updated_at ELSE unixepoch() END
-    `).bind(user.sub, trackKey, payload.rating, title, artist, trackId, artwork, album, durationSeconds).run();
+    `).bind(user.sub, trackKey, payload.rating, title, artist, trackId, artwork, album).run();
     return Response.json({ ok: true });
   } catch { /* Support older schemas during the database column rename. */ }
   const withProviderIdentity = env.DB.prepare(`
