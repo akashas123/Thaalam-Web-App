@@ -704,6 +704,102 @@ html.is-restoring-session .app-loader {
   background: #05070d;
   content: "";
 }
+
+/* Listening-based daily mixes. The artwork is intentionally generated in CSS
+   so a mix always has a polished cover before its first songs are fetched. */
+.thaalam-mix-card {
+  display: flex;
+  width: 8.5rem;
+  flex: 0 0 8.5rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.42rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.thaalam-mix-art {
+  display: grid;
+  width: 8.5rem;
+  height: 8.5rem;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 0.6rem;
+  background:
+    radial-gradient(circle at 76% 20%, rgba(255,255,255,.34), transparent 21%),
+    linear-gradient(135deg, #ff5b88, var(--liked-folder-color) 45%, #52001c 100%);
+  box-shadow: inset 0 1px rgba(255,255,255,.28), 0 .5rem 1.2rem rgba(0,0,0,.22);
+}
+
+.thaalam-mix-card:nth-child(2n) .thaalam-mix-art { background: radial-gradient(circle at 22% 18%, rgba(255,255,255,.28), transparent 20%), linear-gradient(135deg, #7d64ee, #432a97 52%, #160d38); }
+.thaalam-mix-card:nth-child(3n) .thaalam-mix-art { background: radial-gradient(circle at 75% 25%, rgba(255,255,255,.3), transparent 20%), linear-gradient(135deg, #ea9a49, #ba3d34 54%, #4c121e); }
+.thaalam-mix-card:nth-child(4n) .thaalam-mix-art { background: radial-gradient(circle at 30% 18%, rgba(255,255,255,.26), transparent 20%), linear-gradient(135deg, #2aada6, #176875 54%, #082938); }
+
+.thaalam-mix-art svg {
+  width: 3rem;
+  height: 3rem;
+  fill: #fff !important;
+  stroke: none !important;
+}
+
+.thaalam-mix-art svg rect {
+  fill: #fff !important;
+  stroke: none !important;
+}
+
+/* The same Thaalam mark is used when a played Mix appears in Recents. These
+   live outside the mobile-only rules so the card is identical on desktop. */
+.mobile-genre-track-art.is-thaalam-mix-recent {
+  display: grid !important;
+  place-items: center;
+  background:
+    radial-gradient(circle at 76% 20%, rgba(255,255,255,.34), transparent 21%),
+    linear-gradient(135deg, #ff5b88, var(--liked-folder-color) 45%, #52001c 100%) !important;
+}
+.mobile-genre-track-art.is-thaalam-mix-recent svg {
+  width: 38% !important;
+  height: 38% !important;
+  fill: #fff !important;
+  stroke: none !important;
+}
+.mobile-genre-track-art.is-thaalam-mix-recent rect {
+  fill: #fff !important;
+  stroke: none !important;
+}
+.mobile-genre-track-art.is-thaalam-mix-recent[data-mix-variant="1"] { background: radial-gradient(circle at 22% 18%, rgba(255,255,255,.28), transparent 20%), linear-gradient(135deg, #7d64ee, #432a97 52%, #160d38) !important; }
+.mobile-genre-track-art.is-thaalam-mix-recent[data-mix-variant="2"] { background: radial-gradient(circle at 75% 25%, rgba(255,255,255,.3), transparent 20%), linear-gradient(135deg, #ea9a49, #ba3d34 54%, #4c121e) !important; }
+.mobile-genre-track-art.is-thaalam-mix-recent[data-mix-variant="3"] { background: radial-gradient(circle at 30% 18%, rgba(255,255,255,.26), transparent 20%), linear-gradient(135deg, #2aada6, #176875 54%, #082938) !important; }
+
+.thaalam-mix-copy { display: grid; min-width: 0; gap: .15rem; }
+.thaalam-mix-copy strong,
+.thaalam-mix-copy small { overflow: hidden; width: 100%; text-overflow: ellipsis; white-space: nowrap; }
+.thaalam-mix-copy strong { font-size: .78rem; font-weight: 700; }
+.thaalam-mix-copy small { color: rgba(255,255,255,.62); font-size: .68rem; }
+.thaalam-mix-card:hover .thaalam-mix-art { filter: brightness(1.12); transform: translateY(-.1rem); }
+.thaalam-mix-card:focus-visible { outline: 2px solid rgba(255,255,255,.8); outline-offset: .25rem; border-radius: .6rem; }
+
+.library-mixes { margin-top: 1.65rem; }
+.library-mixes h2 { margin: 0 0 .8rem; color: #fff; font-size: 1.05rem; }
+.library-mixes-row { display: flex; gap: .9rem; overflow-x: auto; padding: .05rem .1rem .35rem; scrollbar-width: none; }
+.library-mixes-row::-webkit-scrollbar { display: none; }
+
+@media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) {
+  .home-page .desktop-library-row .thaalam-mix-card {
+    width: var(--desktop-home-genre-art-size);
+    flex-basis: var(--desktop-home-genre-art-size);
+  }
+
+  .home-page .desktop-library-row .thaalam-mix-art {
+    width: var(--desktop-home-genre-art-size);
+    height: var(--desktop-home-genre-art-size);
+    border-radius: .55rem;
+  }
+}
 @keyframes appLoaderSpin {
   to { transform: rotate(360deg); }
 }
@@ -5309,6 +5405,9 @@ body.has-lyrics .lyrics-panel {
   .mobile-recents-row .mobile-genre-track-art { width: 5.5rem; min-width: 5.5rem; height: 5.5rem; min-height: 5.5rem; flex-basis: 5.5rem; }
   .mobile-recents-row .mobile-genre-track-art.is-liked-folder-recent { display: grid; place-items: center; background: linear-gradient(145deg, color-mix(in srgb, var(--liked-folder-color) 65%, white) 0%, var(--liked-folder-color) 55%, color-mix(in srgb, var(--liked-folder-color) 82%, black) 100%); }
   .mobile-recents-row .mobile-genre-track-art.is-liked-folder-recent svg { width: 1.6rem; height: 1.6rem; fill: #fff; }
+  .mobile-recents-row .mobile-genre-track-art.is-thaalam-mix-recent { display: grid; place-items: center; background: radial-gradient(circle at 76% 20%, rgba(255,255,255,.34), transparent 21%), linear-gradient(135deg, #ff5b88, var(--liked-folder-color) 45%, #52001c 100%); }
+  .mobile-recents-row .mobile-genre-track-art.is-thaalam-mix-recent svg { width: 2.15rem; height: 2.15rem; fill: #fff; }
+  .mobile-recents-row .mobile-genre-track-art.is-thaalam-mix-recent rect { fill: #fff; stroke: none; }
   .mobile-recents-row .mobile-genre-track.is-liked-folder-recent .mobile-genre-track-artist { display: none; }
   .mobile-genre-track { width: 8.5rem; flex: 0 0 8.5rem; }
   .mobile-genre-track-art { position: relative; display: block; width: 8.5rem; min-width: 8.5rem; height: 8.5rem; min-height: 8.5rem; aspect-ratio: 1 / 1; flex: 0 0 8.5rem; overflow: hidden; border: 0; border-radius: 0.55rem; background: #111 url('album-placeholder.svg?v=3') center / cover no-repeat; }
@@ -8144,6 +8243,23 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
   .home-page .mobile-recents-row .mobile-genre-track-art {
     height: var(--desktop-home-art-size);
     min-height: var(--desktop-home-art-size);
+  }
+
+  .home-page .mobile-recents-row .mobile-genre-track-art.is-thaalam-mix-recent {
+    display: grid;
+    place-items: center;
+    background: radial-gradient(circle at 76% 20%, rgba(255,255,255,.34), transparent 21%), linear-gradient(135deg, #ff5b88, var(--liked-folder-color) 45%, #52001c 100%);
+  }
+
+  .home-page .mobile-recents-row .mobile-genre-track-art.is-thaalam-mix-recent svg {
+    width: 38%;
+    height: 38%;
+    fill: #fff;
+  }
+
+  .home-page .mobile-recents-row .mobile-genre-track-art.is-thaalam-mix-recent rect {
+    fill: #fff;
+    stroke: none;
   }
 
   .home-page .mobile-recents-row .mobile-genre-track-row {
