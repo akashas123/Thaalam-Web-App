@@ -360,8 +360,8 @@ body.view-about {
 }
 
 @media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) {
-  body.desktop-cursor-hidden,
-  body.desktop-cursor-hidden * {
+  body.view-now-playing.desktop-cursor-hidden,
+  body.view-now-playing.desktop-cursor-hidden * {
     cursor: none !important;
   }
 }
@@ -673,6 +673,18 @@ html.has-saved-login .login-screen {
 }
 html.is-restoring-session .app-loader {
   display: grid;
+}
+@media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) {
+  /* A refresh restores personal Home rows after the static document is
+     parsed. Keep the transition invisible so returning users never see the
+     login/loading spinner. */
+  html.desktop-home-restoring .app-loader {
+    display: none !important;
+  }
+
+  html.desktop-home-restoring body.view-home .home-page {
+    visibility: hidden;
+  }
 }
 .app-loader[hidden] {
   display: none !important;
