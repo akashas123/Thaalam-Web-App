@@ -49,7 +49,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=708">
+  <link rel="stylesheet" href="style.css?v=718">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -416,6 +416,7 @@
           <div class="catalog-suggestions" id="catalogSuggestions" role="listbox" aria-label="Song suggestions" hidden></div>
         </form>
       </header>
+      <section class="mobile-search-results" id="mobileSearchResults" aria-live="polite" hidden></section>
       <div class="mobile-genre-shelves" id="mobileGenreShelves" aria-label="Browse songs by genre">
         <section class="mobile-genre-row mobile-home-initial-shelf" aria-label="International songs">
           <h2>International</h2><div class="mobile-genre-track-row">
@@ -512,7 +513,7 @@
       </div>
       <div class="about-signoff">
         <h1 id="aboutTitle" tabindex="-1"><img class="about-signoff-logo" src="thaalam-icon-512.png?v=8" alt="Thaalam 24x7"></h1>
-        <p class="about-signoff-note" id="aboutVersion">v9.9.9</p>
+        <p class="about-signoff-note" id="aboutVersion">v9.9.20</p>
         <button class="site-page-action" type="button" data-view="home">
           Back to Home
         </button>
@@ -1474,6 +1475,7 @@
       }
     } catch { /* Use International when browser storage is unavailable. */ }
     let activeSearchTerm = '';
+    let catalogSearchCommitted = false;
     let suggestionRequestId = 0;
     let suggestionTimer = 0;
     let genreRequestId = 0;
@@ -2647,6 +2649,22 @@
         button.setAttribute('aria-label', `${isPlaying ? 'Pause' : 'Play'} ${title}`);
         button.title = `${isPlaying ? 'Pause' : 'Play'} ${title}`;
       });
+      refreshMobileSearchPlaybackState();
+    }
+
+    function refreshMobileSearchPlaybackState() {
+      const current = window.latestNowPlayingData?.now_playing?.song ||
+        window.currentNowPlayingSong ||
+        (window.onDemandPlaybackActive ? window.getCurrentOnDemandSong?.() : null);
+      document.querySelectorAll('.mobile-search-result-row').forEach((row) => {
+        const active = isSameFavouriteTrack({
+          trackName: row.dataset.trackName,
+          artistName: row.dataset.artistName,
+          artworkUrl100: row.dataset.artworkUrl
+        }, current);
+        row.classList.toggle('is-active-track', active);
+        row.setAttribute('aria-current', active ? 'true' : 'false');
+      });
     }
 
     window.addEventListener('thaalam:nowplaying', refreshFavouriteListPlaybackState);
@@ -3010,6 +3028,11 @@
         return trackTimeMillis ? { ...song, trackTimeMillis, durationSeconds: trackTimeMillis / 1000 } : song;
       });
       lastGenreResultsSongs = songs;
+      if (activeGenre.startsWith('search:') && !desktopNavigation.matches) {
+        renderDedicatedMobileSearchResults(songs);
+        updateHomeTint(songs);
+        return;
+      }
       const wasBusy = genreResults.getAttribute('aria-busy') === 'true';
       genreResults.setAttribute('aria-busy', 'false');
       genreResults.classList.toggle(
@@ -3531,6 +3554,53 @@
       }
     }
 
+    function renderDedicatedMobileSearchResults(songs, message = '') {
+      const results = document.getElementById('mobileSearchResults');
+      if (!results) return;
+      results.hidden = false;
+      results.replaceChildren();
+      if (!songs.length) {
+        const notice = document.createElement('p');
+        notice.className = 'mobile-search-results-message';
+        notice.textContent = message || 'No matching songs were found.';
+        results.appendChild(notice);
+        return;
+      }
+      songs.forEach((song) => {
+        const row = document.createElement('button');
+        row.className = 'mobile-search-result-row';
+        row.type = 'button';
+        row.dataset.trackName = song.trackName || '';
+        row.dataset.artistName = song.artistName || '';
+        row.dataset.artworkUrl = song.artworkUrl100 || '';
+        row.setAttribute('aria-label', `Play ${song.trackName || 'song'}`);
+        const artwork = document.createElement('img');
+        artwork.alt = '';
+        artwork.src = song.artworkUrl100
+          ? song.artworkUrl100.replace(/^http:/, 'https:').replace(/\d+x\d+bb\./, '300x300bb.')
+          : 'album-placeholder.svg?v=3';
+        artwork.addEventListener('error', () => { artwork.src = 'album-placeholder.svg?v=3'; }, { once: true });
+        const copy = document.createElement('span');
+        copy.className = 'mobile-search-result-copy';
+        const title = document.createElement('strong');
+        title.textContent = song.trackName || 'Unknown song';
+        const artist = document.createElement('small');
+        artist.textContent = song.artistName || 'Unknown artist';
+        copy.append(title, artist);
+        row.append(artwork, copy);
+        row.addEventListener('click', () => {
+          const current = window.onDemandPlaybackActive ? window.getCurrentOnDemandSong?.() : null;
+          if (isSameFavouriteTrack(song, current)) {
+            window.toggleOnDemandPlayback?.();
+            return;
+          }
+          window.startOnDemandSong?.(song, { openNowPlaying: false });
+        });
+        results.appendChild(row);
+      });
+      refreshMobileSearchPlaybackState();
+    }
+
     // Crossing the mobile/desktop boundary swaps the search card structure
     // (info button inside the thumbnail vs. beside the details), so rebuild
     // search results from the last rendered song list. The render key carries
@@ -3545,6 +3615,9 @@
     function showGenreLoading() {
       genreResults.replaceChildren();
       genreResults.setAttribute('aria-busy', 'true');
+      if (activeGenre.startsWith('search:') && !desktopNavigation.matches) {
+        document.getElementById('mobileSearchResults')?.setAttribute('hidden', '');
+      }
       // Keep the mobile search viewport visible while results are loading (or
       // if the request reports an error), rather than showing an empty panel.
       genreResults.classList.toggle(
@@ -4402,6 +4475,9 @@
         genreTabShuffle = false;
         genreResults.replaceChildren();
         genreResults.setAttribute('aria-busy', 'false');
+        if (activeGenre.startsWith('search:') && !desktopNavigation.matches) {
+          renderDedicatedMobileSearchResults([], 'Could not load songs. Check your connection and try again.');
+        }
         const error = document.createElement('p');
         error.className = 'genre-empty';
         error.textContent = 'Could not load songs. Check your connection and try again.';
@@ -4422,6 +4498,10 @@
     }
 
     function renderCatalogSuggestions(songs, term) {
+      if (catalogSearchCommitted) {
+        hideCatalogSuggestions();
+        return;
+      }
       songs = filterCatalogSuggestions(songs, term).slice(0, 5);
       catalogSuggestions.replaceChildren();
       if (!songs.length) {
@@ -5116,6 +5196,9 @@
     });
 
     function loadGenre(genre, { scrollDesktopShelf = true } = {}) {
+      if (!genre.startsWith('search:')) {
+        document.getElementById('mobileSearchResults')?.setAttribute('hidden', '');
+      }
       if (activeGenre !== genre) {
         genreResults.scrollTop = 0;
         if (catalogSearchInput.value) {
@@ -5314,6 +5397,8 @@
     function searchCatalog(term) {
       const normalizedTerm = term.trim();
       if (!normalizedTerm) return;
+      catalogSearchCommitted = true;
+      hideCatalogSuggestions();
       if (desktopNavigation.matches) document.body.classList.add('desktop-catalog-active');
       genreResults.scrollTop = 0;
       if (activeGenre === 'you-like') {
@@ -5337,6 +5422,9 @@
       // A search supersedes a just-armed tab switch: its results must render
       // without the tile-shuffle cascade.
       genreTabShuffle = false;
+      window.clearTimeout(genreShuffleTimer);
+      genreShuffleTimer = 0;
+      genreResults.classList.remove('is-shuffling');
       // Cancel any pending trailing suggestion fetch — loadCatalog awaits the
       // shared per-term request itself, so nothing is lost by stopping the
       // timer here, and the dropdown can't pop back open over the results.
@@ -5358,7 +5446,18 @@
       hideCatalogSuggestions();
       searchCatalog(catalogSearchInput.value);
     });
-    catalogSearchInput.addEventListener('input', updateCatalogSuggestions);
+    catalogSearchInput.addEventListener('input', () => {
+      catalogSearchCommitted = false;
+      updateCatalogSuggestions();
+      // Mobile should keep the suggestion list open while the listener types.
+      // A result search only begins from Enter, the search button, or a
+      // suggestion tap — never from a trailing typing timer.
+      if (desktopNavigation.matches || !document.body.classList.contains('mobile-search-active')) return;
+      const term = catalogSearchInput.value.trim();
+      if (term !== activeSearchTerm) {
+        document.getElementById('mobileSearchResults')?.setAttribute('hidden', '');
+      }
+    });
     catalogClearButton.addEventListener('click', clearCatalogSearch);
     catalogSearchInput.addEventListener('search', updateCatalogSuggestions);
     catalogSearchInput.addEventListener('keydown', (event) => {

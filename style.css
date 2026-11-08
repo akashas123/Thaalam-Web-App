@@ -5594,9 +5594,9 @@ body.has-lyrics .lyrics-panel {
 
   .library-header h1 { font-size: 1.65rem; line-height: 1.15; }
   .library-subtitle { max-width: 22rem; margin: 0.4rem 0 0; color: rgba(255,255,255,.64); font-size: 0.82rem; line-height: 1.45; }
-  body.view-library .liked-playlist-card { display: flex; width: 100%; min-height: 5rem; margin-top: 2rem; align-items: center; gap: 0.8rem; padding: 0.65rem; border: 0 !important; border-radius: 0.9rem; outline: 0; background: transparent !important; box-shadow: none !important; color: #fff; text-align: left; cursor: pointer; }
-  .liked-playlist-art { display: grid; width: 3.7rem; height: 3.7rem; flex: 0 0 3.7rem; place-items: center; border-radius: 0.55rem; background: linear-gradient(145deg, color-mix(in srgb, var(--liked-folder-color) 65%, white) 0%, var(--liked-folder-color) 55%, color-mix(in srgb, var(--liked-folder-color) 82%, black) 100%); }
-  .liked-playlist-art svg { width: 1.8rem; height: 1.8rem; fill: #fff; }
+  body.view-library .liked-playlist-card { display: flex; width: 100%; min-height: 5.9rem; margin-top: 2rem; align-items: center; gap: 0.9rem; padding: 0.65rem; border: 0 !important; border-radius: 0.9rem; outline: 0; background: transparent !important; box-shadow: none !important; color: #fff; text-align: left; cursor: pointer; }
+  .liked-playlist-art { display: grid; width: 4.75rem; height: 4.75rem; flex: 0 0 4.75rem; place-items: center; border-radius: 0.65rem; background: linear-gradient(145deg, color-mix(in srgb, var(--liked-folder-color) 65%, white) 0%, var(--liked-folder-color) 55%, color-mix(in srgb, var(--liked-folder-color) 82%, black) 100%); }
+  .liked-playlist-art svg { width: 2.25rem; height: 2.25rem; fill: #fff; }
   .liked-playlist-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 0.25rem; }
   .liked-playlist-copy strong { font-size: 0.9rem; }
   .liked-playlist-copy > span { color: rgba(255,255,255,.62); font-size: 0.75rem; }
@@ -7099,11 +7099,72 @@ img {
     fill: currentColor;
   }
 
-  /* Keep the result viewport present while a search is loading or reporting
-     an error. The list marker is applied before the request begins, but this
-     fallback prevents a transient empty screen during mobile navigation. */
-  body.mobile-search-active.view-home #genreResults {
+  /* Mobile search has a dedicated results viewport. The Home wrapper also
+     serves desktop/library views and can collapse inside this mobile grid. */
+  body.mobile-search-active.view-home .recent-history-panel {
+    /* Mobile search no longer reuses Home's shared result wrapper. Leaving
+       that wrapper in the grid can consume the only result row and hide the
+       successfully fetched cards. */
+    display: none !important;
+  }
+
+  .mobile-search-results { display: none; }
+
+  body.mobile-search-active.view-home .mobile-search-results:not([hidden]) {
+    display: flex;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding-bottom: calc(7.5rem + env(safe-area-inset-bottom, 0px));
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+
+  .mobile-search-results::-webkit-scrollbar { display: none; }
+  .mobile-search-result-row {
     display: grid;
+    width: 100%;
+    min-height: 4.35rem;
+    grid-template-columns: 3.35rem minmax(0, 1fr);
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.45rem 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: #fff;
+    font: inherit;
+    text-align: left;
+    transition: background-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+  }
+
+  .mobile-search-result-row img {
+    display: block;
+    width: 3.35rem;
+    height: 3.35rem;
+    border-radius: 0.45rem;
+    object-fit: cover;
+  }
+
+  .mobile-search-result-copy { display: grid; min-width: 0; gap: 0.2rem; }
+  .mobile-search-result-copy strong,
+  .mobile-search-result-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-search-result-copy strong { font-size: 0.88rem; font-weight: 650; }
+  .mobile-search-result-copy small { color: rgba(255,255,255,.64); font-size: 0.75rem; }
+  .mobile-search-result-row.is-active-track strong { color: var(--liked-folder-color); }
+  .mobile-search-result-row.is-active-track small { color: color-mix(in srgb, var(--liked-folder-color) 75%, white); }
+  .mobile-search-results-message { margin: 1rem 0; color: rgba(255,255,255,.68); font-size: 0.85rem; text-align: center; }
+
+  /* Touch browsers can keep :hover after a tap, which made Mix artwork jump
+     upward even though playback had already started. Keep this desktop-only. */
+  .thaalam-mix-card:hover .thaalam-mix-art {
+    filter: none;
+    transform: none;
   }
 
   /* Search starts dark and borrows a wash only from its own committed song
@@ -7166,6 +7227,10 @@ img {
     max-height: none;
     min-height: 0;
     margin-bottom: 0;
+    padding-bottom: calc(10rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  body.mini-player-visible.view-home.mobile-search-active .mobile-search-results:not([hidden]) {
     padding-bottom: calc(10rem + env(safe-area-inset-bottom, 0px));
   }
 
@@ -7352,6 +7417,13 @@ img {
 @media (max-width: 56.1875rem), (pointer: coarse) and (any-pointer: coarse) {
   body.view-now-playing,
   body.view-now-playing * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Library cards are touch controls too; prevent the browser's default blue
+     press-selection flash without affecting the desktop experience. */
+  body.view-library,
+  body.view-library * {
     -webkit-tap-highlight-color: transparent;
   }
 }
