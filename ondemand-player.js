@@ -513,6 +513,9 @@ function recordCompletedTasteTrack() {
         profile: personalizedTasteProfile
       }));
     } catch { /* Keep this session's taste profile in memory. */ }
+    // Mix eligibility follows completed listening, never a song merely opened
+    // and skipped. Publish every genuine completion for the home/library UI.
+    window.dispatchEvent(new CustomEvent('thaalam-on-demand-completed-playback-change'));
     if (shouldRefreshProfile) {
       scheduleTasteProfileWork(() => {
         window.dispatchEvent(new CustomEvent('thaalam-personalized-recommendations-update'));
@@ -521,6 +524,7 @@ function recordCompletedTasteTrack() {
   });
 }
 window.getOnDemandTasteProfile = () => personalizedTasteProfile.map((song) => ({ ...song }));
+window.getCompletedOnDemandTracks = () => completedTasteTracks.map((song) => ({ ...song }));
 
 let pendingHistoryCommit = 0;
 let recentHistoryDirty = false;
