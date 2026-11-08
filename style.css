@@ -105,7 +105,7 @@
 
 /* Desktop Home — a richer, spacious catalogue surface.  This intentionally
    stays desktop-only so the focused mobile Home layout is unaffected. */
-@media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) {
+@media not all {
   body.view-home {
     background:
       radial-gradient(125% 86% at -16% -28%, transparent 54%, rgba(194, 86, 255, 0.36) 54.25%, rgba(215, 121, 255, 0.06) 54.8%, transparent 55.35%),
@@ -588,8 +588,8 @@ body.view-now-playing::after {
   padding: 0.8rem 1rem;
   border: 0;
   border-radius: 999px;
-  background: #fff;
-  color: #111;
+  background: var(--liked-folder-color);
+  color: #fff;
   font: inherit;
   font-weight: 600;
   cursor: pointer;
@@ -597,7 +597,7 @@ body.view-now-playing::after {
 
 .profile-logout-button:hover,
 .profile-logout-button:focus-visible {
-  background: rgba(255, 255, 255, 0.86);
+  background: color-mix(in srgb, var(--liked-folder-color) 84%, black);
 }
 
 .profile-dialog-action {
@@ -929,6 +929,9 @@ body.view-about .site-page.about-page {
 
 body.view-rises-from-mini.view-now-playing .player-view {
   animation: nowPlayingRiseIn 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 /* Same idea for the pinned heading; the keyframe repeats its resting
@@ -943,6 +946,9 @@ body.view-rises-from-mini.view-now-playing .player-view {
 @media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) {
   body.view-rises-from-mini.view-now-playing #nowPlayingHeading {
     animation: nowPlayingHeadingRiseIn 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform, opacity;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
   }
 }
 
@@ -1950,7 +1956,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
     height: 1px;
     margin: 0 auto 1.5rem;
     border-radius: 999px;
-    background: linear-gradient(90deg, transparent, rgba(237, 204, 163, 0.82), transparent);
+    background: linear-gradient(90deg, transparent, var(--liked-folder-color), transparent);
   }
 
   /* The station name is the one piece of pure display type on the page: a
@@ -1975,6 +1981,160 @@ body.view-rises-from-mini.view-now-playing .player-view {
       );
   }
 
+  .about-signoff #aboutTitle:has(.about-signoff-logo) {
+    display: flex;
+    justify-content: center;
+    line-height: 0;
+  }
+
+  .about-signoff-logo {
+    display: block;
+    width: clamp(4.5rem, 7vw, 6rem);
+    height: auto;
+    border-radius: 1.3rem;
+    box-shadow: 0 0.9rem 2.25rem color-mix(in srgb, var(--liked-folder-color) 22%, transparent);
+  }
+
+  /* Desktop About: compact editorial split layout. */
+  body.view-about { background: #030409; }
+
+  body.view-about .site-page.about-page {
+    padding: 4rem clamp(2rem, 8vw, 8rem) 2rem;
+  }
+
+  body.view-about .about-page .site-page-content {
+    display: grid;
+    width: min(64rem, 100%);
+    max-height: calc(100dvh - 9rem);
+    grid-template-areas:
+      "eyebrow signoff"
+      "story signoff"
+      "story action";
+    grid-template-columns: minmax(0, 1fr) minmax(9.5rem, 0.46fr);
+    grid-template-rows: auto 1fr auto;
+    align-items: center;
+    column-gap: clamp(3rem, 9vw, 8rem);
+    row-gap: 1rem;
+    padding: 0;
+    overflow: auto;
+    text-align: left;
+  }
+
+  body.view-about .about-page > .site-page-content > .site-page-eyebrow {
+    grid-area: eyebrow;
+    justify-self: start;
+    margin: 0;
+    color: rgba(255, 255, 255, 0.68);
+    font-size: 0.66rem;
+    letter-spacing: 0.19em;
+  }
+
+  body.view-about .about-page > .site-page-content > .site-page-eyebrow::after {
+    display: block;
+    width: 2.6rem;
+    height: 2px;
+    margin-top: 0.75rem;
+    border-radius: 999px;
+    background: var(--liked-folder-color);
+    content: "";
+  }
+
+  body.view-about .about-story {
+    grid-area: story;
+    max-width: 34rem;
+    margin: 0;
+    font-size: 0.94rem;
+    line-height: 1.68;
+  }
+
+  body.view-about .about-story .site-page-copy {
+    max-width: none;
+    margin: 0 0 1.15rem;
+    color: rgba(255, 255, 255, 0.78);
+    font-size: inherit;
+    line-height: inherit;
+  }
+
+  body.view-about .about-signoff {
+    grid-area: signoff;
+    align-self: end;
+    margin: 0;
+    text-align: center;
+  }
+
+  body.view-about .about-signoff::before { display: none; }
+
+  body.view-about .about-signoff #aboutTitle:has(.about-signoff-logo) {
+    justify-content: center;
+  }
+
+  body.view-about .about-signoff-logo {
+    width: clamp(4.25rem, 6vw, 5.75rem);
+    border-radius: 1.15rem;
+    box-shadow: 0 0.85rem 2.4rem color-mix(in srgb, var(--liked-folder-color) 32%, transparent);
+  }
+
+  body.view-about .about-signoff-note {
+    margin-top: 0.7rem;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 0.62rem;
+    letter-spacing: 0.1em;
+  }
+
+  body.view-about .about-signoff + .site-page-action {
+    grid-area: action;
+    justify-self: center;
+    min-height: 2.2rem;
+    margin: 0;
+    padding: 0 1rem;
+    font-size: 0.72rem;
+  }
+
+  /* Scale the desktop composition up and centre the logo against the copy. */
+  body.view-about .about-page .site-page-content {
+    width: min(76rem, 100%);
+    grid-template-areas:
+      "eyebrow ."
+      "story signoff";
+    grid-template-columns: minmax(0, 42rem) minmax(11rem, 0.5fr);
+    grid-template-rows: auto auto;
+    column-gap: clamp(4rem, 10vw, 9rem);
+    row-gap: 1.35rem;
+  }
+
+  body.view-about .about-story {
+    max-width: 42rem;
+    font-size: clamp(1rem, 1.25vw, 1.12rem);
+    line-height: 1.76;
+  }
+
+  body.view-about .about-story .site-page-copy { margin-bottom: 1.45rem; }
+
+  body.view-about .about-signoff {
+    align-self: center;
+    justify-self: center;
+  }
+
+  body.view-about .about-signoff-logo {
+    width: clamp(5.5rem, 7.2vw, 7rem);
+    border-radius: 1.45rem;
+  }
+
+  body.view-about .about-signoff .site-page-action {
+    min-height: 2.45rem;
+    margin-top: 1rem;
+    padding: 0 1.25rem;
+    font-size: 0.78rem;
+  }
+
+@media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) and (max-height: 42rem) {
+  body.view-about .site-page.about-page { padding-top: 3.25rem; }
+  body.view-about .about-page .site-page-content { max-height: calc(100dvh - 7.5rem); }
+  body.view-about .about-story { font-size: 0.84rem; }
+  body.view-about .about-story .site-page-copy { margin-bottom: 0.75rem; }
+  body.view-about .about-signoff-logo { width: 4.25rem; }
+}
+
   .about-signoff-note {
     margin: 0.75rem 0 0;
     color: rgba(255, 255, 255, 0.58);
@@ -1988,14 +2148,14 @@ body.view-rises-from-mini.view-now-playing .player-view {
     min-height: 2.9rem;
     margin-top: 1.5rem;
     padding: 0 1.5rem;
-    border-color: rgba(237, 204, 163, 0.42);
+    border-color: color-mix(in srgb, var(--liked-folder-color) 58%, transparent);
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.055));
     box-shadow: 0 0.55rem 1.5rem rgba(0, 0, 0, 0.18), inset 0 1px rgba(255, 255, 255, 0.16);
   }
 
   .about-signoff + .site-page-action:hover,
   .about-signoff + .site-page-action:focus-visible {
-    border-color: rgba(255, 232, 203, 0.72);
+    border-color: color-mix(in srgb, var(--liked-folder-color) 82%, white);
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.08));
     box-shadow: 0 0.8rem 1.8rem rgba(0, 0, 0, 0.24), inset 0 1px rgba(255, 255, 255, 0.22);
   }
@@ -8544,9 +8704,8 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
   }
 }
 
-/* Desktop Home texture only.  All sizing below intentionally matches the
-   established desktop layout; this layer changes no catalogue geometry. */
-@media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) {
+/* Desktop Home texture only. Disabled to preserve the original Home surface. */
+@media not all {
   body.view-home {
     background:
       radial-gradient(125% 86% at -16% -28%, transparent 54%, color-mix(in srgb, var(--liked-folder-color) 38%, transparent) 54.25%, color-mix(in srgb, var(--liked-folder-color) 7%, transparent) 54.8%, transparent 55.35%),
@@ -8627,3 +8786,19 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
     transform: translateY(0.3rem);
   }
 }
+
+/* Keep the NEW badge in the same paint layer as its album art while desktop
+   shelves scroll. Backdrop filters can otherwise lag behind the scroll layer. */
+@media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) {
+  body.view-home .genre-results .genre-card-art-frame {
+    isolation: isolate;
+    contain: paint;
+  }
+
+  body.view-home .genre-results .new-release-badge {
+    z-index: 3;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
