@@ -1,4 +1,4 @@
-const CACHE_NAME = 'thaalam-24x7-v1014';
+const CACHE_NAME = 'thaalam-24x7-v1015';
 const ALBUM_ART_CACHE_NAME = 'thaalam-album-art-v2';
 const ALBUM_ART_CACHE_LIMIT = 240;
 
@@ -6,7 +6,7 @@ const APP_FILES = [
   './',
   './index.html',
   './style.css?v=718',
-  './script.js?v=94',
+  './script.js?v=95',
   './audio-recovery.js?v=3',
   './marquee.js?v=4',
   './media-metadata.js?v=18',
@@ -26,7 +26,6 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => cache.addAll(APP_FILES))
-      .then(() => self.skipWaiting())
   );
 });
 
@@ -40,7 +39,6 @@ self.addEventListener('activate', (event) => {
           )
           .map((cacheName) => caches.delete(cacheName))
       ))
-      .then(() => self.clients.claim())
   );
 });
 
