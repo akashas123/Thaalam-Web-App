@@ -1360,7 +1360,15 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js')
+    let refreshingForServiceWorker = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      // Reload once when a fresh worker claims this open tab, preventing an
+      // old HTML/CSS/JS combination from surviving the cache update.
+      if (refreshingForServiceWorker) return;
+      refreshingForServiceWorker = true;
+      window.location.reload();
+    });
+    navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
       .then((registration) => {
         // Check for deployed updates while the app is in the foreground. A
         // background PWA can have its network suspended by the browser, which
