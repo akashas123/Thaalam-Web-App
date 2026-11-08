@@ -513,7 +513,7 @@
       </div>
       <div class="about-signoff">
         <h1 id="aboutTitle" tabindex="-1"><img class="about-signoff-logo" src="thaalam-icon-512.png?v=8" alt="Thaalam 24x7"></h1>
-        <p class="about-signoff-note" id="aboutVersion">v1.0.26</p>
+        <p class="about-signoff-note" id="aboutVersion">v1.0.27</p>
         <button class="site-page-action" type="button" data-view="home">
           Back to Home
         </button>
@@ -1002,6 +1002,7 @@
   <script src="media-metadata.js?v=18"></script>
   <script src="player-controls.js?v=61"></script>
   <script src="lyrics.js?v=56"></script>
+  <script src="recommendation-engine.js?v=1"></script>
   <script src="/google-auth-config.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script>
@@ -1550,30 +1551,15 @@
     }
 
     function recommendationSeed(key) {
-      const value = `${recommendationDeviceId}|${localCalendarDayKey()}|${key}`;
-      let hash = 2166136261;
-      for (let index = 0; index < value.length; index += 1) {
-        hash ^= value.charCodeAt(index);
-        hash = Math.imul(hash, 16777619);
-      }
-      return hash >>> 0;
+      return window.ThaalamRecommendationEngine.seed({
+        deviceId: recommendationDeviceId,
+        dayKey: localCalendarDayKey(),
+        key
+      });
     }
 
     function seededGenreShuffle(items, seed) {
-      const shuffled = items.slice();
-      let state = seed >>> 0;
-      const random = () => {
-        state += 0x6D2B79F5;
-        let value = state;
-        value = Math.imul(value ^ (value >>> 15), value | 1);
-        value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
-        return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
-      };
-      for (let index = shuffled.length - 1; index > 0; index -= 1) {
-        const swapIndex = Math.floor(random() * (index + 1));
-        [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
-      }
-      return shuffled;
+      return window.ThaalamRecommendationEngine.shuffle(items, seed);
     }
 
     function getCachedDailyGenreChart(key) {
@@ -2089,40 +2075,17 @@
     }
 
     function diversifyGenreSongs(songs) {
-      const remaining = [...songs];
-      const ordered = [];
-      const recentAlbums = [];
-      const recentArtists = [];
-      const keyFor = (value) => (value || '').trim().toLocaleLowerCase();
-
-      while (remaining.length) {
-        // Keep the chart's ranking as much as possible while spacing tracks
-        // from the same album and avoiding a run of one artist.
-        let index = remaining.findIndex((song) => {
-          const album = keyFor(song.collectionName);
-          const artist = keyFor(song.artistName);
-          return (!album || !recentAlbums.slice(-5).includes(album)) &&
-            (!artist || !recentArtists.slice(-2).includes(artist));
-        });
-        if (index < 0) {
-          index = remaining.findIndex((song) => {
-            const album = keyFor(song.collectionName);
-            return !album || !recentAlbums.slice(-5).includes(album);
-          });
-        }
-        if (index < 0) index = 0;
-
-        const [song] = remaining.splice(index, 1);
-        ordered.push(song);
-        recentAlbums.push(keyFor(song.collectionName));
-        recentArtists.push(keyFor(song.artistName));
-      }
-      return ordered;
+      return window.ThaalamRecommendationEngine.diversify(songs);
     }
 
     // Keep the full genre chart playable, while bringing familiar artists into
     // the mix and spacing repeats on both mobile and desktop.
     function personalizeGenreSongs(songs) {
+      return window.ThaalamRecommendationEngine.personalize(songs, {
+        history: window.getOnDemandTasteProfile?.() || [],
+        dedupe: dedupeRecommendationSongs
+      });
+
       songs = dedupeRecommendationSongs(songs);
       const history = window.getOnDemandTasteProfile?.() || [];
       if (!history.length) return songs;
@@ -2900,6 +2863,16 @@
     }
 
     function getListeningMixes() {
+      return window.ThaalamRecommendationEngine.dailyMixes({
+        completedTracks: window.getCompletedOnDemandTracks?.() || [],
+        labels: mixGenreLabels,
+        genreForSong: genreForMixSong,
+        dayKey: localCalendarDayKey(),
+        deviceId: recommendationDeviceId,
+        storage: localStorage,
+        storageKey: DAILY_MIX_PLAN_KEY
+      });
+
       const scores = new Map(Object.keys(mixGenreLabels).map((genre) => [genre, { plays: 0, weight: 0 }]));
       // A genre earns a Mix after three completed tracks. Sampling or skipping
       // a song never changes the listener's library.
@@ -2964,6 +2937,8 @@
     }
 
     function mixArtistNames(artistName) {
+      return window.ThaalamRecommendationEngine.artistNames(artistName);
+
       return [...new Set(String(artistName || '')
         .split(/,|&|\bfeat(?:uring)?\b|\bwith\b|\bx\b|\bÃ—\b/i)
         .map((artist) => artist.trim())
@@ -2971,6 +2946,16 @@
     }
 
     function getMixDiscoveryArtists(mix, seed) {
+      return window.ThaalamRecommendationEngine.discoveryArtists({
+        mix,
+        taste: [
+          ...(window.getCompletedOnDemandTracks?.() || []),
+          ...(window.getOnDemandPlaybackHistory?.() || [])
+        ],
+        genreForSong: genreForMixSong,
+        value: seed
+      });
+
       const scores = new Map();
       const taste = [
         ...(window.getCompletedOnDemandTracks?.() || []),
@@ -2993,6 +2978,13 @@
     }
 
     function beginMixDiscoverySession(mixId) {
+      return window.ThaalamRecommendationEngine.nextMixSession({
+        mixId,
+        dayKey: localCalendarDayKey(),
+        storage: localStorage,
+        storageKey: MIX_DISCOVERY_SESSION_KEY
+      });
+
       const today = localCalendarDayKey();
       let count = 0;
       try {
