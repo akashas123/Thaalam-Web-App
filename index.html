@@ -49,7 +49,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=700">
+  <link rel="stylesheet" href="style.css?v=706">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -495,6 +495,10 @@
           <strong>Liked Songs</strong>
         </span>
       </button>
+      <section class="library-mixes" id="libraryMixes" aria-label="Your mixes" hidden>
+        <h2>Made for you</h2>
+        <div class="library-mixes-row" id="libraryMixesRow"></div>
+      </section>
     </div>
   </main>
 
@@ -508,7 +512,7 @@
       </div>
       <div class="about-signoff">
         <h1 id="aboutTitle" tabindex="-1"><img class="about-signoff-logo" src="thaalam-icon-512.png?v=8" alt="Thaalam 24x7"></h1>
-        <p class="about-signoff-note" id="aboutVersion">v9.8.4</p>
+        <p class="about-signoff-note" id="aboutVersion">v9.9.2</p>
         <button class="site-page-action" type="button" data-view="home">
           Back to Home
         </button>
@@ -991,7 +995,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=92"></script>
-  <script src="ondemand-player.js?v=201"></script>
+  <script src="ondemand-player.js?v=207"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=18"></script>
@@ -2842,12 +2846,115 @@
       image.hidden = false;
     }
 
-    function updateDesktopLibraryFolder() {
+    const mixGenreLabels = {
+      malayalam: 'Malayalam',
+      tamil: 'Tamil',
+      hindi: 'Hindi',
+      international: 'International'
+    };
+
+    function genreForMixSong(song) {
+      const language = String(song?.language || '').trim().toLocaleLowerCase();
+      return genreLanguageOrder.find(([, languageKey]) => language.includes(languageKey))?.[0] || '';
+    }
+
+    function getListeningMixes() {
+      const scores = new Map(Object.keys(mixGenreLabels).map((genre) => [genre, 0]));
+      (window.getOnDemandPlaybackHistory?.() || []).forEach((song, index) => {
+        const genre = genreForMixSong(song);
+        if (!genre) return;
+        // Recent plays carry a little more weight while the full history keeps
+        // a listener's long-term taste from disappearing overnight.
+        scores.set(genre, scores.get(genre) + 1 / (1 + index * 0.08));
+      });
+      const rankedGenres = [...scores]
+        .filter(([, score]) => score > 0)
+        .sort((first, second) => second[1] - first[1])
+        .map(([genre]) => genre);
+      if (!rankedGenres.length) return [];
+
+      const mixes = [];
+      if (rankedGenres.length > 1) {
+        mixes.push({
+          id: 'thaalam',
+          title: 'Thaalam Mix',
+          subtitle: 'Across your favourite sounds',
+          genres: rankedGenres
+        });
+      }
+      rankedGenres.slice(0, 5).forEach((genre, index) => {
+        mixes.push({
+          id: `genre-${genre}`,
+          title: `Thaalam Mix ${index + 1}`,
+          subtitle: `${mixGenreLabels[genre]} favourites`,
+          genres: [genre]
+        });
+      });
+      return mixes;
+    }
+
+    async function playListeningMix(mix) {
+      const history = window.getOnDemandPlaybackHistory?.() || [];
+      const historyTracks = history.filter((song) => mix.genres.includes(genreForMixSong(song)));
+      const chartResults = await Promise.all(mix.genres.map(async (genre) => {
+        try { return await loadDailyGenreChart(genre); } catch { return []; }
+      }));
+      const unique = new Map();
+      [...historyTracks, ...chartResults.flat()].forEach((song) => {
+        const key = String(song.providerTrackId || song.trackId || `${song.trackName}|${song.artistName}`);
+        if (key && !unique.has(key)) unique.set(key, song);
+      });
+      const dailySeed = recommendationSeed(`mix:${mix.id}`);
+      const queue = seededGenreShuffle([...unique.values()], dailySeed).slice(0, 30);
+      if (queue.length) {
+        window.startOnDemandQueue?.(queue, 0, {
+          openNowPlaying: false,
+          recordRecent: false,
+          queueSource: 'mix'
+        });
+        window.recordOnDemandMixRecent?.(mix);
+      }
+    }
+
+    function createListeningMixCard(mix, index) {
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'thaalam-mix-card';
+      card.style.setProperty('--mix-index', String(index));
+      card.setAttribute('aria-label', `Play ${mix.title}: ${mix.subtitle}`);
+      const art = document.createElement('span');
+      art.className = 'thaalam-mix-art';
+      art.setAttribute('aria-hidden', 'true');
+      art.innerHTML = '<svg viewBox="0 0 140 120" fill="#fff"><rect x="0" y="40" width="20" height="40"/><rect x="30" y="20" width="20" height="80"/><rect x="60" y="0" width="20" height="120"/><rect x="90" y="20" width="20" height="80"/><rect x="120" y="40" width="20" height="40"/></svg>';
+      const copy = document.createElement('span');
+      copy.className = 'thaalam-mix-copy';
+      const title = document.createElement('strong');
+      title.textContent = mix.title;
+      const subtitle = document.createElement('small');
+      subtitle.textContent = mix.subtitle;
+      copy.append(title, subtitle);
+      card.append(art, copy);
+      card.addEventListener('click', () => { void playListeningMix({ ...mix, variant: index }); });
+      return card;
+    }
+
+    function renderListeningMixes() {
+      const mixes = getListeningMixes();
+      const mobileMixes = document.getElementById('libraryMixes');
+      const mobileRow = document.getElementById('libraryMixesRow');
+      if (mobileMixes && mobileRow) {
+        mobileRow.replaceChildren(...mixes.map(createListeningMixCard));
+        mobileMixes.hidden = mixes.length === 0;
+      }
+      updateDesktopLibraryFolder(mixes);
+    }
+
+    function updateDesktopLibraryFolder(passedMixes = getListeningMixes()) {
       const shelves = document.getElementById('mobileGenreShelves');
       if (!shelves) return;
       if (document.body.classList.contains('desktop-library-active')) updateDesktopLibraryHero();
       const existingSection = shelves.querySelector('.desktop-library-row');
-      if (!desktopNavigation.matches || !currentFavouriteSongs.length) {
+      if (!desktopNavigation.matches || (!currentFavouriteSongs.length && !passedMixes.length)) {
         existingSection?.remove();
         return;
       }
@@ -2870,18 +2977,24 @@
       heading.textContent = 'From your library';
       const trackRow = document.createElement('div');
       trackRow.className = 'mobile-genre-track-row';
-      const folder = document.createElement('button');
-      folder.type = 'button';
-      folder.className = 'desktop-liked-folder';
-      folder.dataset.folderName = 'Liked Songs';
-      folder.dataset.folderArtwork = '';
-      folder.dataset.folderSource = 'On this device';
-      folder.setAttribute('aria-label', `Open Liked Songs, ${currentFavouriteSongs.length} songs`);
-      folder.innerHTML = '<span class="desktop-liked-folder-art" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78Z"/></svg></span><span class="desktop-liked-folder-title">Liked Songs</span>';
-      folder.addEventListener('click', () => openDesktopLibraryFolder(folder));
-      trackRow.appendChild(folder);
+      if (currentFavouriteSongs.length) {
+        const folder = document.createElement('button');
+        folder.type = 'button';
+        folder.className = 'desktop-liked-folder';
+        folder.dataset.folderName = 'Liked Songs';
+        folder.dataset.folderArtwork = '';
+        folder.dataset.folderSource = 'On this device';
+        folder.setAttribute('aria-label', `Open Liked Songs, ${currentFavouriteSongs.length} songs`);
+        folder.innerHTML = '<span class="desktop-liked-folder-art" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78Z"/></svg></span><span class="desktop-liked-folder-title">Liked Songs</span>';
+        folder.addEventListener('click', () => openDesktopLibraryFolder(folder));
+        trackRow.appendChild(folder);
+      }
+      passedMixes.forEach((mix, index) => trackRow.appendChild(createListeningMixCard(mix, index)));
       section.append(heading, trackRow);
-      genreShelves[1].after(section);
+      // Recents is the first shelf when it exists. Keep the personal library
+      // row immediately beneath it, ahead of the genre shelves.
+      const recentsShelf = shelves.querySelector('.mobile-recents-row');
+      (recentsShelf || genreShelves[0]).after(section);
     }
 
     function renderGenreResults(songs) {
@@ -3089,7 +3202,7 @@
           if (activeGenre === 'you-like' && window.startOnDemandQueue) {
             const queue = sortFavouriteSongs(currentFavouriteSongs);
             const songIndex = queue.findIndex((item) => item.trackKey && item.trackKey === song.trackKey);
-            window.startOnDemandQueue(queue, songIndex >= 0 ? songIndex : 0, { openNowPlaying: false });
+            window.startOnDemandQueue(queue, songIndex >= 0 ? songIndex : 0, { openNowPlaying: false, recordLikedRecent: true });
             return;
           }
           window.startOnDemandSong?.(song, { openNowPlaying: false });
@@ -3268,7 +3381,7 @@
           metadataPlayButton.addEventListener('click', () => {
             const queue = sortFavouriteSongs(currentFavouriteSongs);
             const songIndex = queue.findIndex((item) => item.trackKey && item.trackKey === song.trackKey);
-            window.startOnDemandQueue?.(queue, songIndex >= 0 ? songIndex : 0, { openNowPlaying: false });
+            window.startOnDemandQueue?.(queue, songIndex >= 0 ? songIndex : 0, { openNowPlaying: false, recordLikedRecent: true });
           });
           details.append(metadataPlayButton);
           card.append(media, details);
@@ -3694,6 +3807,8 @@
         if (category.title === 'Recents') {
           card.dataset.recentTrackKey = song.recentDisplayType === 'liked-folder'
             ? 'liked-folder'
+            : song.recentDisplayType === 'thaalam-mix'
+              ? `thaalam-mix:${song.trackName || ''}`
             : `${song.providerTrackId || song.trackId || ''}:${song.trackName || ''}:${song.artistName || ''}`.toLocaleLowerCase();
         }
         const desktopShelfPlayControl = category.title !== 'Recents' &&
@@ -3703,15 +3818,23 @@
         play.className = 'mobile-genre-track-art';
         let playAction = play;
         const isLikedFolderRecent = category.title === 'Recents' && song.recentDisplayType === 'liked-folder';
+        const isThaalamMixRecent = category.title === 'Recents' && song.recentDisplayType === 'thaalam-mix';
         if (isLikedFolderRecent) card.classList.add('is-liked-folder-recent');
+        if (isThaalamMixRecent) card.classList.add('is-thaalam-mix-recent');
         if (!desktopShelfPlayControl) {
           play.setAttribute('aria-label', isLikedFolderRecent
             ? 'Play Liked Songs'
+            : isThaalamMixRecent
+              ? `Play ${song.recentDisplayName || 'Thaalam Mix'}`
             : `Play ${song.trackName || 'song'} on demand`);
         }
         if (isLikedFolderRecent) {
           play.classList.add('is-liked-folder-recent');
           play.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 4.6a5.4 5.4 0 0 0-7.6 0L12 5.8l-1.2-1.2a5.4 5.4 0 0 0-7.6 7.6l1.2 1.2L12 21l7.6-7.6 1.2-1.2a5.4 5.4 0 0 0 0-7.6Z"/></svg>';
+        } else if (isThaalamMixRecent) {
+          play.classList.add('is-thaalam-mix-recent');
+          play.dataset.mixVariant = String(Math.max(0, Number(song.mixVariant) || 0));
+          play.innerHTML = '<svg viewBox="0 0 140 120" aria-hidden="true"><rect x="0" y="40" width="20" height="40"/><rect x="30" y="20" width="20" height="80"/><rect x="60" y="0" width="20" height="120"/><rect x="90" y="20" width="20" height="80"/><rect x="120" y="40" width="20" height="40"/></svg>';
         } else {
           const artwork = document.createElement('img');
           const placeholderArtwork = 'album-placeholder.svg?v=3';
@@ -4655,7 +4778,7 @@
         songs = getLocalLikedSongs(userId);
       }
       if (!songs?.length) return;
-      window.startOnDemandQueue?.(sortFavouriteSongs(songs), 0, { openNowPlaying: false });
+      window.startOnDemandQueue?.(sortFavouriteSongs(songs), 0, { openNowPlaying: false, recordLikedRecent: true });
     }
     window.playLikedSongsQueue = playLikedSongsQueue;
 
@@ -5092,6 +5215,7 @@
     window.addEventListener('thaalam-on-demand-playback-history-change', () => {
       reorderDesktopGenreTabsFromHistory();
       reorderMobileGenreRowsFromHistory();
+      renderListeningMixes();
       if (desktopNavigation.matches && activeGenre === 'recently-played') {
         renderGenreResults(window.getOnDemandPlaybackHistory?.() || []);
       }
@@ -5697,7 +5821,7 @@
         }
       }
       if (queue.length) {
-        window.startOnDemandQueue?.(queue, 0, { openNowPlaying: false });
+        window.startOnDemandQueue?.(queue, 0, { openNowPlaying: false, recordLikedRecent: true });
       }
     };
     document.getElementById('likedFolderPlayAll')?.addEventListener('click', () => {
@@ -5757,6 +5881,18 @@
     });
 
     restoreActiveView();
+    renderListeningMixes();
+    // Mix order and track selection use the current calendar day as their
+    // seed. Rebuild at local midnight so a long-open session stays fresh.
+    const scheduleDailyMixRefresh = () => {
+      const now = new Date();
+      const nextDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      window.setTimeout(() => {
+        renderListeningMixes();
+        scheduleDailyMixRefresh();
+      }, Math.max(1000, nextDay.getTime() - now.getTime() + 250));
+    };
+    scheduleDailyMixRefresh();
     if (mobileFolderToolbarQuery.matches) {
       const initialMobileState = getMobileNavigationSnapshot();
       const initialHistoryState = history.state && typeof history.state === 'object' ? history.state : {};

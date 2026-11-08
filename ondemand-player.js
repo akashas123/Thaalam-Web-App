@@ -418,6 +418,9 @@ try {
     const seenRecentIdentities = new Set();
     onDemandRecentHistory = storedRecents
       .filter((song) => song && typeof song.trackName === 'string' && song.trackName.trim())
+      // Remove legacy Liked Songs shortcuts left by the old recents logic.
+      // New entries are stamped when the user actually starts Liked Songs.
+      .filter((song) => song.recentDisplayType !== 'liked-folder' || song.recentSource === 'explicit-liked')
       .filter((song) => {
         const identity = song.recentDisplayType === 'liked-folder'
           ? 'liked-folder'
@@ -575,8 +578,9 @@ function rememberOnDemandPlayback(song) {
 
 function rememberOnDemandSong(song, { fromLikedFolder = false } = {}) {
   const recentSong = fromLikedFolder
-    ? { ...song, recentDisplayType: 'liked-folder', recentDisplayName: 'Liked Songs', recentDisplayArtist: 'Your library' }
+    ? { ...song, recentDisplayType: 'liked-folder', recentDisplayName: 'Liked Songs', recentDisplayArtist: 'Your library', recentSource: 'explicit-liked' }
     : { ...song };
+  recentSong.recentRecordedAt = Date.now();
   const identity = (entry) => entry.recentDisplayType === 'liked-folder'
     ? 'liked-folder'
     : `${entry.trackName || ''}\n${entry.artistName || ''}`.toLowerCase();
@@ -2954,8 +2958,7 @@ async function startOnDemandSong(song, {
   selectedDuration = Number(song.trackTimeMillis) / 1000 || 0;
   enqueueOnDemandSong(song);
   if (recordRecent) {
-    const fromLikedFolder = song.recentDisplayType === 'liked-folder' ||
-      (preserveQueue && onDemandQueueSource === 'favourites');
+    const fromLikedFolder = song.recentDisplayType === 'liked-folder';
     rememberOnDemandSong(song, { fromLikedFolder });
   }
   updateTransportButtonState();
@@ -3059,6 +3062,7 @@ async function startOnDemandSong(song, {
 }
 
 function startOnDemandQueue(songs, startIndex = 0, options = {}) {
+  const queueSource = options.queueSource === 'mix' ? 'mix' : 'favourites';
   const originalSongs = Array.isArray(songs) ? songs.filter((song) => song?.trackName) : [];
   const originalSelectedIndex = Math.max(0, Math.min(
     originalSongs.length - 1,
@@ -3100,8 +3104,8 @@ function startOnDemandQueue(songs, startIndex = 0, options = {}) {
   onDemandQueueIndex = selectedIndex;
   onDemandQueueStartIndex = selectedIndex;
   onDemandQueueSessionId = createOnDemandQueueSessionId();
-  onDemandQueueSource = 'favourites';
-  onDemandFavouriteQueueLength = queue.length;
+  onDemandQueueSource = queueSource;
+  onDemandFavouriteQueueLength = queueSource === 'favourites' ? queue.length : 0;
   playedTrackIds.clear();
   relatedTrackCache = [];
   relatedTrackCursor = 0;
@@ -3116,10 +3120,13 @@ function startOnDemandQueue(songs, startIndex = 0, options = {}) {
   updateTransportButtonState();
 
   pendingLikedQueueStartKey = selectedKey;
-  const start = startOnDemandSong(selectedSong, {
+  const recentSong = options.recordLikedRecent
+    ? { ...selectedSong, recentDisplayType: 'liked-folder' }
+    : selectedSong;
+  const start = startOnDemandSong(recentSong, {
     ...options,
     preserveQueue: true,
-    recordRecent: true
+    recordRecent: options.recordRecent ?? true
   });
   let trackedStart;
   trackedStart = Promise.resolve(start).finally(() => {
@@ -3393,6 +3400,20 @@ window.getOnDemandQueuePosition = () => ({
 });
 window.recordOnDemandLikedRecent = (song) => {
   if (song?.trackName) rememberOnDemandSong(song, { fromLikedFolder: true });
+};
+window.recordOnDemandMixRecent = (mix) => {
+  if (!mix?.title) return;
+  rememberOnDemandSong({
+    trackName: String(mix.title),
+    artistName: String(mix.subtitle || 'Your daily mix'),
+    recentDisplayType: 'thaalam-mix',
+    recentDisplayName: String(mix.title),
+    recentDisplayArtist: String(mix.subtitle || 'Your daily mix'),
+    mixId: String(mix.id || ''),
+    mixVariant: Math.max(0, Number(mix.variant) || 0),
+    mixGenres: Array.isArray(mix.genres) ? mix.genres : []
+  });
+  window.dispatchEvent(new CustomEvent('thaalam-on-demand-recents-change'));
 };
 
 /* Mute/unmute the on-demand audio element. */
