@@ -513,7 +513,7 @@
       </div>
       <div class="about-signoff">
         <h1 id="aboutTitle" tabindex="-1"><img class="about-signoff-logo" src="thaalam-icon-512.png?v=8" alt="Thaalam 24x7"></h1>
-        <p class="about-signoff-note" id="aboutVersion">v9.9.23</p>
+        <p class="about-signoff-note" id="aboutVersion">v9.9.24</p>
         <button class="site-page-action" type="button" data-view="home">
           Back to Home
         </button>
@@ -2787,11 +2787,21 @@
       sampleHomeTint(firstArt || '');
     }
 
+    function getRecentMixTint(track) {
+      const art = track?.querySelector('.mobile-genre-track-art.is-thaalam-mix-recent');
+      if (!art) return '';
+      // These are the same four palette families used by the CSS Mix covers.
+      const palette = ['#d80d43', '#5a38bb', '#c65537', '#197985'];
+      const variant = Math.max(0, Number(art.dataset.mixVariant) || 0);
+      return palette[variant % palette.length];
+    }
+
     function updateMobileHomeTint() {
       if (desktopNavigation.matches) return;
       const shelves = document.getElementById('mobileGenreShelves');
       const firstRecentTrack = shelves?.querySelector('.mobile-recents-row .mobile-genre-track');
       const likedFolderIsFirst = Boolean(firstRecentTrack?.classList.contains('is-liked-folder-recent'));
+      const mixTint = getRecentMixTint(firstRecentTrack);
       document.body.classList.toggle('has-liked-home-glow', likedFolderIsFirst);
       if (likedFolderIsFirst) {
         setHomeArt('');
@@ -2801,6 +2811,11 @@
         const likedFolderColor = getComputedStyle(document.documentElement)
           .getPropertyValue('--liked-folder-color').trim();
         setHomeTint(likedFolderColor || '#ff1744');
+        return;
+      }
+      if (mixTint) {
+        setHomeArt('');
+        setHomeTint(mixTint);
         return;
       }
       const firstArtwork = [...(shelves?.querySelectorAll('.mobile-genre-track-art img') || [])]
@@ -2814,12 +2829,18 @@
       const shelves = document.getElementById('mobileGenreShelves');
       const firstRecentTrack = shelves?.querySelector('.mobile-recents-row .mobile-genre-track');
       const likedFolderIsFirst = Boolean(firstRecentTrack?.classList.contains('is-liked-folder-recent'));
+      const mixTint = getRecentMixTint(firstRecentTrack);
       document.body.classList.toggle('has-liked-home-glow', likedFolderIsFirst);
       if (likedFolderIsFirst) {
         setHomeArt('');
         const likedFolderColor = getComputedStyle(document.documentElement)
           .getPropertyValue('--liked-folder-color').trim();
         setHomeTint(likedFolderColor || '#ff1744');
+        return;
+      }
+      if (mixTint) {
+        setHomeArt('');
+        setHomeTint(mixTint);
         return;
       }
       const firstArtwork = [...document.querySelectorAll(

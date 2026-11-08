@@ -1,4 +1,4 @@
-const CACHE_NAME = 'thaalam-24x7-v1013';
+const CACHE_NAME = 'thaalam-24x7-v1014';
 const ALBUM_ART_CACHE_NAME = 'thaalam-album-art-v2';
 const ALBUM_ART_CACHE_LIMIT = 240;
 
