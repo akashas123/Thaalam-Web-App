@@ -49,7 +49,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=697">
+  <link rel="stylesheet" href="style.css?v=700">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -198,7 +198,7 @@
 <body class="view-now-playing">
 
   <script>
-    // Hide the desktop cursor after a short pause on the non-player views.
+    // Hide the desktop cursor after a short pause on Now Playing only.
     // Moving the mouse, using the keyboard, or switching views restores it.
     (() => {
       const desktop = window.matchMedia('(min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine)');
@@ -211,9 +211,9 @@
       function updateCursorState() {
         window.clearTimeout(idleTimer);
         document.body.classList.remove('desktop-cursor-hidden');
-        if (!isDesktopLayout() || document.body.classList.contains('view-now-playing')) return;
+        if (!isDesktopLayout() || !document.body.classList.contains('view-now-playing')) return;
         idleTimer = window.setTimeout(() => {
-          if (isDesktopLayout() && !document.body.classList.contains('view-now-playing')) {
+          if (isDesktopLayout() && document.body.classList.contains('view-now-playing')) {
             document.body.classList.add('desktop-cursor-hidden');
           }
         }, idleDelay);
@@ -246,6 +246,9 @@
           window.localStorage.setItem('thaalam-active-view-v1', 'home');
           document.body.classList.remove('view-now-playing');
           document.body.classList.add('view-home');
+          if (localStorage.getItem('thaalam.googleProfile')) {
+            document.documentElement.classList.add('desktop-home-restoring');
+          }
           return;
         }
         if (window.sessionStorage.getItem('thaalam-session-v1') === null) {
@@ -265,6 +268,9 @@
         }
         document.body.classList.remove('view-now-playing');
         document.body.classList.add(`view-${storedView}`);
+        if (storedView === 'home' && localStorage.getItem('thaalam.googleProfile')) {
+          document.documentElement.classList.add('desktop-home-restoring');
+        }
       } catch (error) {
         // Private mode or blocked storage: use Home as the landing page.
         document.body.classList.remove('view-now-playing');
@@ -502,7 +508,7 @@
       </div>
       <div class="about-signoff">
         <h1 id="aboutTitle" tabindex="-1"><img class="about-signoff-logo" src="thaalam-icon-512.png?v=8" alt="Thaalam 24x7"></h1>
-        <p class="about-signoff-note" id="aboutVersion">v9.8.1</p>
+        <p class="about-signoff-note" id="aboutVersion">v9.8.4</p>
         <button class="site-page-action" type="button" data-view="home">
           Back to Home
         </button>
@@ -4005,6 +4011,14 @@
         return section;
       });
       updateMobileRecents();
+      // On a signed-in desktop refresh, keep Home covered until its saved
+      // genre order and recents are both in the DOM. Without this handoff the
+      // browser can paint the static default Home for one frame first.
+      if (document.documentElement.classList.contains('desktop-home-restoring')) {
+        requestAnimationFrame(() => {
+          document.documentElement.classList.remove('desktop-home-restoring');
+        });
+      }
       const results = await Promise.allSettled(categories.map((category) =>
         loadDailyGenreChart(category.key)
       ));
