@@ -49,7 +49,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=726">
+  <link rel="stylesheet" href="style.css?v=729">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -513,7 +513,7 @@
       </div>
       <div class="about-signoff">
         <h1 id="aboutTitle" tabindex="-1"><img class="about-signoff-logo" src="thaalam-icon-512.png?v=8" alt="Thaalam 24x7"></h1>
-        <p class="about-signoff-note" id="aboutVersion">v9.9.33</p>
+        <p class="about-signoff-note" id="aboutVersion">v1.0.26</p>
         <button class="site-page-action" type="button" data-view="home">
           Back to Home
         </button>
@@ -1435,6 +1435,8 @@
     const GENRE_CACHE_KEY = 'thaalam-jiosaavn-genre-cache-v12';
     const GENRE_CHART_LIMIT = 21;
     const RECOMMENDATION_DEVICE_KEY = 'thaalam-recommendation-device-v1';
+    const DAILY_MIX_PLAN_KEY = 'thaalam-daily-mix-plan-v1';
+    const MIX_DISCOVERY_SESSION_KEY = 'thaalam-mix-discovery-session-v1';
     let recommendationDeviceId = '';
     try {
       recommendationDeviceId = localStorage.getItem(RECOMMENDATION_DEVICE_KEY) || '';
@@ -2917,39 +2919,140 @@
         .map(([genre]) => genre);
       if (!rankedGenres.length) return [];
 
+      // A Mix number is a promise for the day. Later listening cannot make a
+      // card change genre; the fresh genre ranking applies tomorrow instead.
+      const today = localCalendarDayKey();
+      let plannedGenres = [];
+      try {
+        const savedPlan = JSON.parse(localStorage.getItem(DAILY_MIX_PLAN_KEY) || '{}');
+        if (savedPlan?.dayKey === today &&
+            savedPlan?.deviceId === recommendationDeviceId &&
+            Array.isArray(savedPlan?.genres)) {
+          plannedGenres = savedPlan.genres.filter((genre) =>
+            Object.prototype.hasOwnProperty.call(mixGenreLabels, genre));
+        }
+        if (!plannedGenres.length) {
+          plannedGenres = rankedGenres.slice(0, 5);
+          localStorage.setItem(DAILY_MIX_PLAN_KEY, JSON.stringify({
+            dayKey: today,
+            deviceId: recommendationDeviceId,
+            genres: plannedGenres
+          }));
+        }
+      } catch {
+        plannedGenres = rankedGenres.slice(0, 5);
+      }
+
       const mixes = [];
-      if (rankedGenres.length > 1) {
+      if (plannedGenres.length > 1) {
         mixes.push({
           id: 'thaalam',
           title: 'Thaalam Mix',
           subtitle: 'Across your favourite sounds',
-          genres: rankedGenres
+          genres: plannedGenres
         });
       }
-      rankedGenres.slice(0, 5).forEach((genre, index) => {
+      plannedGenres.forEach((genre, index) => {
         mixes.push({
           id: `genre-${genre}`,
           title: `Thaalam Mix ${index + 1}`,
-          subtitle: `${mixGenreLabels[genre]} favourites`,
+          subtitle: `${mixGenreLabels[genre]} Mix`,
           genres: [genre]
         });
       });
       return mixes;
     }
 
+    function mixArtistNames(artistName) {
+      return [...new Set(String(artistName || '')
+        .split(/,|&|\bfeat(?:uring)?\b|\bwith\b|\bx\b|\bÃ—\b/i)
+        .map((artist) => artist.trim())
+        .filter(Boolean))];
+    }
+
+    function getMixDiscoveryArtists(mix, seed) {
+      const scores = new Map();
+      const taste = [
+        ...(window.getCompletedOnDemandTracks?.() || []),
+        ...(window.getOnDemandPlaybackHistory?.() || [])
+      ];
+      taste.forEach((song, index) => {
+        if (!mix.genres.includes(genreForMixSong(song))) return;
+        const recencyWeight = 1 / (1 + index * 0.06);
+        mixArtistNames(song.artistName).forEach((artist) => {
+          const key = artist.toLocaleLowerCase();
+          const current = scores.get(key) || { artist, score: 0 };
+          current.score += recencyWeight;
+          scores.set(key, current);
+        });
+      });
+      const ranked = [...scores.values()]
+        .sort((first, second) => second.score - first.score)
+        .slice(0, 14);
+      return seededGenreShuffle(ranked, seed).slice(0, 6).map(({ artist }) => artist);
+    }
+
+    function beginMixDiscoverySession(mixId) {
+      const today = localCalendarDayKey();
+      let count = 0;
+      try {
+        const state = JSON.parse(localStorage.getItem(MIX_DISCOVERY_SESSION_KEY) || '{}');
+        const sessions = state?.dayKey === today && state?.sessions && typeof state.sessions === 'object'
+          ? state.sessions
+          : {};
+        count = Math.max(0, Number(sessions[mixId]) || 0) + 1;
+        sessions[mixId] = count;
+        localStorage.setItem(MIX_DISCOVERY_SESSION_KEY, JSON.stringify({ dayKey: today, sessions }));
+      } catch {
+        count = Math.floor(Math.random() * 1000000) + 1;
+      }
+      return count;
+    }
+
     async function playListeningMix(mix) {
-      const history = window.getOnDemandPlaybackHistory?.() || [];
-      const historyTracks = history.filter((song) => mix.genres.includes(genreForMixSong(song)));
-      const chartResults = await Promise.all(mix.genres.map(async (genre) => {
+      const trackKey = (song) => {
+        const id = String(song?.providerTrackId || song?.trackId || '').trim();
+        if (id) return `id:${id}`;
+        return `song:${String(song?.trackName || '').trim().toLocaleLowerCase()}|${String(song?.artistName || '').trim().toLocaleLowerCase()}`;
+      };
+      // Charts combine related artists and new releases. A Mix intentionally
+      // removes the listener's playback history, keeping it discovery-first.
+      const heardTracks = new Set([
+        ...(window.getOnDemandPlaybackHistory?.() || []),
+        ...(window.getCompletedOnDemandTracks?.() || [])
+      ].map(trackKey));
+      const sessionNumber = beginMixDiscoverySession(mix.id);
+      const sessionSeed = recommendationSeed(`mix-discovery:${mix.id}:${sessionNumber}`);
+      const artistQueries = getMixDiscoveryArtists(mix, sessionSeed);
+      // Use fresh artist searches for every session. The daily chart is only a
+      // safety net for a small or brand-new taste profile, not the main queue.
+      const discoveryResults = await Promise.all(mix.genres.map(async (genre, index) => {
+        const genreArtists = seededGenreShuffle(
+          artistQueries, recommendationSeed(`mix-artists:${mix.id}:${sessionNumber}:${genre}:${index}`)
+        ).slice(0, 4);
+        if (genreArtists.length) {
+          try { return await searchGenreChart(genreArtists, 0, 50, genre); } catch { /* fall through */ }
+        }
         try { return await loadDailyGenreChart(genre); } catch { return []; }
       }));
       const unique = new Map();
-      [...historyTracks, ...chartResults.flat()].forEach((song) => {
-        const key = String(song.providerTrackId || song.trackId || `${song.trackName}|${song.artistName}`);
+      const addUnheard = (song) => {
+        const key = trackKey(song);
+        if (heardTracks.has(key)) return;
         if (key && !unique.has(key)) unique.set(key, song);
-      });
-      const dailySeed = recommendationSeed(`mix:${mix.id}`);
-      const queue = seededGenreShuffle([...unique.values()], dailySeed).slice(0, 30);
+      };
+      discoveryResults.flat().forEach(addUnheard);
+      // Keep the queue usable for listeners with a deep history without
+      // letting the daily-release shelf dominate normal Mix sessions.
+      if (unique.size < 12) {
+        const fallbackResults = await Promise.all(mix.genres.map(async (genre) => {
+          try { return await loadDailyGenreChart(genre); } catch { return []; }
+        }));
+        fallbackResults.flat().forEach(addUnheard);
+      }
+      const queue = diversifyGenreSongs(
+        seededGenreShuffle([...unique.values()], sessionSeed)
+      ).slice(0, 30);
       if (queue.length) {
         window.startOnDemandQueue?.(queue, 0, {
           openNowPlaying: false,
@@ -4408,6 +4511,8 @@
       genreResultCache.clear();
       genreResultCacheDay.clear();
       mobileHomeGenresLoaded = false;
+      // The daily boundary is also when Mix genre assignments may change.
+      renderListeningMixes();
       if (!document.body.classList.contains('desktop-catalog-active') &&
           !document.body.classList.contains('mobile-search-active')) {
         void loadMobileHomeGenres();
