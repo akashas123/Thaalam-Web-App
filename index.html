@@ -49,7 +49,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=725">
+  <link rel="stylesheet" href="style.css?v=726">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -513,7 +513,7 @@
       </div>
       <div class="about-signoff">
         <h1 id="aboutTitle" tabindex="-1"><img class="about-signoff-logo" src="thaalam-icon-512.png?v=8" alt="Thaalam 24x7"></h1>
-        <p class="about-signoff-note" id="aboutVersion">v9.9.32</p>
+        <p class="about-signoff-note" id="aboutVersion">v9.9.33</p>
         <button class="site-page-action" type="button" data-view="home">
           Back to Home
         </button>
@@ -2992,7 +2992,33 @@
         mobileRow.replaceChildren(...mixes.map(createListeningMixCard));
         mobileMixes.hidden = mixes.length === 0;
       }
+      renderMobileHomeMixes(mixes);
       updateDesktopLibraryFolder(mixes);
+    }
+
+    function renderMobileHomeMixes(passedMixes = getListeningMixes()) {
+      const shelves = document.getElementById('mobileGenreShelves');
+      if (!shelves) return;
+      const existingSection = shelves.querySelector('.mobile-home-mixes-row');
+      const recentsShelf = shelves.querySelector('.mobile-recents-row');
+
+      // This shelf belongs only to the mobile Home feed. Desktop keeps its
+      // existing “From your library” row exactly as it is.
+      if (desktopNavigation.matches || !recentsShelf || !passedMixes.length) {
+        existingSection?.remove();
+        return;
+      }
+
+      const section = existingSection || document.createElement('section');
+      section.className = 'mobile-genre-row mobile-home-mixes-row';
+      section.setAttribute('aria-label', 'Made for you');
+      const heading = document.createElement('h2');
+      heading.textContent = 'Made for you';
+      const row = document.createElement('div');
+      row.className = 'mobile-genre-track-row';
+      row.replaceChildren(...passedMixes.map(createListeningMixCard));
+      section.replaceChildren(heading, row);
+      recentsShelf.after(section);
     }
 
     function updateDesktopLibraryFolder(passedMixes = getListeningMixes()) {
@@ -4140,6 +4166,7 @@
           });
         }
       }
+      renderMobileHomeMixes();
       updateMobileHomeTint();
       updateDesktopHomeTint();
       updateDesktopLibraryFolder();
