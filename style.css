@@ -736,9 +736,9 @@ html.is-restoring-session .app-loader {
   box-shadow: inset 0 1px rgba(255,255,255,.28), 0 .5rem 1.2rem rgba(0,0,0,.22);
 }
 
-.thaalam-mix-card:nth-child(2n) .thaalam-mix-art { background: radial-gradient(circle at 22% 18%, rgba(255,255,255,.28), transparent 20%), linear-gradient(135deg, #7d64ee, #432a97 52%, #160d38); }
-.thaalam-mix-card:nth-child(3n) .thaalam-mix-art { background: radial-gradient(circle at 75% 25%, rgba(255,255,255,.3), transparent 20%), linear-gradient(135deg, #ea9a49, #ba3d34 54%, #4c121e); }
-.thaalam-mix-card:nth-child(4n) .thaalam-mix-art { background: radial-gradient(circle at 30% 18%, rgba(255,255,255,.26), transparent 20%), linear-gradient(135deg, #2aada6, #176875 54%, #082938); }
+.thaalam-mix-card[data-mix-variant="1"] .thaalam-mix-art { background: radial-gradient(circle at 22% 18%, rgba(255,255,255,.28), transparent 20%), linear-gradient(135deg, #7d64ee, #432a97 52%, #160d38); }
+.thaalam-mix-card[data-mix-variant="2"] .thaalam-mix-art { background: radial-gradient(circle at 75% 25%, rgba(255,255,255,.3), transparent 20%), linear-gradient(135deg, #ea9a49, #ba3d34 54%, #4c121e); }
+.thaalam-mix-card[data-mix-variant="3"] .thaalam-mix-art { background: radial-gradient(circle at 30% 18%, rgba(255,255,255,.26), transparent 20%), linear-gradient(135deg, #2aada6, #176875 54%, #082938); }
 
 .thaalam-mix-art svg {
   width: 3rem;
@@ -7099,11 +7099,11 @@ img {
     fill: currentColor;
   }
 
-  /* Mobile Search must never fall back to the genre grid, including while a
-     typed query is waiting to render. Only committed search results use this
-     list layout. */
-  body.mobile-search-active.view-home #genreResults:not(.search-list-layout) {
-    display: none;
+  /* Keep the result viewport present while a search is loading or reporting
+     an error. The list marker is applied before the request begins, but this
+     fallback prevents a transient empty screen during mobile navigation. */
+  body.mobile-search-active.view-home #genreResults {
+    display: grid;
   }
 
   /* Search starts dark and borrows a wash only from its own committed song

@@ -274,6 +274,7 @@ function createOnDemandQueueSessionId() {
 }
 let onDemandQueueSessionId = createOnDemandQueueSessionId();
 let onDemandQueueSource = 'autoplay';
+let onDemandMixName = '';
 let onDemandShuffle = false;
 let shufflePreparedCursor = -1;
 let shuffleNormalQueueFuture = null;
@@ -313,7 +314,9 @@ function updateNowPlayingSubtitle(isOnDemand) {
     nowPlayingSubtitle.textContent = isOnDemand
       ? (onDemandQueueSource === 'favourites'
         ? 'Songs you favourited'
-        : 'Discover music through Autoplay')
+        : onDemandQueueSource === 'mix'
+          ? 'Discover music through personalised mix'
+          : 'Discover music through Autoplay')
       : 'Discover music through Live';
   }
   if (nowPlayingAutoplayContext) {
@@ -323,7 +326,9 @@ function updateNowPlayingSubtitle(isOnDemand) {
     nowPlayingAutoplayContext.textContent = showPlaybackContext
       ? onDemandQueueSource === 'favourites'
         ? 'Playing from your library'
-        : `Autoplay started from “${firstSong}”`
+        : onDemandQueueSource === 'mix'
+          ? `Playing from “${onDemandMixName || 'Thaalam Mix'}”`
+          : `Autoplay started from “${firstSong}”`
       : '';
   }
 }
@@ -424,6 +429,8 @@ try {
       .filter((song) => {
         const identity = song.recentDisplayType === 'liked-folder'
           ? 'liked-folder'
+          : song.recentDisplayType === 'thaalam-mix'
+            ? `thaalam-mix:${song.trackName || ''}`.toLocaleLowerCase()
           : `${song.trackName}\n${song.artistName || ''}`.trim().toLocaleLowerCase();
         if (seenRecentIdentities.has(identity)) return false;
         seenRecentIdentities.add(identity);
@@ -583,6 +590,8 @@ function rememberOnDemandSong(song, { fromLikedFolder = false } = {}) {
   recentSong.recentRecordedAt = Date.now();
   const identity = (entry) => entry.recentDisplayType === 'liked-folder'
     ? 'liked-folder'
+    : entry.recentDisplayType === 'thaalam-mix'
+      ? `thaalam-mix:${entry.trackName || ''}`.toLocaleLowerCase()
     : `${entry.trackName || ''}\n${entry.artistName || ''}`.toLowerCase();
   const key = identity(recentSong);
   const previousRecents = onDemandRecentHistory.filter((entry) => identity(entry) !== key);
@@ -3105,6 +3114,7 @@ function startOnDemandQueue(songs, startIndex = 0, options = {}) {
   onDemandQueueStartIndex = selectedIndex;
   onDemandQueueSessionId = createOnDemandQueueSessionId();
   onDemandQueueSource = queueSource;
+  onDemandMixName = queueSource === 'mix' ? String(options.mixName || 'Thaalam Mix') : '';
   onDemandFavouriteQueueLength = queueSource === 'favourites' ? queue.length : 0;
   playedTrackIds.clear();
   relatedTrackCache = [];

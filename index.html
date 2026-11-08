@@ -49,7 +49,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=706">
+  <link rel="stylesheet" href="style.css?v=708">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -512,7 +512,7 @@
       </div>
       <div class="about-signoff">
         <h1 id="aboutTitle" tabindex="-1"><img class="about-signoff-logo" src="thaalam-icon-512.png?v=8" alt="Thaalam 24x7"></h1>
-        <p class="about-signoff-note" id="aboutVersion">v9.9.2</p>
+        <p class="about-signoff-note" id="aboutVersion">v9.9.9</p>
         <button class="site-page-action" type="button" data-view="home">
           Back to Home
         </button>
@@ -995,7 +995,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=92"></script>
-  <script src="ondemand-player.js?v=207"></script>
+  <script src="ondemand-player.js?v=210"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=18"></script>
@@ -2910,7 +2910,8 @@
         window.startOnDemandQueue?.(queue, 0, {
           openNowPlaying: false,
           recordRecent: false,
-          queueSource: 'mix'
+          queueSource: 'mix',
+          mixName: mix.title
         });
         window.recordOnDemandMixRecent?.(mix);
       }
@@ -2921,6 +2922,7 @@
       card.type = 'button';
       card.className = 'thaalam-mix-card';
       card.style.setProperty('--mix-index', String(index));
+      card.dataset.mixVariant = String(index);
       card.setAttribute('aria-label', `Play ${mix.title}: ${mix.subtitle}`);
       const art = document.createElement('span');
       art.className = 'thaalam-mix-art';
@@ -3543,6 +3545,12 @@
     function showGenreLoading() {
       genreResults.replaceChildren();
       genreResults.setAttribute('aria-busy', 'true');
+      // Keep the mobile search viewport visible while results are loading (or
+      // if the request reports an error), rather than showing an empty panel.
+      genreResults.classList.toggle(
+        'search-list-layout',
+        activeGenre.startsWith('search:') && mobileSearchListQuery.matches
+      );
       // Mobile Browse uses the first artwork in its visible shelves. Keep that
       // live tint while the hidden catalog grid loads for a Home revisit.
       if (desktopNavigation.matches || document.body.classList.contains('mobile-search-active')) {
@@ -3819,6 +3827,10 @@
         let playAction = play;
         const isLikedFolderRecent = category.title === 'Recents' && song.recentDisplayType === 'liked-folder';
         const isThaalamMixRecent = category.title === 'Recents' && song.recentDisplayType === 'thaalam-mix';
+        const currentMixes = isThaalamMixRecent ? getListeningMixes() : [];
+        const currentMixIndex = isThaalamMixRecent
+          ? currentMixes.findIndex((mix) => mix.title === (song.recentDisplayName || song.trackName))
+          : -1;
         if (isLikedFolderRecent) card.classList.add('is-liked-folder-recent');
         if (isThaalamMixRecent) card.classList.add('is-thaalam-mix-recent');
         if (!desktopShelfPlayControl) {
@@ -3833,7 +3845,9 @@
           play.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 4.6a5.4 5.4 0 0 0-7.6 0L12 5.8l-1.2-1.2a5.4 5.4 0 0 0-7.6 7.6l1.2 1.2L12 21l7.6-7.6 1.2-1.2a5.4 5.4 0 0 0 0-7.6Z"/></svg>';
         } else if (isThaalamMixRecent) {
           play.classList.add('is-thaalam-mix-recent');
-          play.dataset.mixVariant = String(Math.max(0, Number(song.mixVariant) || 0));
+          play.dataset.mixVariant = String(currentMixIndex >= 0
+            ? currentMixIndex
+            : Math.max(0, Number(song.mixVariant) || 0));
           play.innerHTML = '<svg viewBox="0 0 140 120" aria-hidden="true"><rect x="0" y="40" width="20" height="40"/><rect x="30" y="20" width="20" height="80"/><rect x="60" y="0" width="20" height="120"/><rect x="90" y="20" width="20" height="80"/><rect x="120" y="40" width="20" height="40"/></svg>';
         } else {
           const artwork = document.createElement('img');
@@ -3877,6 +3891,25 @@
             void window.playLikedSongsQueue?.()
               .catch((error) => console.warn('Could not start the Liked Songs queue.', error))
               .finally(() => { playAction.disabled = false; });
+            return;
+          }
+          if (isThaalamMixRecent) {
+            // Taste can change while this Recent card remains visible. Resolve
+            // the Mix again at tap time, rather than replaying the old genre
+            // list captured when the shelf was first rendered.
+            const latestMixes = getListeningMixes();
+            const latestMixIndex = latestMixes.findIndex((mix) =>
+              mix.title === (song.recentDisplayName || song.trackName));
+            const mix = latestMixIndex >= 0
+              ? { ...latestMixes[latestMixIndex], variant: latestMixIndex }
+              : {
+                  id: song.mixId || `recent-${song.trackName || 'mix'}`,
+                  title: song.recentDisplayName || song.trackName || 'Thaalam Mix',
+                  subtitle: song.recentDisplayArtist || song.artistName || 'Your daily mix',
+                  genres: Array.isArray(song.mixGenres) ? song.mixGenres : [],
+                  variant: Math.max(0, Number(song.mixVariant) || 0)
+                };
+            void playListeningMix(mix);
             return;
           }
           if (desktopShelfPlayControl) {
