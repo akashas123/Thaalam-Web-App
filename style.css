@@ -752,6 +752,62 @@ html.is-restoring-session .app-loader {
   stroke: none !important;
 }
 
+@keyframes thaalamEqualizerBar {
+  0%, 74%, 100% { transform: scaleY(1); opacity: 1; }
+  80% { transform: scaleY(0.5); opacity: 0.72; }
+  87% { transform: scaleY(0.9); opacity: 1; }
+  93% { transform: scaleY(0.62); opacity: 0.8; }
+}
+
+@keyframes thaalamLikedHeartbeat {
+  0%, 76%, 100% { transform: translateY(0) scale(1); }
+  81% { transform: translateY(-0.18rem) scale(1.48) rotate(-2deg); }
+  86% { transform: translateY(0) scale(0.88) rotate(1deg); }
+  91% { transform: translateY(-0.1rem) scale(1.26); }
+  95% { transform: translateY(0) scale(1); }
+}
+
+/* Each card gets its own quiet burst time. The five bars inside a mark retain
+   the same familiar pattern, so a Mix reads as one equalizer rather than five
+   unrelated animations. */
+.thaalam-mix-card,
+.mobile-genre-track-art.is-thaalam-mix-recent {
+  --mix-burst-offset: 0s;
+}
+.thaalam-mix-card[data-mix-variant="1"],
+.mobile-genre-track-art.is-thaalam-mix-recent[data-mix-variant="1"] { --mix-burst-offset: -1.15s; }
+.thaalam-mix-card[data-mix-variant="2"],
+.mobile-genre-track-art.is-thaalam-mix-recent[data-mix-variant="2"] { --mix-burst-offset: -2.55s; }
+.thaalam-mix-card[data-mix-variant="3"],
+.mobile-genre-track-art.is-thaalam-mix-recent[data-mix-variant="3"] { --mix-burst-offset: -4.05s; }
+.thaalam-mix-card[data-mix-variant="4"],
+.mobile-genre-track-art.is-thaalam-mix-recent[data-mix-variant="4"] { --mix-burst-offset: -5.35s; }
+.thaalam-mix-card[data-mix-variant="5"],
+.mobile-genre-track-art.is-thaalam-mix-recent[data-mix-variant="5"] { --mix-burst-offset: -6.45s; }
+
+.thaalam-mix-art svg rect {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: thaalamEqualizerBar 7.2s ease-in-out infinite;
+}
+.thaalam-mix-art svg rect:nth-child(1) { animation-delay: calc(var(--mix-burst-offset) - .42s); }
+.thaalam-mix-art svg rect:nth-child(2) { animation-delay: calc(var(--mix-burst-offset) - .16s); }
+.thaalam-mix-art svg rect:nth-child(3) { animation-delay: calc(var(--mix-burst-offset) - .58s); }
+.thaalam-mix-art svg rect:nth-child(4) { animation-delay: calc(var(--mix-burst-offset) - .29s); }
+.thaalam-mix-art svg rect:nth-child(5) { animation-delay: calc(var(--mix-burst-offset) - .72s); }
+
+/* Recent items are history, not live cards: keep their Mix artwork still. */
+.mobile-recents-row .mobile-genre-track-art.is-thaalam-mix-recent svg rect {
+  animation: none;
+  transform: none;
+}
+
+.liked-playlist-art svg,
+.desktop-liked-folder-art svg {
+  transform-origin: center;
+  animation: thaalamLikedHeartbeat 7.2s cubic-bezier(.36,.07,.19,.97) infinite;
+}
+
 /* The same Thaalam mark is used when a played Mix appears in Recents. These
    live outside the mobile-only rules so the card is identical on desktop. */
 .mobile-genre-track-art.is-thaalam-mix-recent {
@@ -805,6 +861,10 @@ html.is-restoring-session .app-loader {
 }
 @media (prefers-reduced-motion: reduce) {
   .app-loader-ring { animation-duration: 1.8s; }
+  .thaalam-mix-art svg rect,
+  .mobile-genre-track-art.is-thaalam-mix-recent svg rect,
+  .liked-playlist-art svg,
+  .desktop-liked-folder-art svg { animation: none; }
 }
 .login-card {
   position: absolute;
