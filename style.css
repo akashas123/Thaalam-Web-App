@@ -103,6 +103,105 @@
   }
 }
 
+/* Desktop Home — a richer, spacious catalogue surface.  This intentionally
+   stays desktop-only so the focused mobile Home layout is unaffected. */
+@media not all {
+  body.view-home {
+    background:
+      radial-gradient(125% 86% at -16% -28%, transparent 54%, rgba(194, 86, 255, 0.36) 54.25%, rgba(215, 121, 255, 0.06) 54.8%, transparent 55.35%),
+      radial-gradient(92% 88% at 86% 21%, transparent 47%, rgba(151, 61, 237, 0.3) 47.2%, rgba(210, 119, 255, 0.06) 47.8%, transparent 48.5%),
+      radial-gradient(90% 76% at 108% 82%, transparent 43%, rgba(170, 65, 242, 0.36) 43.25%, rgba(210, 125, 255, 0.05) 43.85%, transparent 44.55%),
+      radial-gradient(65% 58% at 45% 8%, rgba(89, 33, 126, 0.28), transparent 73%),
+      linear-gradient(135deg, #130c22 0%, #090a14 48%, #09080f 100%);
+  }
+
+  /* Replace the album-tint layer with subtle, non-distracting depth. */
+  body.view-home::before,
+  body.view-home.has-home-art::before {
+    width: 100vw;
+    height: 100dvh;
+    background:
+      radial-gradient(ellipse 54% 35% at 27% 4%, rgba(183, 91, 244, 0.14), transparent 72%),
+      radial-gradient(ellipse 42% 34% at 77% 42%, rgba(100, 45, 181, 0.13), transparent 76%);
+    filter: none;
+    opacity: 1;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  body.view-home .site-page.home-page {
+    padding-inline: 0;
+    background: transparent;
+  }
+
+  body.view-home .home-page .site-page-content {
+    width: min(68rem, calc(100vw - 4rem));
+    padding: clamp(1.6rem, 3vw, 2.75rem) 0 0;
+  }
+
+  body.view-home .home-catalog-header {
+    align-items: center;
+  }
+
+  body.view-home .home-catalog-header h1 {
+    font-size: clamp(2.4rem, 3.45vw, 3.5rem);
+    font-weight: 750;
+    letter-spacing: -0.052em;
+  }
+
+  body.view-home .home-catalog-header .site-page-copy {
+    margin-top: 0.5rem;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 1rem;
+  }
+
+  body.view-home .catalog-search {
+    flex-basis: 17.5rem;
+    min-width: 17.5rem;
+    margin-bottom: 0;
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.11), 0 0.6rem 2rem rgba(0, 0, 0, 0.14);
+  }
+
+  body.view-home .genre-tabs {
+    margin-top: clamp(2.8rem, 6vh, 4.25rem);
+    gap: 1.4rem;
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+  }
+
+  body.view-home .genre-tab {
+    min-height: 2.35rem;
+    font-size: 0.82rem;
+  }
+
+  body.view-home .genre-results {
+    margin-top: 1.45rem;
+  }
+
+  body.view-home .genre-results:not(.favourites-list-layout):not(.desktop-search-list-layout):not(.recent-history-layout) {
+    column-gap: 0.9rem;
+    row-gap: 1.85rem;
+  }
+
+  body.view-home .genre-results:not(.favourites-list-layout):not(.desktop-search-list-layout):not(.recent-history-layout) > .genre-card {
+    max-width: 9.2rem;
+  }
+
+  body.view-home .genre-results:not(.favourites-list-layout) .genre-card-art-frame {
+    border-radius: 0.45rem;
+    box-shadow: 0 0.65rem 1.5rem rgba(0, 0, 0, 0.3);
+  }
+
+  body.mini-player-visible.view-home .mini-player {
+    border-top-color: rgba(255, 255, 255, 0.12);
+    background: linear-gradient(90deg, rgba(8, 7, 16, 0.96), rgba(19, 12, 31, 0.94), rgba(8, 7, 16, 0.96));
+    box-shadow: 0 -0.8rem 2.25rem rgba(0, 0, 0, 0.22);
+    backdrop-filter: blur(1rem) saturate(125%);
+    -webkit-backdrop-filter: blur(1rem) saturate(125%);
+  }
+}
+
 /* Keep desktop genre-card controls visually attached to their artwork while
    the results pane scrolls. Blur and hover scaling can composite the overlay
    on a separate layer and make it appear to drift over the moving grid. */
@@ -489,8 +588,8 @@ body.view-now-playing::after {
   padding: 0.8rem 1rem;
   border: 0;
   border-radius: 999px;
-  background: #fff;
-  color: #111;
+  background: var(--liked-folder-color);
+  color: #fff;
   font: inherit;
   font-weight: 600;
   cursor: pointer;
@@ -498,7 +597,7 @@ body.view-now-playing::after {
 
 .profile-logout-button:hover,
 .profile-logout-button:focus-visible {
-  background: rgba(255, 255, 255, 0.86);
+  background: color-mix(in srgb, var(--liked-folder-color) 84%, black);
 }
 
 .profile-dialog-action {
@@ -830,6 +929,9 @@ body.view-about .site-page.about-page {
 
 body.view-rises-from-mini.view-now-playing .player-view {
   animation: nowPlayingRiseIn 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 /* Same idea for the pinned heading; the keyframe repeats its resting
@@ -844,6 +946,9 @@ body.view-rises-from-mini.view-now-playing .player-view {
 @media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) {
   body.view-rises-from-mini.view-now-playing #nowPlayingHeading {
     animation: nowPlayingHeadingRiseIn 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform, opacity;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
   }
 }
 
@@ -1851,7 +1956,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
     height: 1px;
     margin: 0 auto 1.5rem;
     border-radius: 999px;
-    background: linear-gradient(90deg, transparent, rgba(237, 204, 163, 0.82), transparent);
+    background: linear-gradient(90deg, transparent, var(--liked-folder-color), transparent);
   }
 
   /* The station name is the one piece of pure display type on the page: a
@@ -1876,6 +1981,160 @@ body.view-rises-from-mini.view-now-playing .player-view {
       );
   }
 
+  .about-signoff #aboutTitle:has(.about-signoff-logo) {
+    display: flex;
+    justify-content: center;
+    line-height: 0;
+  }
+
+  .about-signoff-logo {
+    display: block;
+    width: clamp(4.5rem, 7vw, 6rem);
+    height: auto;
+    border-radius: 1.3rem;
+    box-shadow: 0 0.9rem 2.25rem color-mix(in srgb, var(--liked-folder-color) 22%, transparent);
+  }
+
+  /* Desktop About: compact editorial split layout. */
+  body.view-about { background: #030409; }
+
+  body.view-about .site-page.about-page {
+    padding: 4rem clamp(2rem, 8vw, 8rem) 2rem;
+  }
+
+  body.view-about .about-page .site-page-content {
+    display: grid;
+    width: min(64rem, 100%);
+    max-height: calc(100dvh - 9rem);
+    grid-template-areas:
+      "eyebrow signoff"
+      "story signoff"
+      "story action";
+    grid-template-columns: minmax(0, 1fr) minmax(9.5rem, 0.46fr);
+    grid-template-rows: auto 1fr auto;
+    align-items: center;
+    column-gap: clamp(3rem, 9vw, 8rem);
+    row-gap: 1rem;
+    padding: 0;
+    overflow: auto;
+    text-align: left;
+  }
+
+  body.view-about .about-page > .site-page-content > .site-page-eyebrow {
+    grid-area: eyebrow;
+    justify-self: start;
+    margin: 0;
+    color: rgba(255, 255, 255, 0.68);
+    font-size: 0.66rem;
+    letter-spacing: 0.19em;
+  }
+
+  body.view-about .about-page > .site-page-content > .site-page-eyebrow::after {
+    display: block;
+    width: 2.6rem;
+    height: 2px;
+    margin-top: 0.75rem;
+    border-radius: 999px;
+    background: var(--liked-folder-color);
+    content: "";
+  }
+
+  body.view-about .about-story {
+    grid-area: story;
+    max-width: 34rem;
+    margin: 0;
+    font-size: 0.94rem;
+    line-height: 1.68;
+  }
+
+  body.view-about .about-story .site-page-copy {
+    max-width: none;
+    margin: 0 0 1.15rem;
+    color: rgba(255, 255, 255, 0.78);
+    font-size: inherit;
+    line-height: inherit;
+  }
+
+  body.view-about .about-signoff {
+    grid-area: signoff;
+    align-self: end;
+    margin: 0;
+    text-align: center;
+  }
+
+  body.view-about .about-signoff::before { display: none; }
+
+  body.view-about .about-signoff #aboutTitle:has(.about-signoff-logo) {
+    justify-content: center;
+  }
+
+  body.view-about .about-signoff-logo {
+    width: clamp(4.25rem, 6vw, 5.75rem);
+    border-radius: 1.15rem;
+    box-shadow: 0 0.85rem 2.4rem color-mix(in srgb, var(--liked-folder-color) 32%, transparent);
+  }
+
+  body.view-about .about-signoff-note {
+    margin-top: 0.7rem;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 0.62rem;
+    letter-spacing: 0.1em;
+  }
+
+  body.view-about .about-signoff + .site-page-action {
+    grid-area: action;
+    justify-self: center;
+    min-height: 2.2rem;
+    margin: 0;
+    padding: 0 1rem;
+    font-size: 0.72rem;
+  }
+
+  /* Scale the desktop composition up and centre the logo against the copy. */
+  body.view-about .about-page .site-page-content {
+    width: min(76rem, 100%);
+    grid-template-areas:
+      "eyebrow ."
+      "story signoff";
+    grid-template-columns: minmax(0, 42rem) minmax(11rem, 0.5fr);
+    grid-template-rows: auto auto;
+    column-gap: clamp(4rem, 10vw, 9rem);
+    row-gap: 1.35rem;
+  }
+
+  body.view-about .about-story {
+    max-width: 42rem;
+    font-size: clamp(1rem, 1.25vw, 1.12rem);
+    line-height: 1.76;
+  }
+
+  body.view-about .about-story .site-page-copy { margin-bottom: 1.45rem; }
+
+  body.view-about .about-signoff {
+    align-self: center;
+    justify-self: center;
+  }
+
+  body.view-about .about-signoff-logo {
+    width: clamp(5.5rem, 7.2vw, 7rem);
+    border-radius: 1.45rem;
+  }
+
+  body.view-about .about-signoff .site-page-action {
+    min-height: 2.45rem;
+    margin-top: 1rem;
+    padding: 0 1.25rem;
+    font-size: 0.78rem;
+  }
+
+@media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) and (max-height: 42rem) {
+  body.view-about .site-page.about-page { padding-top: 3.25rem; }
+  body.view-about .about-page .site-page-content { max-height: calc(100dvh - 7.5rem); }
+  body.view-about .about-story { font-size: 0.84rem; }
+  body.view-about .about-story .site-page-copy { margin-bottom: 0.75rem; }
+  body.view-about .about-signoff-logo { width: 4.25rem; }
+}
+
   .about-signoff-note {
     margin: 0.75rem 0 0;
     color: rgba(255, 255, 255, 0.58);
@@ -1889,14 +2148,14 @@ body.view-rises-from-mini.view-now-playing .player-view {
     min-height: 2.9rem;
     margin-top: 1.5rem;
     padding: 0 1.5rem;
-    border-color: rgba(237, 204, 163, 0.42);
+    border-color: color-mix(in srgb, var(--liked-folder-color) 58%, transparent);
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.055));
     box-shadow: 0 0.55rem 1.5rem rgba(0, 0, 0, 0.18), inset 0 1px rgba(255, 255, 255, 0.16);
   }
 
   .about-signoff + .site-page-action:hover,
   .about-signoff + .site-page-action:focus-visible {
-    border-color: rgba(255, 232, 203, 0.72);
+    border-color: color-mix(in srgb, var(--liked-folder-color) 82%, white);
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.08));
     box-shadow: 0 0.8rem 1.8rem rgba(0, 0, 0, 0.24), inset 0 1px rgba(255, 255, 255, 0.22);
   }
@@ -8444,3 +8703,102 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
     flex: 0 0 5.5rem;
   }
 }
+
+/* Desktop Home texture only. Disabled to preserve the original Home surface. */
+@media not all {
+  body.view-home {
+    background:
+      radial-gradient(125% 86% at -16% -28%, transparent 54%, color-mix(in srgb, var(--liked-folder-color) 38%, transparent) 54.25%, color-mix(in srgb, var(--liked-folder-color) 7%, transparent) 54.8%, transparent 55.35%),
+      radial-gradient(92% 88% at 86% 21%, transparent 47%, color-mix(in srgb, var(--liked-folder-color) 32%, transparent) 47.2%, color-mix(in srgb, var(--liked-folder-color) 7%, transparent) 47.8%, transparent 48.5%),
+      radial-gradient(90% 76% at 108% 82%, transparent 43%, color-mix(in srgb, var(--liked-folder-color) 38%, transparent) 43.25%, color-mix(in srgb, var(--liked-folder-color) 6%, transparent) 43.85%, transparent 44.55%),
+      radial-gradient(65% 58% at 45% 8%, color-mix(in srgb, var(--liked-folder-color) 18%, transparent), transparent 73%),
+      linear-gradient(135deg, color-mix(in srgb, var(--liked-folder-color) 12%, #090a14) 0%, #090a14 48%, #09080f 100%);
+  }
+
+  body.view-home::before,
+  body.view-home.has-home-art::before {
+    width: 100vw;
+    height: 100dvh;
+    background:
+      radial-gradient(ellipse 54% 35% at 27% 4%, color-mix(in srgb, var(--liked-folder-color) 12%, transparent), transparent 72%),
+      radial-gradient(ellipse 42% 34% at 77% 42%, color-mix(in srgb, var(--liked-folder-color) 11%, transparent), transparent 76%);
+    filter: none;
+    opacity: 1;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  /* Restore the existing desktop Home sizing. */
+  body.view-home .site-page.home-page {
+    padding-inline: 2rem;
+  }
+
+  body.view-home .home-page .site-page-content {
+    width: min(88rem, 100%);
+    padding: clamp(1rem, 2.5vw, 2.25rem);
+    padding-bottom: 0;
+  }
+
+  body.view-home .home-catalog-header { align-items: flex-end; }
+  body.view-home .home-catalog-header h1 {
+    font-size: clamp(2.25rem, 4.5vw, 4rem);
+    font-weight: 700;
+    letter-spacing: -0.045em;
+  }
+  body.view-home .home-catalog-header .site-page-copy { margin-top: 0.75rem; }
+  body.view-home .catalog-search {
+    flex: 0 1 22rem;
+    min-width: 14rem;
+    margin: 0 0 0.4rem;
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.1);
+  }
+  body.view-home .genre-tabs {
+    margin-top: clamp(2rem, 4vh, 3rem);
+    gap: clamp(1rem, 2vw, 2rem);
+    border-bottom-color: rgba(255, 255, 255, 0.12);
+  }
+  body.view-home .genre-tab { min-height: 2.75rem; font-size: inherit; }
+  body.view-home .genre-results { margin-top: 1rem; }
+  body.view-home .genre-results:not(.favourites-list-layout):not(.desktop-search-list-layout):not(.recent-history-layout) {
+    column-gap: 1rem;
+    row-gap: 1.35rem;
+  }
+  body.view-home .genre-results:not(.favourites-list-layout):not(.desktop-search-list-layout):not(.recent-history-layout) > .genre-card { max-width: 10rem; }
+  body.view-home .genre-results:not(.favourites-list-layout) .genre-card-art-frame {
+    border-radius: 0.35rem;
+    box-shadow: none;
+  }
+}
+
+@media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) {
+  body.view-home .home-catalog-header .site-page-copy.is-rotating-subtitle {
+    display: inline-block;
+    transition: opacity 0.22s ease, transform 0.22s ease;
+  }
+
+  body.view-home .home-catalog-header .site-page-copy.is-subtitle-changing {
+    opacity: 0;
+    transform: translateY(0.3rem);
+  }
+
+  body.view-home .home-catalog-header .site-page-copy.is-subtitle-entering {
+    opacity: 0;
+    transform: translateY(0.3rem);
+  }
+}
+
+/* Keep the NEW badge in the same paint layer as its album art while desktop
+   shelves scroll. Backdrop filters can otherwise lag behind the scroll layer. */
+@media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) {
+  body.view-home .genre-results .genre-card-art-frame {
+    isolation: isolate;
+    contain: paint;
+  }
+
+  body.view-home .genre-results .new-release-badge {
+    z-index: 3;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
