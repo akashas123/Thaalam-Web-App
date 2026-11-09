@@ -616,31 +616,6 @@ export async function handleMusicStream(request) {
    client de-duplicates against playedTrackIds, so chained stations keep the
    radio moving without repeating the session's played tracks. */
 async function fetchProviderRadioSongs(id, k, env = {}) {
-  let stationid = null;
-  try {
-    const stationPayload = await callProviderApi(
-      'webradio.createEntityStation',
-      { entity_type: 'queue', entity_id: JSON.stringify([id]) },
-      'android', env
-    );
-    stationid = (stationPayload && stationPayload.stationid) || null;
-  } catch {
-    stationid = null;
-  }
-  if (!stationid) return { stationid: null, songs: [] };
-
-  let songPayload = null;
-  try {
-    songPayload = await callProviderApi(
-      'webradio.getSong',
-      { stationid, k: String(k) },
-      'android', env
-    );
-  } catch {
-    songPayload = null;
-  }
-  if (!songPayload) return { stationid, songs: [] };
-
   /* web-radio responses are shaped as either
      { stationid, song } (single) or
      { stationid, 0: { song }, 1: { song }, ... } (multiple). */
@@ -664,7 +639,27 @@ async function fetchProviderRadioSongs(id, k, env = {}) {
 
   const songs = [];
   const seen = new Set();
-  collectSongs(songPayload, songs, seen);
+  let stationid = null;
+  try {
+    const stationPayload = await callProviderApi(
+      'webradio.createEntityStation',
+      { entity_type: 'queue', entity_id: JSON.stringify([id]) },
+      'android', env
+    );
+    stationid = (stationPayload && stationPayload.stationid) || null;
+  } catch {
+    stationid = null;
+  }
+  if (!stationid) return { stationid: null, songs: [] };
+  try {
+    const songPayload = await callProviderApi(
+      'webradio.getSong',
+      { stationid, k: String(k) },
+      'android', env
+    );
+    collectSongs(songPayload, songs, seen);
+  } catch {
+  }
   return { stationid, songs: songs.slice(0, k) };
 }
 

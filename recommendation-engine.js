@@ -102,6 +102,30 @@
     return mixed;
   }
 
+  /* A Home genre shelf learns progressively*/
+  function homeGenrePlan({ genre, completedTracks = [], genreForSong, limit = 21, artistLimit = 5 } = {}) {
+    const safeLimit = Math.max(1, Number(limit) || 21);
+    const history = (Array.isArray(completedTracks) ? completedTracks : [])
+      .filter((song) => typeof genreForSong === 'function' && genreForSong(song) === genre);
+    const artistCounts = new Map();
+    history.forEach((song) => artistNames(song.artistName).forEach((artist) => {
+      const key = normalize(artist);
+      if (!key) return;
+      const entry = artistCounts.get(key) || { artist, plays: 0 };
+      entry.plays += 1;
+      artistCounts.set(key, entry);
+    }));
+    const personalizedCount = Math.min(safeLimit, history.length);
+    return {
+      personalizedCount,
+      generalCount: safeLimit - personalizedCount,
+      artists: [...artistCounts.values()]
+        .sort((first, second) => second.plays - first.plays || first.artist.localeCompare(second.artist))
+        .slice(0, Math.max(1, Number(artistLimit) || 5))
+        .map(({ artist }) => artist)
+    };
+  }
+
   function dailyMixes({ completedTracks = [], labels, genreForSong, dayKey, deviceId, storage, storageKey, firstDayKey }) {
     const scores = new Map(Object.keys(labels).map((genre) => [genre, { plays: 0, weight: 0 }]));
     completedTracks.forEach((song, index) => {
@@ -199,7 +223,7 @@
   }
 
   window.ThaalamRecommendationEngine = Object.freeze({
-    seed, shuffle, diversify, personalize, dailyMixes, artistNames,
+    seed, shuffle, diversify, personalize, homeGenrePlan, dailyMixes, artistNames,
     discoveryArtists, nextMixSession
   });
 }());
