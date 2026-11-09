@@ -1,0 +1,745 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="dark"><title>Thaalam 24x7 | Engineering Documentation</title><style>
+:root{--bg:#080808;--surface:#151515;--line:#4a4a4a;--text:#f4f4f4;--muted:#b8b8b8;--accent:#f2f2f2}*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(ellipse at 85% 0%,#202020 0,transparent 32%),var(--bg);color:var(--text);font:15px/1.75 Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}a{color:#dedede}aside{position:fixed;top:0;bottom:0;left:0;width:295px;overflow:auto;background:#0d0d0d;border-right:1px solid var(--line);padding:30px 18px}aside .brand{font-size:19px;font-weight:850;letter-spacing:-.6px;color:#fff;margin-bottom:5px}aside .brand span{color:var(--accent)}aside small{display:block;color:var(--muted);margin-bottom:25px}nav a{display:block;color:#b8b8b8;text-decoration:none;padding:7px 11px;border-radius:8px;font-size:12.5px;line-height:1.4}nav a:hover,nav a.active{background:#303030;color:#f0f0f0}nav .nav-3{padding-left:25px;font-size:11.5px}main{margin-left:295px;max-width:1230px;padding:55px 65px 120px}.hero{border:1px solid #686868;background:linear-gradient(125deg,#181818,#121212 70%);padding:35px 40px;border-radius:22px;margin-bottom:45px}.eyebrow{color:#e7e7e7;text-transform:uppercase;font-weight:800;letter-spacing:2.2px;font-size:11px}.hero h1{font-size:clamp(36px,5vw,60px);line-height:1.05;letter-spacing:-2px;margin:12px 0 18px}.hero p{color:#dedede;font-size:17px;margin:0}.chip{display:inline-block;border:1px solid #808080;color:#d2d2d2;border-radius:100px;padding:3px 12px;font-size:11px;margin-top:22px;margin-right:6px}article h2{font-size:29px;letter-spacing:-.8px;margin:58px 0 19px;padding-top:12px;border-top:1px solid var(--line)}article h3{font-size:20px;margin:37px 0 12px;color:#e2e2e2}article h2:first-child{display:none}p,li{color:#d2d2d2}strong{color:#fafafa}blockquote{border-left:3px solid #ededed;margin:20px 0;padding:10px 18px;background:#202020;border-radius:0 9px 9px 0}blockquote p{margin:0}pre{background:#141414;border:1px solid var(--line);border-radius:12px;padding:20px;overflow:auto;color:#cccccc;font-size:12px;line-height:1.65}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;color:#d8d8d8}p code,li code,td code{background:#282828;padding:2px 5px;border-radius:5px;font-size:.88em}table{width:100%;border-collapse:collapse;margin:20px 0 28px;font-size:13px;display:block;overflow-x:auto}th{color:#e8e8e8;background:#353535;text-align:left}td,th{padding:11px 15px;border-bottom:1px solid #3d3d3d;white-space:normal}tr:nth-child(even) td{background:#171717}.diagram{overflow:auto;background:#101010;border:1px solid #505050;border-radius:16px;padding:18px;margin:24px 0}.flow-svg{display:block;max-width:100%;height:auto;margin:auto;min-width:620px}.math-display{padding:22px 15px;overflow:auto;background:#1a1a1a;border:1px solid #575757;border-radius:12px;text-align:center;margin:20px 0}.math-display code{white-space:pre-wrap;overflow-wrap:anywhere}.anchor{font-size:14px;margin-left:9px;text-decoration:none;opacity:0}.anchor:hover,h2:hover .anchor,h3:hover .anchor{opacity:1}.topbar{display:none}footer{color:#969696;font-size:12px;margin-top:75px;border-top:1px solid var(--line);padding-top:22px}@media(max-width:900px){aside{display:none}main{margin:0;padding:24px 19px 70px}.topbar{display:block;padding:13px 20px;border-bottom:1px solid var(--line);font-weight:750}.hero{padding:26px 23px}.flow-svg{min-width:650px}article h2{font-size:25px}}@media print{aside,.topbar{display:none}main{margin:0;padding:0;max-width:none}body{background:#fff;color:#111}p,li{color:#222}.hero{background:#fff;color:#111}.diagram{background:#fff}h2,h3{break-after:avoid}table{display:table}}
+</style><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"><script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script><script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" onload="renderAll()"></script></head><body><div class="topbar">THAALAM / ENGINEERING</div><aside><div class="brand">THAALAM <span>24x7</span></div><small>Engineering documentation · v1.0</small><nav><a class="nav-2" href="#recommendation-engine">Recommendation engine</a><a class="nav-3" href="#how-recommendations-flow">How recommendations flow</a><a class="nav-3" href="#what-the-engine-learns">What the engine learns</a><a class="nav-3" href="#personalisation-score">Personalisation score</a><a class="nav-3" href="#daily-mix-logic">Daily Mix logic</a><a class="nav-3" href="#mix-discovery-flow">Mix discovery flow</a><a class="nav-3" href="#diversity-rules">Diversity rules</a><a class="nav-2" href="#algorithm-internals-mathematical-and-implementation-specification">Algorithm internals: mathematical and implementation specification</a><a class="nav-3" href="#1-input-normalization-and-artist-token-extraction">1. Input normalization and artist-token extraction</a><a class="nav-3" href="#2-deterministic-seed-fnv-1a-style-32-bit-hashing">2. Deterministic seed: FNV-1a-style 32-bit hashing</a><a class="nav-3" href="#3-seeded-shuffle-mulberry32-style-prng-and-fisher-yates">3. Seeded shuffle: Mulberry32-style PRNG and Fisher–Yates</a><a class="nav-3" href="#4-affinity-scoring-weighted-implicit-feedback">4. Affinity scoring: weighted implicit feedback</a><a class="nav-3" href="#5-genre-weighting-and-eligibility">5. Genre weighting and eligibility</a><a class="nav-3" href="#6-daily-plan-persistence-and-first-day-lifecycle">6. Daily plan persistence and first-day lifecycle</a><a class="nav-3" href="#7-discovery-artist-scoring">7. Discovery artist scoring</a><a class="nav-3" href="#8-session-counter-and-refresh-behavior">8. Session counter and refresh behavior</a><a class="nav-3" href="#9-diversity-selection-as-constrained-greedy-scheduling">9. Diversity selection as constrained greedy scheduling</a><a class="nav-3" href="#10-computational-complexity">10. Computational complexity</a><a class="nav-3" href="#11-reproducibility-guarantees-and-limitations">11. Reproducibility, guarantees, and limitations</a><a class="nav-3" href="#12-testing-and-evaluation">12. Testing and evaluation</a><a class="nav-2" href="#product-features">Product features</a><a class="nav-2" href="#storage-and-performance">Storage and performance</a><a class="nav-2" href="#architecture">Architecture</a><a class="nav-2" href="#google-sign-in-and-ratings">Google sign-in and ratings</a><a class="nav-2" href="#deployment">Deployment</a><a class="nav-2" href="#local-development">Local development</a><a class="nav-2" href="#privacy-and-security">Privacy and security</a></nav></aside><main><header class="hero"><div class="eyebrow">Engineering / Recommendation Systems</div><h1>Thaalam <span style="color:#f2f2f2">24x7</span></h1><p>Recommendation intelligence, listening signals, deterministic ranking and Mix discovery — fully documented.</p><span class="chip">Heuristic ranking</span><span class="chip">Deterministic seeds</span><span class="chip">Browser-first</span><span class="chip">Technical specification</span></header><article><h1>Thaalam 24x7</h1>
+<blockquote>
+<p>A lightweight music app for playback, discovery, personalised Mixes, and listening without interruption.</p>
+</blockquote>
+<h2 id="recommendation-engine">Recommendation engine<a class="anchor" href="#recommendation-engine">#</a></h2>
+<p>Thaalam uses a <strong>deterministic, heuristic-based</strong> recommendation engine. Completed listening, early manual skips, genre preferences, seeded variation, and diversity constraints inform ranking and Mix generation. The browser-side module exports eight functions via <code>window.ThaalamRecommendationEngine</code>.</p>
+<p>The engine does <strong>not</strong> train a machine-learning model, infer audio embeddings, or communicate listening history by itself. Playback-event classification, candidate retrieval, storage retention, and queue assembly are responsibilities of the surrounding application.</p>
+<h3 id="how-recommendations-flow">How recommendations flow<a class="anchor" href="#how-recommendations-flow">#</a></h3>
+<div class="diagram">
+
+<!-- Generated by graphviz version 2.42.4 (0)
+ -->
+<!-- Title: G Pages: 1 -->
+<svg class="flow-svg" width="783pt" height="618pt"
+ viewBox="0.00 0.00 782.50 618.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(18 600)">
+<title>G</title>
+<!-- A -->
+<g id="node1" class="node">
+<title>A</title>
+<path fill="#202020" stroke="#a0a0a0" d="M337.5,-582C337.5,-582 219.5,-582 219.5,-582 213.5,-582 207.5,-576 207.5,-570 207.5,-570 207.5,-558 207.5,-558 207.5,-552 213.5,-546 219.5,-546 219.5,-546 337.5,-546 337.5,-546 343.5,-546 349.5,-552 349.5,-558 349.5,-558 349.5,-570 349.5,-570 349.5,-576 343.5,-582 337.5,-582"/>
+<text text-anchor="middle" x="278.5" y="-560.9" font-family="Arial" font-size="12.00" fill="#f7f7f7">Listener plays a song</text>
+</g>
+<!-- B -->
+<g id="node2" class="node">
+<title>B</title>
+<path fill="#454545" stroke="#a0a0a0" d="M266.85,-494.13C266.85,-494.13 164.15,-468.87 164.15,-468.87 158.33,-467.43 158.33,-464.57 164.15,-463.13 164.15,-463.13 266.85,-437.87 266.85,-437.87 272.67,-436.43 284.33,-436.43 290.15,-437.87 290.15,-437.87 392.85,-463.13 392.85,-463.13 398.67,-464.57 398.67,-467.43 392.85,-468.87 392.85,-468.87 290.15,-494.13 290.15,-494.13 284.33,-495.57 272.67,-495.57 266.85,-494.13"/>
+<text text-anchor="middle" x="278.5" y="-462.9" font-family="Arial" font-size="12.00" fill="#f7f7f7">Listening outcome</text>
+</g>
+<!-- A&#45;&gt;B -->
+<g id="edge1" class="edge">
+<title>A&#45;&gt;B</title>
+<path fill="none" stroke="#c5c5c5" d="M278.5,-545.84C278.5,-534.14 278.5,-518.22 278.5,-503.74"/>
+<polygon fill="#c5c5c5" stroke="#c5c5c5" points="280.78,-503.71 278.5,-497.21 276.23,-503.71 280.78,-503.71"/>
+</g>
+<!-- C -->
+<g id="node3" class="node">
+<title>C</title>
+<path fill="#202020" stroke="#a0a0a0" d="M167,-376C167,-376 12,-376 12,-376 6,-376 0,-370 0,-364 0,-364 0,-352 0,-352 0,-346 6,-340 12,-340 12,-340 167,-340 167,-340 173,-340 179,-346 179,-352 179,-352 179,-364 179,-364 179,-370 173,-376 167,-376"/>
+<text text-anchor="middle" x="89.5" y="-354.9" font-family="Arial" font-size="12.00" fill="#f7f7f7">Positive artist + genre signal</text>
+</g>
+<!-- B&#45;&gt;C -->
+<g id="edge2" class="edge">
+<title>B&#45;&gt;C</title>
+<path fill="none" stroke="#c5c5c5" d="M241.16,-444.06C207.74,-425.31 159.04,-398 125.91,-379.42"/>
+<polygon fill="#c5c5c5" stroke="#c5c5c5" points="126.69,-377.25 119.91,-376.05 124.47,-381.22 126.69,-377.25"/>
+<text text-anchor="middle" x="202.5" y="-403" font-family="Arial" font-size="10.00" fill="#d8d8d8">Completed</text>
+</g>
+<!-- D -->
+<g id="node4" class="node">
+<title>D</title>
+<path fill="#202020" stroke="#a0a0a0" d="M545,-376C545,-376 390,-376 390,-376 384,-376 378,-370 378,-364 378,-364 378,-352 378,-352 378,-346 384,-340 390,-340 390,-340 545,-340 545,-340 551,-340 557,-346 557,-352 557,-352 557,-364 557,-364 557,-370 551,-376 545,-376"/>
+<text text-anchor="middle" x="467.5" y="-354.9" font-family="Arial" font-size="12.00" fill="#f7f7f7">Negative track + artist signal</text>
+</g>
+<!-- B&#45;&gt;D -->
+<g id="edge3" class="edge">
+<title>B&#45;&gt;D</title>
+<path fill="none" stroke="#c5c5c5" d="M315.84,-444.06C349.26,-425.31 397.96,-398 431.09,-379.42"/>
+<polygon fill="#c5c5c5" stroke="#c5c5c5" points="432.53,-381.22 437.09,-376.05 430.31,-377.25 432.53,-381.22"/>
+<text text-anchor="middle" x="411.5" y="-403" font-family="Arial" font-size="10.00" fill="#d8d8d8">Early skip</text>
+</g>
+<!-- E -->
+<g id="node5" class="node">
+<title>E</title>
+<path fill="#202020" stroke="#a0a0a0" d="M330.5,-376C330.5,-376 226.5,-376 226.5,-376 220.5,-376 214.5,-370 214.5,-364 214.5,-364 214.5,-352 214.5,-352 214.5,-346 220.5,-340 226.5,-340 226.5,-340 330.5,-340 330.5,-340 336.5,-340 342.5,-346 342.5,-352 342.5,-352 342.5,-364 342.5,-364 342.5,-370 336.5,-376 330.5,-376"/>
+<text text-anchor="middle" x="278.5" y="-354.9" font-family="Arial" font-size="12.00" fill="#f7f7f7">No negative signal</text>
+</g>
+<!-- B&#45;&gt;E -->
+<g id="edge4" class="edge">
+<title>B&#45;&gt;E</title>
+<path fill="none" stroke="#c5c5c5" d="M278.5,-434.91C278.5,-418.45 278.5,-398.35 278.5,-382.97"/>
+<polygon fill="#c5c5c5" stroke="#c5c5c5" points="280.78,-382.76 278.5,-376.26 276.23,-382.76 280.78,-382.76"/>
+<text text-anchor="middle" x="298.5" y="-403" font-family="Arial" font-size="10.00" fill="#d8d8d8">Near&#45;end</text>
+</g>
+<!-- F -->
+<g id="node6" class="node">
+<title>F</title>
+<path fill="#202020" stroke="#a0a0a0" d="M501.5,-291C501.5,-291 383.5,-291 383.5,-291 377.5,-291 371.5,-285 371.5,-279 371.5,-279 371.5,-267 371.5,-267 371.5,-261 377.5,-255 383.5,-255 383.5,-255 501.5,-255 501.5,-255 507.5,-255 513.5,-261 513.5,-267 513.5,-267 513.5,-279 513.5,-279 513.5,-285 507.5,-291 501.5,-291"/>
+<text text-anchor="middle" x="442.5" y="-269.9" font-family="Arial" font-size="12.00" fill="#f7f7f7">Personalised ranking</text>
+</g>
+<!-- C&#45;&gt;F -->
+<g id="edge5" class="edge">
+<title>C&#45;&gt;F</title>
+<path fill="none" stroke="#c5c5c5" d="M162.21,-339.9C221.32,-326.01 304.5,-306.45 364.88,-292.25"/>
+<polygon fill="#c5c5c5" stroke="#c5c5c5" points="365.58,-294.42 371.39,-290.72 364.54,-289.99 365.58,-294.42"/>
+</g>
+<!-- G -->
+<g id="node7" class="node">
+<title>G</title>
+<path fill="#202020" stroke="#a0a0a0" d="M300,-291C300,-291 169,-291 169,-291 163,-291 157,-285 157,-279 157,-279 157,-267 157,-267 157,-261 163,-255 169,-255 169,-255 300,-255 300,-255 306,-255 312,-261 312,-267 312,-267 312,-279 312,-279 312,-285 306,-291 300,-291"/>
+<text text-anchor="middle" x="234.5" y="-269.9" font-family="Arial" font-size="12.00" fill="#f7f7f7">Daily Mix genre ranking</text>
+</g>
+<!-- C&#45;&gt;G -->
+<g id="edge7" class="edge">
+<title>C&#45;&gt;G</title>
+<path fill="none" stroke="#c5c5c5" d="M119.54,-339.8C142.58,-326.61 174.45,-308.37 198.79,-294.44"/>
+<polygon fill="#c5c5c5" stroke="#c5c5c5" points="199.98,-296.38 204.49,-291.18 197.72,-292.43 199.98,-296.38"/>
+</g>
+<!-- D&#45;&gt;F -->
+<g id="edge6" class="edge">
+<title>D&#45;&gt;F</title>
+<path fill="none" stroke="#c5c5c5" d="M462.32,-339.8C458.63,-327.56 453.63,-310.96 449.58,-297.5"/>
+<polygon fill="#c5c5c5" stroke="#c5c5c5" points="451.73,-296.74 447.67,-291.18 447.37,-298.06 451.73,-296.74"/>
+</g>
+<!-- K -->
+<g id="node11" class="node">
+<title>K</title>
+<path fill="#202020" stroke="#a0a0a0" d="M505,-206C505,-206 380,-206 380,-206 374,-206 368,-200 368,-194 368,-194 368,-182 368,-182 368,-176 374,-170 380,-170 380,-170 505,-170 505,-170 511,-170 517,-176 517,-182 517,-182 517,-194 517,-194 517,-200 511,-206 505,-206"/>
+<text text-anchor="middle" x="442.5" y="-184.9" font-family="Arial" font-size="12.00" fill="#f7f7f7">Album + artist diversity</text>
+</g>
+<!-- F&#45;&gt;K -->
+<g id="edge10" class="edge">
+<title>F&#45;&gt;K</title>
+<path fill="none" stroke="#c5c5c5" d="M442.5,-254.8C442.5,-242.67 442.5,-226.26 442.5,-212.87"/>
+<polygon fill="#c5c5c5" stroke="#c5c5c5" points="444.78,-212.68 442.5,-206.18 440.23,-212.68 444.78,-212.68"/>
+</g>
+<!-- L -->
+<g id="node12" class="node">
+<title>L</title>
+<path fill="#202020" stroke="#a0a0a0" d="M319.5,-206C319.5,-206 205.5,-206 205.5,-206 199.5,-206 193.5,-200 193.5,-194 193.5,-194 193.5,-182 193.5,-182 193.5,-176 199.5,-170 205.5,-170 205.5,-170 319.5,-170 319.5,-170 325.5,-170 331.5,-176 331.5,-182 331.5,-182 331.5,-194 331.5,-194 331.5,-200 325.5,-206 319.5,-206"/>
+<text text-anchor="middle" x="262.5" y="-184.9" font-family="Arial" font-size="12.00" fill="#f7f7f7">Mix discovery queue</text>
+</g>
+<!-- G&#45;&gt;L -->
+<g id="edge11" class="edge">
+<title>G&#45;&gt;L</title>
+<path fill="none" stroke="#c5c5c5" d="M240.3,-254.8C244.43,-242.56 250.03,-225.96 254.57,-212.5"/>
+<polygon fill="#c5c5c5" stroke="#c5c5c5" points="256.78,-213.06 256.71,-206.18 252.47,-211.61 256.78,-213.06"/>
+</g>
+<!-- H -->
+<g id="node8" class="node">
+<title>H</title>
+<path fill="#202020" stroke="#a0a0a0" d="M734.5,-484C734.5,-484 570.5,-484 570.5,-484 564.5,-484 558.5,-478 558.5,-472 558.5,-472 558.5,-460 558.5,-460 558.5,-454 564.5,-448 570.5,-448 570.5,-448 734.5,-448 734.5,-448 740.5,-448 746.5,-454 746.5,-460 746.5,-460 746.5,-472 746.5,-472 746.5,-478 740.5,-484 734.5,-484"/>
+<text text-anchor="middle" x="652.5" y="-462.9" font-family="Arial" font-size="12.00" fill="#f7f7f7">Device + day + screen context</text>
+</g>
+<!-- I -->
+<g id="node9" class="node">
+<title>I</title>
+<path fill="#202020" stroke="#a0a0a0" d="M701,-376C701,-376 604,-376 604,-376 598,-376 592,-370 592,-364 592,-364 592,-352 592,-352 592,-346 598,-340 604,-340 604,-340 701,-340 701,-340 707,-340 713,-346 713,-352 713,-352 713,-364 713,-364 713,-370 707,-376 701,-376"/>
+<text text-anchor="middle" x="652.5" y="-354.9" font-family="Arial" font-size="12.00" fill="#f7f7f7">Stable daily seed</text>
+</g>
+<!-- H&#45;&gt;I -->
+<g id="edge8" class="edge">
+<title>H&#45;&gt;I</title>
+<path fill="none" stroke="#c5c5c5" d="M652.5,-447.97C652.5,-430.38 652.5,-402.78 652.5,-382.99"/>
+<polygon fill="#c5c5c5" stroke="#c5c5c5" points="654.78,-382.84 652.5,-376.34 650.23,-382.84 654.78,-382.84"/>
+</g>
+<!-- J -->
+<g id="node10" class="node">
+<title>J</title>
+<path fill="#202020" stroke="#a0a0a0" d="M678,-291C678,-291 583,-291 583,-291 577,-291 571,-285 571,-279 571,-279 571,-267 571,-267 571,-261 577,-255 583,-255 583,-255 678,-255 678,-255 684,-255 690,-261 690,-267 690,-267 690,-279 690,-279 690,-285 684,-291 678,-291"/>
+<text text-anchor="middle" x="630.5" y="-269.9" font-family="Arial" font-size="12.00" fill="#f7f7f7">Seeded variation</text>
+</g>
+<!-- I&#45;&gt;J -->
+<g id="edge9" class="edge">
+<title>I&#45;&gt;J</title>
+<path fill="none" stroke="#c5c5c5" d="M647.94,-339.8C644.7,-327.56 640.3,-310.96 636.73,-297.5"/>
+<polygon fill="#c5c5c5" stroke="#c5c5c5" points="638.92,-296.88 635.05,-291.18 634.52,-298.04 638.92,-296.88"/>
+</g>
+<!-- J&#45;&gt;K -->
+<g id="edge12" class="edge">
+<title>J&#45;&gt;K</title>
+<path fill="none" stroke="#c5c5c5" d="M591.55,-254.8C561.2,-241.4 519.03,-222.79 487.28,-208.77"/>
+<polygon fill="#c5c5c5" stroke="#c5c5c5" points="487.95,-206.58 481.08,-206.03 486.11,-210.74 487.95,-206.58"/>
+</g>
+<!-- M -->
+<g id="node13" class="node">
+<title>M</title>
+<path fill="#202020" stroke="#a0a0a0" d="M507,-121C507,-121 372,-121 372,-121 366,-121 360,-115 360,-109 360,-109 360,-97 360,-97 360,-91 366,-85 372,-85 372,-85 507,-85 507,-85 513,-85 519,-91 519,-97 519,-97 519,-109 519,-109 519,-115 513,-121 507,-121"/>
+<text text-anchor="middle" x="439.5" y="-99.9" font-family="Arial" font-size="12.00" fill="#f7f7f7">Home recommendations</text>
+</g>
+<!-- K&#45;&gt;M -->
+<g id="edge13" class="edge">
+<title>K&#45;&gt;M</title>
+<path fill="none" stroke="#c5c5c5" d="M441.88,-169.8C441.44,-157.67 440.85,-141.26 440.36,-127.87"/>
+<polygon fill="#c5c5c5" stroke="#c5c5c5" points="442.63,-127.59 440.12,-121.18 438.08,-127.75 442.63,-127.59"/>
+</g>
+<!-- N -->
+<g id="node14" class="node">
+<title>N</title>
+<path fill="#202020" stroke="#a0a0a0" d="M310.5,-121C310.5,-121 236.5,-121 236.5,-121 230.5,-121 224.5,-115 224.5,-109 224.5,-109 224.5,-97 224.5,-97 224.5,-91 230.5,-85 236.5,-85 236.5,-85 310.5,-85 310.5,-85 316.5,-85 322.5,-91 322.5,-97 322.5,-97 322.5,-109 322.5,-109 322.5,-115 316.5,-121 310.5,-121"/>
+<text text-anchor="middle" x="273.5" y="-99.9" font-family="Arial" font-size="12.00" fill="#f7f7f7">Mix playback</text>
+</g>
+<!-- L&#45;&gt;N -->
+<g id="edge14" class="edge">
+<title>L&#45;&gt;N</title>
+<path fill="none" stroke="#c5c5c5" d="M264.78,-169.8C266.39,-157.67 268.56,-141.26 270.34,-127.87"/>
+<polygon fill="#c5c5c5" stroke="#c5c5c5" points="272.62,-127.92 271.22,-121.18 268.11,-127.32 272.62,-127.92"/>
+</g>
+<!-- O -->
+<g id="node15" class="node">
+<title>O</title>
+<path fill="#606060" stroke="#a0a0a0" d="M400,-36C400,-36 309,-36 309,-36 303,-36 297,-30 297,-24 297,-24 297,-12 297,-12 297,-6 303,0 309,0 309,0 400,0 400,0 406,0 412,-6 412,-12 412,-12 412,-24 412,-24 412,-30 406,-36 400,-36"/>
+<text text-anchor="middle" x="354.5" y="-14.9" font-family="Arial" font-size="12.00" fill="#f7f7f7">Playback queue</text>
+</g>
+<!-- M&#45;&gt;O -->
+<g id="edge15" class="edge">
+<title>M&#45;&gt;O</title>
+<path fill="none" stroke="#c5c5c5" d="M421.89,-84.8C408.9,-72.12 391.11,-54.75 377.08,-41.04"/>
+<polygon fill="#c5c5c5" stroke="#c5c5c5" points="378.33,-39.09 372.09,-36.18 375.15,-42.34 378.33,-39.09"/>
+</g>
+<!-- N&#45;&gt;O -->
+<g id="edge16" class="edge">
+<title>N&#45;&gt;O</title>
+<path fill="none" stroke="#c5c5c5" d="M290.28,-84.8C302.66,-72.12 319.61,-54.75 332.99,-41.04"/>
+<polygon fill="#c5c5c5" stroke="#c5c5c5" points="334.83,-42.42 337.74,-36.18 331.57,-39.24 334.83,-42.42"/>
+</g>
+</g>
+</svg>
+</div>
+<blockquote>
+<p><strong>Integration boundary:</strong> The flow describes the intended application pipeline. The supplied engine implements ranking, diversity, seeding, Mix planning, artist selection, and session counters; it does not itself detect playback completion, classify early skips, fetch catalogue tracks, or filter previously heard tracks from Mix discovery candidates.</p>
+</blockquote>
+<h3 id="what-the-engine-learns">What the engine learns<a class="anchor" href="#what-the-engine-learns">#</a></h3>
+<table>
+<thead>
+<tr>
+  <th>Listener action</th>
+  <th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Completes a track</td>
+  <td>When supplied to <code>history</code> / <code>completedTracks</code>, contributes positive artist and genre evidence.</td>
+</tr>
+<tr>
+  <td>Skips manually before the final 30%</td>
+  <td>When the application records this in <code>skips</code>, lowers exact-track and artist affinity. The 30% cutoff is an application rule, not an engine rule.</td>
+</tr>
+<tr>
+  <td>Moves to the next track near the end</td>
+  <td>Does not count as dislike feedback <strong>if</strong> the application does not record a skip.</td>
+</tr>
+<tr>
+  <td>Completes three tracks from one genre</td>
+  <td>Makes that genre eligible for a personalised genre Mix, provided the completion records are supplied.</td>
+</tr>
+<tr>
+  <td>Opens a Mix again</td>
+  <td><code>nextMixSession</code> increments its session counter; the caller can incorporate that counter into a new seed and candidate ordering.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="personalisation-score">Personalisation score<a class="anchor" href="#personalisation-score">#</a></h3>
+<p>For a candidate track (s), let (A(s)) be the artist tokens extracted from its <code>artistName</code>, (P(a)) the number of entries in the supplied <code>history</code> associated with artist (a), (K(a)) the number of entries in <code>skips</code> associated with (a), and (T(s)) the number of skipped entries whose <strong>normalised title and full artist string</strong> match (s).</p>
+<div class="math-display" data-tex="\operatorname{Affinity}(s)=\sum_{a\in A(s)}\bigl[P(a)-1.5K(a)\bigr]-6T(s)"><code>\operatorname{Affinity}(s)=\sum_{a\in A(s)}\bigl[P(a)-1.5K(a)\bigr]-6T(s)</code></div>
+<p>The algorithm sorts candidate songs by descending affinity, breaking ties by their <strong>original input index</strong>. It subsequently tries to avoid artist repetition within a short rolling window. Scores are unbounded and are not probabilities, percentages, or predictions of whether a listener will like a song.</p>
+<h4>Worked example</h4>
+<p>Suppose the candidate is <code>Night Drive — Artist A feat. Artist B</code>, and the supplied event lists yield:</p>
+<table>
+<thead>
+<tr>
+  <th>Signal</th>
+  <th style="text-align:right">Artist A</th>
+  <th style="text-align:right">Artist B</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Completed-history entries</td>
+  <td style="text-align:right">8</td>
+  <td style="text-align:right">3</td>
+</tr>
+<tr>
+  <td>Skip entries</td>
+  <td style="text-align:right">2</td>
+  <td style="text-align:right">1</td>
+</tr>
+</tbody>
+</table>
+<p>If this exact title and full artist string appears once in <code>skips</code>, the score is:</p>
+<div class="math-display" data-tex="(8-1.5\times2)+(3-1.5\times1)-6\times1=0.5"><code>(8-1.5\times2)+(3-1.5\times1)-6\times1=0.5</code></div>
+<p>Without the exact-track skip, it would be (6.5). The exact-track penalty is deliberately stronger than a single artist-level penalty; no song or artist is permanently blacklisted by <code>personalize</code>.</p>
+<h3 id="daily-mix-logic">Daily Mix logic<a class="anchor" href="#daily-mix-logic">#</a></h3>
+<p>Daily Mixes use completed listening only. Opening a track or sampling a few seconds should not change Mix eligibility, provided the application records only true completions in <code>completedTracks</code>.</p>
+<p>For each genre (g), the engine calculates a play count and a position-weighted score:</p>
+<div class="math-display" data-tex="C(g)=\sum_{i=0}^{m-1}\mathbf{1}[\operatorname{genre}(song_i)=g]"><code>C(g)=\sum_{i=0}^{m-1}\mathbf{1}[\operatorname{genre}(song_i)=g]</code></div>
+<div class="math-display" data-tex="G(g)=\sum_{i=0}^{m-1}\mathbf{1}[\operatorname{genre}(song_i)=g]\frac{1}{1+0.08i}"><code>G(g)=\sum_{i=0}^{m-1}\mathbf{1}[\operatorname{genre}(song_i)=g]\frac{1}{1+0.08i}</code></div>
+<p>Only genres with (C(g)\geq3) are eligible. Eligible genres are ranked by (G(g)), and up to five are selected for the next planned daily set. <strong>The weighting assumes index 0 is the newest completion</strong>; the engine does not sort timestamps itself.</p>
+<p>The first eligible day shows a broad <code>Thaalam Mix</code> across genres with at least one completed track. On subsequent days, the saved plan produces a general Mix when more than one genre is planned, followed by numbered genre-specific Mixes. If only one genre qualifies, only its genre Mix is returned. The day and device identifier determine whether a stored plan can be reused.</p>
+<h3 id="mix-discovery-flow">Mix discovery flow<a class="anchor" href="#mix-discovery-flow">#</a></h3>
+<div class="diagram">
+
+<!-- Generated by graphviz version 2.42.4 (0)
+ -->
+<!-- Title: G Pages: 1 -->
+<svg class="flow-svg" width="1261pt" height="65pt"
+ viewBox="0.00 0.00 1260.80 64.80" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(14.4 50.4)">
+<title>G</title>
+<!-- A -->
+<g id="node1" class="node">
+<title>A</title>
+<path fill="#202020" stroke="#a0a0a0" d="M67,-36C67,-36 12,-36 12,-36 6,-36 0,-30 0,-24 0,-24 0,-12 0,-12 0,-6 6,0 12,0 12,0 67,0 67,0 73,0 79,-6 79,-12 79,-12 79,-24 79,-24 79,-30 73,-36 67,-36"/>
+<text text-anchor="middle" x="39.5" y="-15.2" font-family="Arial" font-size="11.00" fill="#f7f7f7">Open a Mix</text>
+</g>
+<!-- B -->
+<g id="node2" class="node">
+<title>B</title>
+<path fill="#202020" stroke="#a0a0a0" d="M196,-36C196,-36 121,-36 121,-36 115,-36 109,-30 109,-24 109,-24 109,-12 109,-12 109,-6 115,0 121,0 121,0 196,0 196,0 202,0 208,-6 208,-12 208,-12 208,-24 208,-24 208,-30 202,-36 196,-36"/>
+<text text-anchor="middle" x="158.5" y="-15.2" font-family="Arial" font-size="11.00" fill="#f7f7f7">Read daily plan</text>
+</g>
+<!-- A&#45;&gt;B -->
+<g id="edge1" class="edge">
+<title>A&#45;&gt;B</title>
+<path fill="none" stroke="#c5c5c5" d="M79.13,-18C86.67,-18 94.7,-18 102.64,-18"/>
+<polygon fill="#c5c5c5" stroke="#c5c5c5" points="102.68,-20.1 108.68,-18 102.68,-15.9 102.68,-20.1"/>
+</g>
+<!-- C -->
+<g id="node3" class="node">
+<title>C</title>
+<path fill="#202020" stroke="#a0a0a0" d="M338,-36C338,-36 250,-36 250,-36 244,-36 238,-30 238,-24 238,-24 238,-12 238,-12 238,-6 244,0 250,0 250,0 338,0 338,0 344,0 350,-6 350,-12 350,-12 350,-24 350,-24 350,-30 344,-36 338,-36"/>
+<text text-anchor="middle" x="294" y="-15.2" font-family="Arial" font-size="11.00" fill="#f7f7f7">Increment session</text>
+</g>
+<!-- B&#45;&gt;C -->
+<g id="edge2" class="edge">
+<title>B&#45;&gt;C</title>
+<path fill="none" stroke="#c5c5c5" d="M208.07,-18C215.8,-18 223.87,-18 231.84,-18"/>
+<polygon fill="#c5c5c5" stroke="#c5c5c5" points="231.9,-20.1 237.9,-18 231.9,-15.9 231.9,-20.1"/>
+</g>
+<!-- D -->
+<g id="node4" class="node">
+<title>D</title>
+<path fill="#202020" stroke="#a0a0a0" d="M491,-36C491,-36 392,-36 392,-36 386,-36 380,-30 380,-24 380,-24 380,-12 380,-12 380,-6 386,0 392,0 392,0 491,0 491,0 497,0 503,-6 503,-12 503,-12 503,-24 503,-24 503,-30 497,-36 491,-36"/>
+<text text-anchor="middle" x="441.5" y="-15.2" font-family="Arial" font-size="11.00" fill="#f7f7f7">Create session seed</text>
+</g>
+<!-- C&#45;&gt;D -->
+<g id="edge3" class="edge">
+<title>C&#45;&gt;D</title>
+<path fill="none" stroke="#c5c5c5" d="M350.01,-18C357.7,-18 365.68,-18 373.57,-18"/>
+<polygon fill="#c5c5c5" stroke="#c5c5c5" points="373.57,-20.1 379.57,-18 373.57,-15.9 373.57,-20.1"/>
+</g>
+<!-- E -->
+<g id="node5" class="node">
+<title>E</title>
+<path fill="#202020" stroke="#a0a0a0" d="M643,-36C643,-36 545,-36 545,-36 539,-36 533,-30 533,-24 533,-24 533,-12 533,-12 533,-6 539,0 545,0 545,0 643,0 643,0 649,0 655,-6 655,-12 655,-12 655,-24 655,-24 655,-30 649,-36 643,-36"/>
+<text text-anchor="middle" x="594" y="-15.2" font-family="Arial" font-size="11.00" fill="#f7f7f7">Select related artists</text>
+</g>
+<!-- D&#45;&gt;E -->
+<g id="edge4" class="edge">
+<title>D&#45;&gt;E</title>
+<path fill="none" stroke="#c5c5c5" d="M503.28,-18C510.93,-18 518.78,-18 526.51,-18"/>
+<polygon fill="#c5c5c5" stroke="#c5c5c5" points="526.97,-20.1 532.97,-18 526.97,-15.9 526.97,-20.1"/>
+</g>
+<!-- F -->
+<g id="node6" class="node">
+<title>F</title>
+<path fill="#202020" stroke="#a0a0a0" d="M808,-36C808,-36 697,-36 697,-36 691,-36 685,-30 685,-24 685,-24 685,-12 685,-12 685,-6 691,0 697,0 697,0 808,0 808,0 814,0 820,-6 820,-12 820,-12 820,-24 820,-24 820,-30 814,-36 808,-36"/>
+<text text-anchor="middle" x="752.5" y="-15.2" font-family="Arial" font-size="11.00" fill="#f7f7f7">Fetch candidates (app)</text>
+</g>
+<!-- E&#45;&gt;F -->
+<g id="edge5" class="edge">
+<title>E&#45;&gt;F</title>
+<path fill="none" stroke="#c5c5c5" d="M655.06,-18C662.82,-18 670.84,-18 678.77,-18"/>
+<polygon fill="#c5c5c5" stroke="#c5c5c5" points="678.82,-20.1 684.82,-18 678.82,-15.9 678.82,-20.1"/>
+</g>
+<!-- G -->
+<g id="node7" class="node">
+<title>G</title>
+<path fill="#202020" stroke="#a0a0a0" d="M950,-36C950,-36 862,-36 862,-36 856,-36 850,-30 850,-24 850,-24 850,-12 850,-12 850,-6 856,0 862,0 862,0 950,0 950,0 956,0 962,-6 962,-12 962,-12 962,-24 962,-24 962,-30 956,-36 950,-36"/>
+<text text-anchor="middle" x="906" y="-15.2" font-family="Arial" font-size="11.00" fill="#f7f7f7">Filter history (app)</text>
+</g>
+<!-- F&#45;&gt;G -->
+<g id="edge6" class="edge">
+<title>F&#45;&gt;G</title>
+<path fill="none" stroke="#c5c5c5" d="M820.39,-18C828.07,-18 835.87,-18 843.48,-18"/>
+<polygon fill="#c5c5c5" stroke="#c5c5c5" points="843.81,-20.1 849.81,-18 843.81,-15.9 843.81,-20.1"/>
+</g>
+<!-- H -->
+<g id="node8" class="node">
+<title>H</title>
+<path fill="#202020" stroke="#a0a0a0" d="M1090,-36C1090,-36 1004,-36 1004,-36 998,-36 992,-30 992,-24 992,-24 992,-12 992,-12 992,-6 998,0 1004,0 1004,0 1090,0 1090,0 1096,0 1102,-6 1102,-12 1102,-12 1102,-24 1102,-24 1102,-30 1096,-36 1090,-36"/>
+<text text-anchor="middle" x="1047" y="-15.2" font-family="Arial" font-size="11.00" fill="#f7f7f7">Shuffle + diversify</text>
+</g>
+<!-- G&#45;&gt;H -->
+<g id="edge7" class="edge">
+<title>G&#45;&gt;H</title>
+<path fill="none" stroke="#c5c5c5" d="M962.34,-18C969.91,-18 977.71,-18 985.37,-18"/>
+<polygon fill="#c5c5c5" stroke="#c5c5c5" points="985.76,-20.1 991.76,-18 985.76,-15.9 985.76,-20.1"/>
+</g>
+<!-- I -->
+<g id="node9" class="node">
+<title>I</title>
+<path fill="#606060" stroke="#a0a0a0" d="M1220,-36C1220,-36 1144,-36 1144,-36 1138,-36 1132,-30 1132,-24 1132,-24 1132,-12 1132,-12 1132,-6 1138,0 1144,0 1144,0 1220,0 1220,0 1226,0 1232,-6 1232,-12 1232,-12 1232,-24 1232,-24 1232,-30 1226,-36 1220,-36"/>
+<text text-anchor="middle" x="1182" y="-15.2" font-family="Arial" font-size="11.00" fill="#f7f7f7">Start Mix queue</text>
+</g>
+<!-- H&#45;&gt;I -->
+<g id="edge8" class="edge">
+<title>H&#45;&gt;I</title>
+<path fill="none" stroke="#c5c5c5" d="M1102.1,-18C1109.74,-18 1117.61,-18 1125.28,-18"/>
+<polygon fill="#c5c5c5" stroke="#c5c5c5" points="1125.66,-20.1 1131.66,-18 1125.66,-15.9 1125.66,-20.1"/>
+</g>
+</g>
+</svg>
+</div>
+<p>Each new Mix session <strong>can</strong> surface fresh music when the caller combines the session counter with <code>seed</code>, fetches fresh candidates, and removes already completed or skipped tracks. These last two actions are <strong>not implemented inside the supplied engine</strong>.</p>
+<h3 id="diversity-rules">Diversity rules<a class="anchor" href="#diversity-rules">#</a></h3>
+<ul>
+<li>Prefer a different album from the previous five selected queue positions.</li>
+<li>Prefer a different <strong>full artist string</strong> from the previous two selected queue positions in <code>diversify</code>.</li>
+<li>Relax to album-only separation if no candidate meets both constraints.</li>
+<li>If none qualifies, select the first remaining candidate so the queue remains playable.</li>
+</ul>
+<p>The separate <code>personalize</code> pass uses <strong>split artist tokens</strong> and a recent-two-artist-token check; the two passes therefore have different definitions of artist overlap.</p>
+<h2 id="algorithm-internals-mathematical-and-implementation-specification">Algorithm internals: mathematical and implementation specification<a class="anchor" href="#algorithm-internals-mathematical-and-implementation-specification">#</a></h2>
+<p>This section documents the <strong>actual supplied JavaScript</strong>, including numerical constants, ordering semantics, and fallback behavior.</p>
+<h3 id="1-input-normalization-and-artist-token-extraction">1. Input normalization and artist-token extraction<a class="anchor" href="#1-input-normalization-and-artist-token-extraction">#</a></h3>
+<p>The <code>normalize</code> helper converts nullish/falsy values to an empty string, trims surrounding whitespace, applies <code>toLocaleLowerCase()</code>, and collapses whitespace runs:</p>
+<pre><code class="language-js">const normalize = (value) =&gt; String(value || '')
+  .trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+</code></pre>
+<p>For artist counting, <code>artistNames</code> splits an artist string on commas, slashes, ampersands, and the words <code>feat</code>, <code>featuring</code>, <code>with</code>, or <code>x</code> (case-insensitive), then trims, drops empty tokens, and removes <strong>exact-string</strong> duplicates. This is heuristic parsing: <code>Artist A &amp; Artist B</code> becomes two artists, but inconsistent punctuation or casing may cause collisions or missed matches. Deduplication occurs <strong>before</strong> lowercasing; differently cased artist tokens may still contribute twice to one song's score.</p>
+<h3 id="2-deterministic-seed-fnv-1a-style-32-bit-hashing">2. Deterministic seed: FNV-1a-style 32-bit hashing<a class="anchor" href="#2-deterministic-seed-fnv-1a-style-32-bit-hashing">#</a></h3>
+<p>The seed function constructs the string</p>
+<div class="math-display" data-tex="X=\operatorname{deviceId}\;||\;\texttt{&quot;|&quot;}\;||\;\operatorname{dayKey}\;||\;\texttt{&quot;|&quot;}\;||\;\operatorname{key}"><code>X=\operatorname{deviceId}\;||\;\texttt{&quot;|&quot;}\;||\;\operatorname{dayKey}\;||\;\texttt{&quot;|&quot;}\;||\;\operatorname{key}</code></div>
+<p>and initializes (h_0=2166136261). For each JavaScript UTF-16 code unit (c_i), it applies:</p>
+<div class="math-display" data-tex="h_{i+1}=\bigl((h_i\oplus c_i)\times16777619\bigr)\bmod2^{32}"><code>h_{i+1}=\bigl((h_i\oplus c_i)\times16777619\bigr)\bmod2^{32}</code></div>
+<p>The implementation uses <code>Math.imul</code> to obtain the low 32 bits of multiplication and <code>&gt;&gt;&gt; 0</code> to return an unsigned integer. This is an <strong>FNV-1a-style</strong> hash over UTF-16 code units, not an implementation of FNV-1a over UTF-8 bytes.</p>
+<p><strong>Properties:</strong> Identical input strings produce identical seeds; changing the device, day, or caller-supplied key generally changes the seed. Collisions are possible. The hash is neither cryptographically secure nor a user identifier protection mechanism.</p>
+<h3 id="3-seeded-shuffle-mulberry32-style-prng-and-fisher-yates">3. Seeded shuffle: Mulberry32-style PRNG and Fisher–Yates<a class="anchor" href="#3-seeded-shuffle-mulberry32-style-prng-and-fisher-yates">#</a></h3>
+<p><code>shuffle(items, value)</code> copies the input array and uses a small stateful 32-bit pseudorandom generator. On each draw it increments the state by hexadecimal <code>0x6D2B79F5</code>, mixes the bits with XOR, shifts, and <code>Math.imul</code>, and converts the final unsigned integer into a number in ([0,1)):</p>
+<div class="math-display" data-tex="u=\frac{\operatorname{uint32}(z)}{2^{32}}"><code>u=\frac{\operatorname{uint32}(z)}{2^{32}}</code></div>
+<p>It then executes a descending Fisher–Yates shuffle:</p>
+<div class="math-display" data-tex="j_i=\lfloor u_i(i+1)\rfloor,\quad i=n-1,n-2,\ldots,1"><code>j_i=\lfloor u_i(i+1)\rfloor,\quad i=n-1,n-2,\ldots,1</code></div>
+<p>and swaps elements (i) and (j_i). The original input array is not mutated. For fixed seed and array order, output order is reproducible. The pseudorandom generator is <strong>not suitable for security or cryptography</strong>. Fisher–Yates runs in (O(n)) time and (O(n)) copy space.</p>
+<h3 id="4-affinity-scoring-weighted-implicit-feedback">4. Affinity scoring: weighted implicit feedback<a class="anchor" href="#4-affinity-scoring-weighted-implicit-feedback">#</a></h3>
+<p>For every entry in <code>history</code>, the engine adds one artist play for each extracted artist token. For every entry in <code>skips</code>, it adds one artist skip for each token and one exact-track skip for the key:</p>
+<pre><code class="language-text">normalize(trackName) + &quot;|&quot; + normalize(artistName)
+</code></pre>
+<p>Empty title and artist together (<code>&quot;|&quot;</code>) are excluded from the exact-track skip map. There is <strong>no time decay</strong> in the <code>personalize</code> score; recency is determined by whatever retention and ordering the caller applies to its history arrays. There is no separate genre, popularity, rating, or audio-feature term in this function.</p>
+<p>The function first invokes the injected <code>dedupe(songs)</code> callback (default identity). It does <strong>not</strong> internally deduplicate candidates. When both history and skips are empty, it returns the deduped input directly without affinity sorting or artist anti-repeat mixing.</p>
+<p>For nonempty feedback, scores are sorted descending, with original candidate index as a stable tie-breaker. During output construction, the engine selects the <strong>first</strong> remaining candidate with no artist token overlapping the last two entries of its accumulated <code>recentArtists</code> token list. If no candidate qualifies, it chooses the first remaining candidate.</p>
+<p><strong>Subtlety:</strong> <code>recentArtists</code> is a flattened list of artist tokens, not a list of songs. A collaboration can push several tokens into this window and change the effective artist-repeat horizon.</p>
+<h3 id="5-genre-weighting-and-eligibility">5. Genre weighting and eligibility<a class="anchor" href="#5-genre-weighting-and-eligibility">#</a></h3>
+<p>The decay function is hyperbolic:</p>
+<div class="math-display" data-tex="w(i)=\frac{1}{1+0.08i}"><code>w(i)=\frac{1}{1+0.08i}</code></div>
+<table>
+<thead>
+<tr>
+  <th style="text-align:right">Completion index</th>
+  <th style="text-align:right">Weight</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td style="text-align:right">0</td>
+  <td style="text-align:right">1.0000</td>
+</tr>
+<tr>
+  <td style="text-align:right">1</td>
+  <td style="text-align:right">0.9259</td>
+</tr>
+<tr>
+  <td style="text-align:right">5</td>
+  <td style="text-align:right">0.7143</td>
+</tr>
+<tr>
+  <td style="text-align:right">10</td>
+  <td style="text-align:right">0.5556</td>
+</tr>
+<tr>
+  <td style="text-align:right">25</td>
+  <td style="text-align:right">0.3333</td>
+</tr>
+<tr>
+  <td style="text-align:right">50</td>
+  <td style="text-align:right">0.2000</td>
+</tr>
+</tbody>
+</table>
+<p>Unlike exponential decay, this function declines slowly and never reaches zero. The score counts repeated completions independently. Three completions of the same track can qualify a genre because eligibility counts events, not unique songs.</p>
+<p><strong>Worked example:</strong> If genre A occurs at positions (0,2,5), then</p>
+<div class="math-display" data-tex="G(A)=1+\frac1{1.16}+\frac1{1.4}\approx2.5764"><code>G(A)=1+\frac1{1.16}+\frac1{1.4}\approx2.5764</code></div>
+<p>If genre B occurs at (1,3,8), then</p>
+<div class="math-display" data-tex="G(B)=\frac1{1.08}+\frac1{1.24}+\frac1{1.64}\approx2.3425"><code>G(B)=\frac1{1.08}+\frac1{1.24}+\frac1{1.64}\approx2.3425</code></div>
+<p>Both genres qualify, but A ranks ahead of B. <code>genreForSong</code> is an injected callback, so the engine does not infer genre from audio, titles, or artist names.</p>
+<h3 id="6-daily-plan-persistence-and-first-day-lifecycle">6. Daily plan persistence and first-day lifecycle<a class="anchor" href="#6-daily-plan-persistence-and-first-day-lifecycle">#</a></h3>
+<p><code>dailyMixes</code> starts with a score record for <strong>every key in <code>labels</code></strong>. Songs whose resolved genre is not a key in <code>labels</code> are ignored. If no genre has three completed plays, the function immediately returns <code>[]</code> and does not initialize the first-day record.</p>
+<p>After eligibility is established, the engine reads <code>storage.getItem(firstDayKey)</code>:</p>
+<ol>
+<li>If its JSON contains the same <code>deviceId</code> and a truthy <code>dayKey</code>, the current day is considered the first Mix day only if the day keys match.</li>
+<li>Otherwise, it writes <code>{ dayKey, deviceId }</code> and treats the current day as the first Mix day.</li>
+<li>If storage access or JSON parsing throws, it treats the call as a first-day call and returns the broad Mix.</li>
+</ol>
+<p>On later days, it reads <code>storageKey</code>. If the stored <code>dayKey</code> and <code>deviceId</code> match and <code>genres</code> is an array, it keeps only genre values that still exist in <code>labels</code>. If no valid planned genres remain, it writes the current top five eligible genres. If storage fails, it uses the current ranking without persistence.</p>
+<p><strong>Important nuance:</strong> A previously saved plan is filtered against current label keys but is <strong>not rechecked for the three-play threshold</strong>. A genre may remain in today's saved plan after the listener's underlying profile changes. Also, the broad first-day Mix uses all genres with at least one completion, not only those with three or more.</p>
+<h3 id="7-discovery-artist-scoring">7. Discovery artist scoring<a class="anchor" href="#7-discovery-artist-scoring">#</a></h3>
+<p>For a given Mix with <code>mix.genres</code>, the engine examines only songs in the supplied <code>taste</code> array whose <code>genreForSong(song)</code> matches a Mix genre. It scores each artist token with a second hyperbolic position weighting:</p>
+<div class="math-display" data-tex="D(a\mid M)=\sum_{i=0}^{n-1}\mathbf{1}[\operatorname{genre}(song_i)\in M]\,\mathbf{1}[a\in A(song_i)]\frac{1}{1+0.06i}"><code>D(a\mid M)=\sum_{i=0}^{n-1}\mathbf{1}[\operatorname{genre}(song_i)\in M]\,\mathbf{1}[a\in A(song_i)]\frac{1}{1+0.06i}</code></div>
+<p>The engine sorts artists by descending discovery score, retains the <strong>top 14</strong>, applies a deterministic shuffle with the supplied <code>value</code> seed, and returns the <strong>first six artist display names</strong>. Therefore:</p>
+<ul>
+<li>The output contains up to six names, not song recommendations.</li>
+<li>The top-14 shortlist is affinity-driven; selection of six within it is seeded variation rather than score-weighted sampling.</li>
+<li>No artists are discovered outside the supplied taste history.</li>
+<li>No catalogue lookup, novel-artist similarity model, or candidate-track exclusion is implemented here.</li>
+<li>As with genre weighting, position 0 is assumed to be newest if recency weighting is desired.</li>
+</ul>
+<h3 id="8-session-counter-and-refresh-behavior">8. Session counter and refresh behavior<a class="anchor" href="#8-session-counter-and-refresh-behavior">#</a></h3>
+<p><code>nextMixSession({ mixId, dayKey, storage, storageKey })</code> reads JSON state from storage. If the saved <code>dayKey</code> matches and <code>sessions</code> is an object, it reuses the counters; otherwise it starts with <code>{}</code>. For the selected Mix:</p>
+<div class="math-display" data-tex="\operatorname{session}_{new}(m)=\max\bigl(0,\operatorname{Number}(\operatorname{session}_{old}(m))\;\text{or}\;0\bigr)+1"><code>\operatorname{session}_{new}(m)=\max\bigl(0,\operatorname{Number}(\operatorname{session}_{old}(m))\;\text{or}\;0\bigr)+1</code></div>
+<p>The new value is persisted as <code>{ dayKey, sessions }</code>. If storage throws, the fallback is a random integer from 1 through 1,000,000 inclusive. The fallback is <strong>not deterministic</strong> and may collide. Session numbers do not affect shuffle order unless the caller passes them into the seed context.</p>
+<p>Example integration:</p>
+<pre><code class="language-js">const engine = window.ThaalamRecommendationEngine;
+const session = engine.nextMixSession({
+  mixId: mix.id,
+  dayKey,
+  storage: localStorage,
+  storageKey: 'thaalam:mix:sessions'
+});
+const value = engine.seed({
+  deviceId,
+  dayKey,
+  key: `mix:${mix.id}:session:${session}`
+});
+const artists = engine.discoveryArtists({
+  mix,
+  taste: completedTracks,
+  genreForSong,
+  value
+});
+// Application responsibility: fetch tracks for these artists,
+// exclude completed/skipped track IDs, then build the queue.
+</code></pre>
+<h3 id="9-diversity-selection-as-constrained-greedy-scheduling">9. Diversity selection as constrained greedy scheduling<a class="anchor" href="#9-diversity-selection-as-constrained-greedy-scheduling">#</a></h3>
+<p><code>diversify</code> processes a mutable copy of the input candidates, constructing an output queue one track at a time. Let (R) be remaining candidates, (L_5) the last five selected normalised album strings, and (L_2) the last two selected normalised <strong>full artist strings</strong>.</p>
+<p>It chooses the earliest remaining candidate satisfying:</p>
+<div class="math-display" data-tex="(\operatorname{album}(s)=\varnothing\ \lor\ \operatorname{album}(s)\notin L_5)
+\ \land\
+(\operatorname{artist}(s)=\varnothing\ \lor\ \operatorname{artist}(s)\notin L_2)"><code>(\operatorname{album}(s)=\varnothing\ \lor\ \operatorname{album}(s)\notin L_5)
+\ \land\
+(\operatorname{artist}(s)=\varnothing\ \lor\ \operatorname{artist}(s)\notin L_2)</code></div>
+<p>If none satisfies both constraints, it chooses the earliest candidate meeting only the album constraint. If that also fails, it chooses the first remaining track. This is a <strong>greedy soft-constraint algorithm</strong>, not a global optimisation solver. It preserves the original candidate preference order as much as possible while introducing local variety.</p>
+<p>The album and artist lists store empty strings too, but empty metadata is explicitly exempted from constraints. Different tracks with identical album names are treated as sharing an album even if they belong to different artists.</p>
+<h3 id="10-computational-complexity">10. Computational complexity<a class="anchor" href="#10-computational-complexity">#</a></h3>
+<p>Let (n) be candidate tracks, (h) history entries, (k) skip entries, (t) taste entries, and (a) distinct artists. String processing costs depend on metadata lengths and artist-token counts.</p>
+<table>
+<thead>
+<tr>
+  <th>Function</th>
+  <th>Typical / upper-bound time</th>
+  <th>Additional space</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>seed</code></td>
+  <td>(O(L)), input string length</td>
+  <td>(O(L)) constructed string</td>
+</tr>
+<tr>
+  <td><code>shuffle</code></td>
+  <td>(O(n))</td>
+  <td>(O(n))</td>
+</tr>
+<tr>
+  <td><code>diversify</code></td>
+  <td>(O(n^2)) worst case</td>
+  <td>(O(n))</td>
+</tr>
+<tr>
+  <td><code>personalize</code></td>
+  <td>(O(h+k+n\log n+n^2)) worst case, excluding injected <code>dedupe</code> and tokenisation</td>
+  <td>(O(h+k+n))</td>
+</tr>
+<tr>
+  <td><code>dailyMixes</code></td>
+  <td>(O(m+g\log g)), (g) label genres</td>
+  <td>(O(g))</td>
+</tr>
+<tr>
+  <td><code>discoveryArtists</code></td>
+  <td>(O(t+a\log a))</td>
+  <td>(O(a))</td>
+</tr>
+<tr>
+  <td><code>nextMixSession</code></td>
+  <td>(O(q)) for JSON parse/serialization of (q) saved session entries</td>
+  <td>(O(q))</td>
+</tr>
+</tbody>
+</table>
+<p>The two greedy queue passes can become quadratic because they repeatedly scan <code>remaining</code>/<code>ranked</code> and use <code>splice</code>. For modest browser queues this may be acceptable; very large catalogues should use bounded candidate pools, precomputed keys, or indexed scheduling.</p>
+<h3 id="11-reproducibility-guarantees-and-limitations">11. Reproducibility, guarantees, and limitations<a class="anchor" href="#11-reproducibility-guarantees-and-limitations">#</a></h3>
+<table>
+<thead>
+<tr>
+  <th>Property</th>
+  <th>Current behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Same seed and same ordered input</td>
+  <td><code>shuffle</code> returns the same order.</td>
+</tr>
+<tr>
+  <td>Different session</td>
+  <td>Different order only when the caller incorporates session into the seed.</td>
+</tr>
+<tr>
+  <td>Positive feedback</td>
+  <td>Artist play counts increase linearly.</td>
+</tr>
+<tr>
+  <td>Negative feedback</td>
+  <td>Artist skips cost 1.5 each; exact-track skips cost 6 each.</td>
+</tr>
+<tr>
+  <td>Cold start</td>
+  <td><code>personalize</code> returns deduped input unchanged; <code>dailyMixes</code> returns no Mix until a genre qualifies.</td>
+</tr>
+<tr>
+  <td>Duplicate songs</td>
+  <td>Removed only if caller supplies an effective <code>dedupe</code> function.</td>
+</tr>
+<tr>
+  <td>Artist parsing</td>
+  <td>Delimiter-based heuristics, not canonical artist IDs.</td>
+</tr>
+<tr>
+  <td>Genre inference</td>
+  <td>Supplied by <code>genreForSong</code>, not learned in this module.</td>
+</tr>
+<tr>
+  <td>Fresh Mix tracks</td>
+  <td>Must be fetched and filtered by surrounding application.</td>
+</tr>
+<tr>
+  <td>Cross-device profile</td>
+  <td>Not implemented by this browser module itself.</td>
+</tr>
+<tr>
+  <td>Storage errors</td>
+  <td>Daily Mixes and sessions have separate fallbacks; persistence is best-effort.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="12-testing-and-evaluation">12. Testing and evaluation<a class="anchor" href="#12-testing-and-evaluation">#</a></h3>
+<p>Recommended unit tests include deterministic shuffle fixtures, hash stability, zero-feedback behavior, exact-track skip penalties, collaborator-artist parsing, empty metadata, three-play eligibility, first-day transition, saved-plan reuse, invalid JSON, blocked storage, session resets at midnight, and constrained queues with repeated albums.</p>
+<p>For production measurement, track <strong>skip rate, completion rate, distinct artists per 20 tracks, distinct albums per 20 tracks, repeated-track rate, Mix return rate, and recommendation latency</strong>. These are proposed evaluation metrics, not metrics computed by the engine. Use replay tests on fixed histories before changing coefficients (<code>1.5</code>, <code>6</code>, <code>0.08</code>, <code>0.06</code>) so changes can be compared against a reproducible baseline.</p>
+<h2 id="product-features">Product features<a class="anchor" href="#product-features">#</a></h2>
+<ul>
+<li>Search and play songs on demand.</li>
+<li>Browse Malayalam, Tamil, Hindi, and international music.</li>
+<li>Keep liked songs, Recents, and personalised Mixes in one library.</li>
+<li>Continue music with the mini player while moving through the app.</li>
+<li>Show lyrics when they are available.</li>
+<li>Sync ratings and persistent sessions through Google sign-in when the backend is configured.</li>
+<li>Update silently through the service worker; deployments do not force-refresh an active listener.</li>
+</ul>
+<h2 id="storage-and-performance">Storage and performance<a class="anchor" href="#storage-and-performance">#</a></h2>
+<p>Listening state stays in browser storage by default. Maintenance runs when the browser is idle, so it does not interrupt playback or animation. Favourites, ratings, and account data are not removed by this cleanup.</p>
+<table>
+<thead>
+<tr>
+  <th>Stored data</th>
+  <th style="text-align:right">Limit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Playback history</td>
+  <td style="text-align:right">160 tracks</td>
+</tr>
+<tr>
+  <td>Completed taste profile</td>
+  <td style="text-align:right">180 tracks</td>
+</tr>
+<tr>
+  <td>Skip profile</td>
+  <td style="text-align:right">100 tracks</td>
+</tr>
+<tr>
+  <td>Search cache</td>
+  <td style="text-align:right">24 recent entries</td>
+</tr>
+<tr>
+  <td>Track duration cache</td>
+  <td style="text-align:right">400 entries</td>
+</tr>
+<tr>
+  <td>Song metadata cache</td>
+  <td style="text-align:right">350 entries</td>
+</tr>
+<tr>
+  <td>Artist metadata cache</td>
+  <td style="text-align:right">220 entries</td>
+</tr>
+</tbody>
+</table>
+<p>These are <strong>application-level storage policies</strong>, as described in the project overview; the recommendation-engine module itself does not enforce these limits or perform idle cleanup. The limits aim to keep the app responsive while retaining useful listening context.</p>
+<h2 id="architecture">Architecture<a class="anchor" href="#architecture">#</a></h2>
+<p>The app is a static HTML, CSS, and JavaScript client hosted through Cloudflare Pages and Worker routes.</p>
+<table>
+<thead>
+<tr>
+  <th>Part</th>
+  <th>Responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Browser app</td>
+  <td>Home, Search, Library, Now Playing, player controls, and local state.</td>
+</tr>
+<tr>
+  <td>Recommendation engine</td>
+  <td>Ranking, Mix planning, discovery artist selection, seeded variation, and diversity.</td>
+</tr>
+<tr>
+  <td>Music routes</td>
+  <td>Same-origin search, song resolution, and autoplay support.</td>
+</tr>
+<tr>
+  <td>Cloudflare D1</td>
+  <td>Persistent sessions and cross-browser ratings.</td>
+</tr>
+<tr>
+  <td>Service worker</td>
+  <td>Versioned app-shell caching and silent update delivery.</td>
+</tr>
+<tr>
+  <td>Optional relay</td>
+  <td>Catalogue forwarding when direct Worker access to the music source is unavailable.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="google-sign-in-and-ratings">Google sign-in and ratings<a class="anchor" href="#google-sign-in-and-ratings">#</a></h2>
+<p>Google sign-in uses Google Identity Services. Configure a Web OAuth client with the deployed origin and local development origin as authorised JavaScript origins. Only the public client ID belongs in the client configuration; never add a client secret to this static app.</p>
+<p>After sign-in, the app creates a persistent HttpOnly session in Cloudflare D1. Ratings can then sync for the same Google account across browsers. Without the backend configuration, local liked songs and device ratings continue to work in that browser.</p>
+<h2 id="deployment">Deployment<a class="anchor" href="#deployment">#</a></h2>
+<p>Cloudflare Pages serves the static application and API routes for music search, song resolution, autoplay, ratings, and authentication sessions. Persistent sessions and synced ratings require a D1 database bound as <code>DB</code>.</p>
+<p>Apply the migrations in the <code>migrations</code> folder in order before enabling account-backed ratings. Git-integrated Pages deployments use the routes in <code>functions</code>, while dashboard Direct Upload deployments use the root Worker file with the static assets.</p>
+<p>An optional relay can be configured for catalogue requests when Cloudflare cannot reach the source service directly. Audio still streams from the music CDN.</p>
+<h2 id="local-development">Local development<a class="anchor" href="#local-development">#</a></h2>
+<p>Start the project with its development script. Local middleware exposes the same music routes as production so the player follows the same browser flow.</p>
+<p>Local development does not include a D1 binding. Persistent account sessions and synced ratings therefore require a deployed Cloudflare environment, while playback, search, liked songs, and local browser state remain available.</p>
+<h2 id="privacy-and-security">Privacy and security<a class="anchor" href="#privacy-and-security">#</a></h2>
+<p>The recommendation engine does not transmit listening history on its own. Browser storage can be cleared, blocked, or changed by the user, so the app treats it as best-effort state rather than a secure source of truth.</p>
+<p>The daily seed is only for stable variation. It is not a secret, authentication token, or security boundary. Track and artist metadata must always be handled as untrusted display content.</p>
+<hr />
+<p><em>Documentation scope: the recommendation-engine internals are derived from the supplied JavaScript implementation. Product, infrastructure, storage-limit, and deployment details reflect the provided project description and should be verified against the full repository before release.</em></p>
+</article><footer>Thaalam 24x7 · Technical documentation · Diagrams embedded as SVG and available offline. Mathematical typesetting loads when online; formula source remains readable offline.</footer></main><script>function renderAll(){if(!window.katex)return;document.querySelectorAll('.math-display').forEach(e=>{try{katex.render(e.dataset.tex,e,{displayMode:true,throwOnError:false})}catch(_){}});if(window.renderMathInElement)renderMathInElement(document.querySelector('article'),{delimiters:[{left:'\(',right:'\)',display:false}],throwOnError:false})}const links=[...document.querySelectorAll('nav a')];const obs=new IntersectionObserver(entries=>{entries.forEach(e=>{if(e.isIntersecting){links.forEach(a=>a.classList.toggle('active',a.hash==='#'+e.target.id))}})},{rootMargin:'-10% 0px -75% 0px'});document.querySelectorAll('article h2,article h3').forEach(h=>obs.observe(h));</script></body></html>

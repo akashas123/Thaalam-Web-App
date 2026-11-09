@@ -2153,6 +2153,25 @@ body.view-rises-from-mini.view-now-playing .player-view {
     display: flex;
     justify-content: center;
     line-height: 0;
+    position: relative;
+    isolation: isolate;
+    filter: none;
+    overflow: visible;
+  }
+
+  .about-signoff #aboutTitle:has(.about-signoff-logo)::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    left: 50%;
+    bottom: -0.62rem;
+    width: 72%;
+    height: 0.7rem;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--liked-folder-color) 38%, transparent);
+    filter: blur(0.55rem);
+    transform: translateX(-50%) scaleY(0.48);
+    opacity: 0.78;
   }
 
   .about-signoff-logo {
@@ -2160,7 +2179,29 @@ body.view-rises-from-mini.view-now-playing .player-view {
     width: clamp(4.5rem, 7vw, 6rem);
     height: auto;
     border-radius: 1.3rem;
-    box-shadow: 0 0.9rem 2.25rem color-mix(in srgb, var(--liked-folder-color) 22%, transparent);
+    position: relative;
+    z-index: 1;
+    box-shadow: none;
+  }
+
+  .about-documentation-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 0.45rem;
+    color: color-mix(in srgb, var(--liked-folder-color) 78%, white);
+    font-size: 0.64rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-decoration: none;
+    text-transform: uppercase;
+    transition: color 160ms ease, transform 160ms ease;
+  }
+
+  .about-documentation-link:hover,
+  .about-documentation-link:focus-visible {
+    color: white;
+    transform: translateY(-1px);
   }
 
   /* Desktop About: compact editorial split layout. */
@@ -2239,7 +2280,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
   body.view-about .about-signoff-logo {
     width: clamp(4.25rem, 6vw, 5.75rem);
     border-radius: 1.15rem;
-    box-shadow: 0 0.85rem 2.4rem color-mix(in srgb, var(--liked-folder-color) 32%, transparent);
+    box-shadow: none;
   }
 
   body.view-about .about-signoff-note {
@@ -2248,6 +2289,8 @@ body.view-rises-from-mini.view-now-playing .player-view {
     font-size: 0.62rem;
     letter-spacing: 0.1em;
   }
+
+  body.view-about .about-documentation-link { margin-top: 0.4rem; }
 
   body.view-about .about-signoff + .site-page-action {
     grid-area: action;

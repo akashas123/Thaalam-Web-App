@@ -124,7 +124,9 @@ document.addEventListener('click', (event) => {
     window.matchMedia('(max-width: 56.1875rem), (pointer: coarse) and (any-pointer: coarse)').matches &&
     event.target.closest('#miniPlayer')
   ) return;
-  if (!event.target.closest('button')) {
+  // Documentation is a normal link so it can open its own page without the
+  // app's click-protection layer cancelling the browser navigation.
+  if (!event.target.closest('button, a.about-documentation-link')) {
     event.preventDefault();
     event.stopImmediatePropagation();
   }
