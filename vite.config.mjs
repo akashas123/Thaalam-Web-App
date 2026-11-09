@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import { Readable } from 'node:stream';
+import { resolve } from 'node:path';
 import {
   handleAlbum,
   handleAutoplay,
@@ -10,6 +11,14 @@ import {
 } from './music-api.mjs';
 
 export default defineConfig({
+  build: {
+    rollupOptions: {
+      input: {
+        main: resolve(import.meta.dirname, 'index.html'),
+        documentation: resolve(import.meta.dirname, 'Documentation/Documentation.html')
+      }
+    }
+  },
   plugins: [{
     name: 'local-music-provider',
     configureServer(server) {
