@@ -513,7 +513,7 @@
       </div>
       <div class="about-signoff">
         <h1 id="aboutTitle" tabindex="-1"><img class="about-signoff-logo" src="thaalam-icon-512.png?v=8" alt="Thaalam 24x7"></h1>
-        <p class="about-signoff-note" id="aboutVersion">v1.0.39</p>
+        <p class="about-signoff-note" id="aboutVersion">v1.0.43</p>
         <a class="about-documentation-link" href="Documentation/Documentation.html" target="_blank" rel="noopener noreferrer">Read documentation <span aria-hidden="true">↗</span></a>
         <button class="site-page-action" type="button" data-view="home">
           Back to Home
@@ -997,13 +997,13 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=96"></script>
-  <script src="ondemand-player.js?v=214"></script>
+  <script src="ondemand-player.js?v=217"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=18"></script>
   <script src="player-controls.js?v=61"></script>
   <script src="lyrics.js?v=56"></script>
-  <script src="recommendation-engine.js?v=3"></script>
+  <script src="recommendation-engine.js?v=4"></script>
   <script src="storage-maintenance.js?v=1"></script>
   <script src="/google-auth-config.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -1435,7 +1435,7 @@
     // Genre tabs use Apple's genre charts. Versioned separately from the old
     // text-search and filtered result caches.
     // v12 caches Saavn's new-release feed separately from the previous search charts.
-    const GENRE_CACHE_KEY = 'thaalam-jiosaavn-genre-cache-v12';
+    const GENRE_CACHE_KEY = 'thaalam-jiosaavn-genre-cache-v14';
     const GENRE_CHART_LIMIT = 21;
     const RECOMMENDATION_DEVICE_KEY = 'thaalam-recommendation-device-v1';
     const DAILY_MIX_PLAN_KEY = 'thaalam-daily-mix-plan-v1';
@@ -1607,6 +1607,16 @@
         .map(([artist]) => artist);
     }
 
+    function getGenreHomePlan(genre) {
+      return window.ThaalamRecommendationEngine.homeGenrePlan({
+        genre,
+        completedTracks: window.getCompletedOnDemandTracks?.() || [],
+        genreForSong: genreForMixSong,
+        limit: GENRE_CHART_LIMIT,
+        artistLimit: 5
+      });
+    }
+
     function recommendationCardKey(card) {
       const song = card.__onDemandSong || {};
       return String(song.providerTrackId || song.trackId ||
@@ -1655,7 +1665,8 @@
       if (genreChartRequests.has(key)) return genreChartRequests.get(key);
 
       const requestRevision = recommendationTasteRevision;
-      const personalizedQueries = getGenreHistoryArtistQueries();
+      const homePlan = getGenreHomePlan(key);
+      const personalizedQueries = homePlan.artists;
       const request = Promise.allSettled([
         fetchGenreNewReleases(key),
         personalizedQueries.length
@@ -1674,12 +1685,14 @@
 
           let songs;
           if (!personalizedQueries.length || !personalizedSongs.length) {
-            // New listeners and failed artist searches keep the general chart.
+            // New listeners and temporarily failed artist searches keep the
+            // general chart, because there is no usable taste signal yet.
             songs = generalSongs.slice(0, GENRE_CHART_LIMIT);
           } else {
-            // With a taste profile, use a 60/40 personalized/general mix.
-            const personalizedTarget = Math.round(GENRE_CHART_LIMIT * 0.6);
-            const generalTarget = GENRE_CHART_LIMIT - personalizedTarget;
+            // The recommendation engine gradually increases personalised
+            // positions in this genre as completed plays build up.
+            const personalizedTarget = homePlan.personalizedCount;
+            const generalTarget = homePlan.generalCount;
             const picked = [];
             const seen = new Set();
             const addFrom = (items, count) => {
@@ -1704,8 +1717,6 @@
             );
             addFrom(personalizedPool, personalizedTarget);
             addFrom(generalPool, generalTarget);
-            // If either source has too few distinct tracks, fill the grid from
-            // whichever source still has unseen songs.
             addFrom(personalizedPool, GENRE_CHART_LIMIT - picked.length);
             addFrom(generalPool, GENRE_CHART_LIMIT - picked.length);
             songs = seededGenreShuffle(picked, recommendationSeed(key));
@@ -2862,7 +2873,8 @@
     };
 
     function genreForMixSong(song) {
-      const language = String(song?.language || '').trim().toLocaleLowerCase();
+      const language = String(song?.language || song?.primaryGenreName || '')
+        .trim().toLocaleLowerCase();
       return genreLanguageOrder.find(([, languageKey]) => language.includes(languageKey))?.[0] || '';
     }
 
@@ -4448,11 +4460,17 @@
 
     window.addEventListener('thaalam-on-demand-recents-change', updateMobileRecents);
 
-    window.addEventListener('thaalam-personalized-recommendations-update', async () => {
+    window.addEventListener('thaalam-personalized-recommendations-update', async (event) => {
       recommendationTasteRevision += 1;
       const revision = recommendationTasteRevision;
+      const changedGenre = genreForMixSong(event.detail?.song);
+      // A played or early-skipped song only changes its own language shelf.
+      // Unknown-language songs leave Home untouched rather than needlessly
+      // reshuffling every genre.
+      if (!changedGenre || !Object.prototype.hasOwnProperty.call(genreFeedIds, changedGenre)) return;
+      const changedGenres = [changedGenre];
       const cache = getGenreCache();
-      Object.keys(genreFeedIds).forEach((key) => {
+      changedGenres.forEach((key) => {
         genreResultCache.delete(key);
         genreResultCacheDay.delete(key);
         genreChartRequests.delete(key);
@@ -4460,7 +4478,7 @@
       });
       try { localStorage.setItem(GENRE_CACHE_KEY, JSON.stringify(cache)); }
       catch { /* The updated charts remain available in memory. */ }
-      await Promise.allSettled(Object.keys(genreFeedIds).map((key) =>
+      await Promise.allSettled(changedGenres.map((key) =>
         loadDailyGenreChart(key)
       ));
       if (revision !== recommendationTasteRevision) return;
@@ -4471,7 +4489,7 @@
       }
       const shelves = document.getElementById('mobileGenreShelves');
       if (!shelves) return;
-      mobileHomeGenreRows.forEach((category) => {
+      mobileHomeGenreRows.filter((category) => category.key === changedGenre).forEach((category) => {
         const section = [...shelves.children].find((item) =>
           item.getAttribute('aria-label') === `${category.title} songs`);
         const songs = getAnyCachedGenreChart(category.key);

@@ -530,7 +530,9 @@ function recordCompletedTasteTrack() {
     window.dispatchEvent(new CustomEvent('thaalam-on-demand-completed-playback-change'));
     if (shouldRefreshProfile) {
       scheduleTasteProfileWork(() => {
-        window.dispatchEvent(new CustomEvent('thaalam-personalized-recommendations-update'));
+        window.dispatchEvent(new CustomEvent('thaalam-personalized-recommendations-update', {
+          detail: { song, signal: 'completed' }
+        }));
       });
     }
   });
@@ -564,7 +566,9 @@ function recordSkippedTasteTrack() {
         skippedTracks: skippedTasteTracks
       }));
     } catch { /* Keep this session's skip signal in memory. */ }
-    window.dispatchEvent(new CustomEvent('thaalam-personalized-recommendations-update'));
+    window.dispatchEvent(new CustomEvent('thaalam-personalized-recommendations-update', {
+      detail: { song, signal: 'skipped' }
+    }));
   });
 }
 
