@@ -1,7 +1,5 @@
 /*
  * Thaalam recommendation engine
- *
- * Pure recommendation logic lives here.
  */
 (function initializeThaalamRecommendationEngine() {
   'use strict';
@@ -91,7 +89,7 @@
     return mixed;
   }
 
-  function dailyMixes({ completedTracks = [], labels, genreForSong, dayKey, deviceId, storage, storageKey }) {
+  function dailyMixes({ completedTracks = [], labels, genreForSong, dayKey, deviceId, storage, storageKey, firstDayKey }) {
     const scores = new Map(Object.keys(labels).map((genre) => [genre, { plays: 0, weight: 0 }]));
     completedTracks.forEach((song, index) => {
       const genre = genreForSong(song);
@@ -105,6 +103,30 @@
       .sort((first, second) => second[1].weight - first[1].weight)
       .map(([genre]) => genre);
     if (!ranked.length) return [];
+
+    const playedGenres = [...scores]
+      .filter(([, score]) => score.plays > 0)
+      .map(([genre]) => genre);
+    let isFirstMixDay = false;
+    try {
+      const firstMix = JSON.parse(storage.getItem(firstDayKey) || '{}');
+      if (firstMix?.deviceId === deviceId && firstMix?.dayKey) {
+        isFirstMixDay = firstMix.dayKey === dayKey;
+      } else {
+        storage.setItem(firstDayKey, JSON.stringify({ dayKey, deviceId }));
+        isFirstMixDay = true;
+      }
+    } catch {
+      isFirstMixDay = true;
+    }
+    if (isFirstMixDay) {
+      return [{
+        id: 'thaalam',
+        title: 'Thaalam Mix',
+        subtitle: 'Across your favourite sounds',
+        genres: playedGenres
+      }];
+    }
 
     let planned = [];
     try {
@@ -121,7 +143,7 @@
     }
 
     const mixes = planned.length > 1 ? [{
-      id: 'thaalam', title: 'Thaalam Mix', subtitle: 'Across your favourite sounds', genres: planned
+      id: 'thaalam', title: 'Thaalam Mix', subtitle: 'General mix', genres: planned
     }] : [];
     planned.forEach((genre, index) => mixes.push({
       id: `genre-${genre}`,

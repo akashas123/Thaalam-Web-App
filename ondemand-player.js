@@ -275,6 +275,12 @@ function createOnDemandQueueSessionId() {
 let onDemandQueueSessionId = createOnDemandQueueSessionId();
 let onDemandQueueSource = 'autoplay';
 let onDemandMixName = '';
+function queueSourceForIndex(index) {
+  if (onDemandFavouriteQueueLength > 0 && index < onDemandFavouriteQueueLength) {
+    return 'favourites';
+  }
+  return onDemandQueueSource === 'mix' ? 'mix' : 'autoplay';
+}
 let onDemandShuffle = false;
 let shufflePreparedCursor = -1;
 let shuffleNormalQueueFuture = null;
@@ -574,7 +580,7 @@ function rememberOnDemandPlayback(song) {
     language: String(song.language || ''),
     primaryGenreName: String(song.primaryGenreName || ''),
     providerTrackId: String(song.providerTrackId || ''),
-    queueSource: onDemandQueueSource === 'favourites' ? 'favourites' : 'autoplay',
+    queueSource: onDemandQueueSource,
     queueStartTrackName: String(onDemandQueue[onDemandQueueStartIndex]?.trackName || song.trackName),
     queueSessionId: onDemandQueueSessionId,
     queueStep,
@@ -1038,6 +1044,7 @@ function saveOnDemandSession(song, trackId, position = 0) {
       queueSessionId: onDemandQueueSessionId,
       queueSource: onDemandQueueSource,
       favouriteQueueLength: onDemandFavouriteQueueLength,
+      mixName: onDemandMixName,
        shuffle: onDemandShuffle,
        repeatMode: onDemandRepeatMode,
 
@@ -1899,9 +1906,7 @@ function markUnavailableAndSkipSong(song, failedCandidates, failedRequestId) {
     const nextQueueIndex = onDemandQueue.indexOf(nextQueuedSong);
     if (nextQueueIndex >= 0) {
       onDemandQueueIndex = nextQueueIndex;
-      onDemandQueueSource = nextQueueIndex < onDemandFavouriteQueueLength
-        ? 'favourites'
-        : 'autoplay';
+      onDemandQueueSource = queueSourceForIndex(nextQueueIndex);
       updateTransportButtonState();
       void startOnDemandSong(nextQueuedSong, {
         preserveQueue: true,
@@ -2243,9 +2248,7 @@ function playNextRepeatAllQueueSong({ crossfade = false } = {}) {
   if (!nextSong) return false;
 
   onDemandQueueIndex = nextIndex;
-  onDemandQueueSource = nextIndex < onDemandFavouriteQueueLength
-    ? 'favourites'
-    : 'autoplay';
+  onDemandQueueSource = queueSourceForIndex(nextIndex);
   window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
   void startOnDemandSong(nextSong, {
     preserveQueue: true,
@@ -2426,9 +2429,7 @@ function skipOnDemandSong(offset, manual = true, { crossfade = false } = {}) {
 
   onDemandQueueIndex = nextIndex;
   window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
-  onDemandQueueSource = onDemandFavouriteQueueLength > 0 && nextIndex < onDemandFavouriteQueueLength
-    ? 'favourites'
-    : 'autoplay';
+  onDemandQueueSource = queueSourceForIndex(nextIndex);
   updateTransportButtonState();
   // Skips stay in the listener's current view; only fresh picks open Now
   // Playing (see startOnDemandSong).
@@ -2855,10 +2856,7 @@ async function playRelatedTrack(track, { crossfade = false } = {}) {
     onDemandQueue.push(song);
     onDemandQueueIndex = onDemandQueue.length - 1;
   }
-  onDemandQueueSource = onDemandFavouriteQueueLength > 0 &&
-    onDemandQueueIndex < onDemandFavouriteQueueLength
-    ? 'favourites'
-    : 'autoplay';
+  onDemandQueueSource = queueSourceForIndex(onDemandQueueIndex);
   window.dispatchEvent(new CustomEvent('thaalam-on-demand-history-change'));
   updateNowPlayingSubtitle(true);
   updateTransportButtonState();
@@ -2943,6 +2941,7 @@ async function startOnDemandSong(song, {
       onDemandQueueStartIndex = 0;
       onDemandQueueSessionId = createOnDemandQueueSessionId();
       onDemandQueueSource = 'autoplay';
+      onDemandMixName = '';
       onDemandFavouriteQueueLength = 0;
       playedTrackIds.clear();
       relatedTrackCache = [];
@@ -3224,7 +3223,12 @@ async function restoreOnDemandSession() {
     );
     onDemandQueueSource = onDemandFavouriteQueueLength > 0 && savedIndex < onDemandFavouriteQueueLength
       ? 'favourites'
-      : 'autoplay';
+      : stored.queueSource === 'mix'
+        ? 'mix'
+        : 'autoplay';
+    onDemandMixName = onDemandQueueSource === 'mix'
+      ? String(stored.mixName || 'Thaalam Mix')
+      : '';
     playedTrackIds.clear();
     savedQueue.forEach((entry) => {
       if (entry?.providerTrackId) playedTrackIds.add(entry.providerTrackId);
@@ -3247,6 +3251,7 @@ async function restoreOnDemandSession() {
     onDemandQueueStartIndex = 0;
     onDemandQueueSessionId = createOnDemandQueueSessionId();
     onDemandQueueSource = 'autoplay';
+    onDemandMixName = '';
     onDemandFavouriteQueueLength = 0;
     enqueueOnDemandSong({ ...song, providerTrackId: stored.trackId });
   }

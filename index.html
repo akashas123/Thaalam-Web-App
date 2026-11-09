@@ -513,7 +513,7 @@
       </div>
       <div class="about-signoff">
         <h1 id="aboutTitle" tabindex="-1"><img class="about-signoff-logo" src="thaalam-icon-512.png?v=8" alt="Thaalam 24x7"></h1>
-        <p class="about-signoff-note" id="aboutVersion">v1.0.27</p>
+        <p class="about-signoff-note" id="aboutVersion">v1.0.29</p>
         <button class="site-page-action" type="button" data-view="home">
           Back to Home
         </button>
@@ -996,13 +996,13 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=95"></script>
-  <script src="ondemand-player.js?v=211"></script>
+  <script src="ondemand-player.js?v=212"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=18"></script>
   <script src="player-controls.js?v=61"></script>
   <script src="lyrics.js?v=56"></script>
-  <script src="recommendation-engine.js?v=1"></script>
+  <script src="recommendation-engine.js?v=2"></script>
   <script src="/google-auth-config.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script>
@@ -1437,6 +1437,7 @@
     const GENRE_CHART_LIMIT = 21;
     const RECOMMENDATION_DEVICE_KEY = 'thaalam-recommendation-device-v1';
     const DAILY_MIX_PLAN_KEY = 'thaalam-daily-mix-plan-v1';
+    const FIRST_MIX_DAY_KEY = 'thaalam-first-mix-day-v1';
     const MIX_DISCOVERY_SESSION_KEY = 'thaalam-mix-discovery-session-v1';
     let recommendationDeviceId = '';
     try {
@@ -2870,7 +2871,8 @@
         dayKey: localCalendarDayKey(),
         deviceId: recommendationDeviceId,
         storage: localStorage,
-        storageKey: DAILY_MIX_PLAN_KEY
+        storageKey: DAILY_MIX_PLAN_KEY,
+        firstDayKey: FIRST_MIX_DAY_KEY
       });
 
       const scores = new Map(Object.keys(mixGenreLabels).map((genre) => [genre, { plays: 0, weight: 0 }]));
