@@ -566,9 +566,9 @@ function recordSkippedTasteTrack() {
         skippedTracks: skippedTasteTracks
       }));
     } catch { /* Keep this session's skip signal in memory. */ }
-    window.dispatchEvent(new CustomEvent('thaalam-personalized-recommendations-update', {
-      detail: { song, signal: 'skipped' }
-    }));
+    // A skip is stored as negative feedback, but never repaints Home by
+    // itself. It is applied the next time completed listening reaches the
+    // three-play profile refresh milestone.
   });
 }
 
