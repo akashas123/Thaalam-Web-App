@@ -347,6 +347,8 @@ const ON_DEMAND_STORAGE_KEY = 'thaalam-on-demand-session-v2';
 const ON_DEMAND_RECENTS_KEY = 'thaalam-on-demand-recents-v1';
 const ON_DEMAND_RECENTS_LIMIT = 10;
 const ON_DEMAND_PLAYBACK_HISTORY_KEY = 'thaalam-on-demand-playback-history-v1';
+const ON_DEMAND_PLAYBACK_HISTORY_LIMIT = 160;
+const ON_DEMAND_TASTE_PROFILE_LIMIT = 180;
 const PLAYBACK_MODE_STORAGE_KEY = 'thaalam-playback-mode-v1';
 const isMobilePlaybackLayout = () => window.matchMedia('(max-width: 56.1875rem)').matches;
 const LEGACY_ON_DEMAND_STORAGE_KEYS = ['thaalam-on-demand-session-v1'];
@@ -455,7 +457,7 @@ try {
   if (Array.isArray(storedHistory)) {
     onDemandPlaybackHistory = storedHistory
       .filter((song) => song && typeof song.trackName === 'string' && song.trackName.trim())
-      .slice(0, 500);
+      .slice(0, ON_DEMAND_PLAYBACK_HISTORY_LIMIT);
   }
 } catch { /* Keep playback history available for this visit if storage is blocked. */ }
 
@@ -465,8 +467,8 @@ let personalizedTasteProfile = [];
 let lastTasteCompletionRequestId = -1;
 try {
   const storedTaste = JSON.parse(localStorage.getItem(ON_DEMAND_TASTE_PROFILE_KEY) || '{}');
-  if (Array.isArray(storedTaste.completedTracks)) completedTasteTracks = storedTaste.completedTracks.slice(0, 500);
-  if (Array.isArray(storedTaste.profile)) personalizedTasteProfile = storedTaste.profile.slice(0, 500);
+  if (Array.isArray(storedTaste.completedTracks)) completedTasteTracks = storedTaste.completedTracks.slice(0, ON_DEMAND_TASTE_PROFILE_LIMIT);
+  if (Array.isArray(storedTaste.profile)) personalizedTasteProfile = storedTaste.profile.slice(0, ON_DEMAND_TASTE_PROFILE_LIMIT);
 } catch { /* Start with an empty taste profile if storage is unavailable. */ }
 
 function scheduleTasteProfileWork(callback) {
@@ -498,7 +500,7 @@ function recordCompletedTasteTrack() {
       language: String(song.language || ''),
       primaryGenreName: String(song.primaryGenreName || ''),
       playedAt: Date.now()
-    }, ...completedTasteTracks].slice(0, 500);
+    }, ...completedTasteTracks].slice(0, ON_DEMAND_TASTE_PROFILE_LIMIT);
     // Count completed plays cumulatively per artist, including interleaved
     // listening. Refresh at each three-play milestone, while each snapshot still
     // contains the full completed history from every artist.
@@ -586,7 +588,7 @@ function rememberOnDemandPlayback(song) {
     queueStep,
     playedAt: Date.now()
   };
-  onDemandPlaybackHistory = [entry, ...onDemandPlaybackHistory].slice(0, 500);
+  onDemandPlaybackHistory = [entry, ...onDemandPlaybackHistory].slice(0, ON_DEMAND_PLAYBACK_HISTORY_LIMIT);
   scheduleOnDemandHistoryCommit({ playback: true });
   if (queueStep === 0) {
     window.dispatchEvent(new CustomEvent('thaalam-on-demand-recents-change'));
