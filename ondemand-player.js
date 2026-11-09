@@ -464,11 +464,14 @@ try {
 const ON_DEMAND_TASTE_PROFILE_KEY = 'thaalam-on-demand-taste-profile-v1';
 let completedTasteTracks = [];
 let personalizedTasteProfile = [];
+let skippedTasteTracks = [];
 let lastTasteCompletionRequestId = -1;
+let lastTasteSkipRequestId = -1;
 try {
   const storedTaste = JSON.parse(localStorage.getItem(ON_DEMAND_TASTE_PROFILE_KEY) || '{}');
   if (Array.isArray(storedTaste.completedTracks)) completedTasteTracks = storedTaste.completedTracks.slice(0, ON_DEMAND_TASTE_PROFILE_LIMIT);
   if (Array.isArray(storedTaste.profile)) personalizedTasteProfile = storedTaste.profile.slice(0, ON_DEMAND_TASTE_PROFILE_LIMIT);
+  if (Array.isArray(storedTaste.skippedTracks)) skippedTasteTracks = storedTaste.skippedTracks.slice(0, 100);
 } catch { /* Start with an empty taste profile if storage is unavailable. */ }
 
 function scheduleTasteProfileWork(callback) {
@@ -518,7 +521,8 @@ function recordCompletedTasteTrack() {
     try {
       localStorage.setItem(ON_DEMAND_TASTE_PROFILE_KEY, JSON.stringify({
         completedTracks: completedTasteTracks,
-        profile: personalizedTasteProfile
+        profile: personalizedTasteProfile,
+        skippedTracks: skippedTasteTracks
       }));
     } catch { /* Keep this session's taste profile in memory. */ }
     // Mix eligibility follows completed listening, never a song merely opened
@@ -533,6 +537,36 @@ function recordCompletedTasteTrack() {
 }
 window.getOnDemandTasteProfile = () => personalizedTasteProfile.map((song) => ({ ...song }));
 window.getCompletedOnDemandTracks = () => completedTasteTracks.map((song) => ({ ...song }));
+window.getOnDemandSkipProfile = () => skippedTasteTracks.map((song) => ({ ...song }));
+
+function recordSkippedTasteTrack() {
+  if (lastTasteSkipRequestId === songRequestId || !currentOnDemandSong?.trackName) return;
+  const duration = Number(onDemandAudio?.duration);
+  const position = Number(onDemandAudio?.currentTime) || 0;
+  // Only an intentional, early Next is feedback. Near the end is simply
+  // normal navigation and should not make the recommendation less relevant.
+  if (Number.isFinite(duration) && duration > 0 && position / duration >= 0.7) return;
+  lastTasteSkipRequestId = songRequestId;
+  const song = { ...currentOnDemandSong };
+  scheduleTasteProfileWork(() => {
+    skippedTasteTracks = [{
+      trackName: String(song.trackName),
+      artistName: String(song.artistName || ''),
+      collectionName: String(song.collectionName || ''),
+      language: String(song.language || ''),
+      primaryGenreName: String(song.primaryGenreName || ''),
+      skippedAt: Date.now()
+    }, ...skippedTasteTracks].slice(0, 100);
+    try {
+      localStorage.setItem(ON_DEMAND_TASTE_PROFILE_KEY, JSON.stringify({
+        completedTracks: completedTasteTracks,
+        profile: personalizedTasteProfile,
+        skippedTracks: skippedTasteTracks
+      }));
+    } catch { /* Keep this session's skip signal in memory. */ }
+    window.dispatchEvent(new CustomEvent('thaalam-personalized-recommendations-update'));
+  });
+}
 
 let pendingHistoryCommit = 0;
 let recentHistoryDirty = false;
@@ -2396,6 +2430,7 @@ function updateTransportButtonState() {
 
 function skipOnDemandSong(offset, manual = true, { crossfade = false } = {}) {
   if (manual) autoplayTrackTransition = false;
+  if (manual && offset > 0) recordSkippedTasteTrack();
   if (offset > 0 && onDemandRepeatMode === 'all' &&
       onDemandQueueSource === 'favourites' && onDemandQueue.length > 1 &&
       onDemandQueueIndex === onDemandQueue.length - 1) {

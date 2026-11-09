@@ -62,17 +62,30 @@
     return ordered;
   }
 
-  function personalize(songs, { history = [], dedupe = (items) => items } = {}) {
+  function personalize(songs, { history = [], skips = [], dedupe = (items) => items } = {}) {
     const uniqueSongs = dedupe(songs);
-    if (!history.length) return uniqueSongs;
+    if (!history.length && !skips.length) return uniqueSongs;
     const artistPlays = new Map();
     history.forEach((song) => artistNames(song.artistName).forEach((artist) => {
       const key = normalize(artist);
       artistPlays.set(key, (artistPlays.get(key) || 0) + 1);
     }));
+    const artistSkips = new Map();
+    const trackSkips = new Map();
+    const trackKey = (song) => `${normalize(song?.trackName)}|${normalize(song?.artistName)}`;
+    skips.forEach((song) => {
+      artistNames(song.artistName).forEach((artist) => {
+        const key = normalize(artist);
+        artistSkips.set(key, (artistSkips.get(key) || 0) + 1);
+      });
+      const key = trackKey(song);
+      if (key !== '|') trackSkips.set(key, (trackSkips.get(key) || 0) + 1);
+    });
     const ranked = uniqueSongs.map((song, index) => ({ song, index,
       affinity: artistNames(song.artistName).reduce((total, artist) =>
-        total + (artistPlays.get(normalize(artist)) || 0), 0)
+        total + (artistPlays.get(normalize(artist)) || 0) -
+        (artistSkips.get(normalize(artist)) || 0) * 1.5, 0) -
+        (trackSkips.get(trackKey(song)) || 0) * 6
     })).sort((first, second) => second.affinity - first.affinity || first.index - second.index);
     const mixed = [];
     const recentArtists = [];

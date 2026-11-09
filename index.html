@@ -513,7 +513,7 @@
       </div>
       <div class="about-signoff">
         <h1 id="aboutTitle" tabindex="-1"><img class="about-signoff-logo" src="thaalam-icon-512.png?v=8" alt="Thaalam 24x7"></h1>
-        <p class="about-signoff-note" id="aboutVersion">v1.0.30</p>
+        <p class="about-signoff-note" id="aboutVersion">v1.0.31</p>
         <button class="site-page-action" type="button" data-view="home">
           Back to Home
         </button>
@@ -996,13 +996,13 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=95"></script>
-  <script src="ondemand-player.js?v=213"></script>
+  <script src="ondemand-player.js?v=214"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=18"></script>
   <script src="player-controls.js?v=61"></script>
   <script src="lyrics.js?v=56"></script>
-  <script src="recommendation-engine.js?v=2"></script>
+  <script src="recommendation-engine.js?v=3"></script>
   <script src="storage-maintenance.js?v=1"></script>
   <script src="/google-auth-config.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -2085,6 +2085,7 @@
     function personalizeGenreSongs(songs) {
       return window.ThaalamRecommendationEngine.personalize(songs, {
         history: window.getOnDemandTasteProfile?.() || [],
+        skips: window.getOnDemandSkipProfile?.() || [],
         dedupe: dedupeRecommendationSongs
       });
 
@@ -3014,7 +3015,8 @@
       // removes the listener's playback history, keeping it discovery-first.
       const heardTracks = new Set([
         ...(window.getOnDemandPlaybackHistory?.() || []),
-        ...(window.getCompletedOnDemandTracks?.() || [])
+        ...(window.getCompletedOnDemandTracks?.() || []),
+        ...(window.getOnDemandSkipProfile?.() || [])
       ].map(trackKey));
       const sessionNumber = beginMixDiscoverySession(mix.id);
       const sessionSeed = recommendationSeed(`mix-discovery:${mix.id}:${sessionNumber}`);

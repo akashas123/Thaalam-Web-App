@@ -40,8 +40,9 @@
     if (!taste || typeof taste !== 'object') return;
     const completed = Array.isArray(taste.completedTracks) ? taste.completedTracks.slice(0, 180) : [];
     const profile = Array.isArray(taste.profile) ? taste.profile.slice(0, 180) : [];
-    if ((taste.completedTracks?.length || 0) <= 180 && (taste.profile?.length || 0) <= 180) return;
-    localStorage.setItem(TASTE_KEY, JSON.stringify({ ...taste, completedTracks: completed, profile }));
+    const skipped = Array.isArray(taste.skippedTracks) ? taste.skippedTracks.slice(0, 100) : [];
+    if ((taste.completedTracks?.length || 0) <= 180 && (taste.profile?.length || 0) <= 180 && (taste.skippedTracks?.length || 0) <= 100) return;
+    localStorage.setItem(TASTE_KEY, JSON.stringify({ ...taste, completedTracks: completed, profile, skippedTracks: skipped }));
   }
 
   function trimSearchCache() {
