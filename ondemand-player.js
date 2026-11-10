@@ -550,15 +550,31 @@ function recordSkippedTasteTrack() {
   if (Number.isFinite(duration) && duration > 0 && position / duration >= 0.7) return;
   lastTasteSkipRequestId = songRequestId;
   const song = { ...currentOnDemandSong };
+  const skippedSong = {
+    trackName: String(song.trackName),
+    artistName: String(song.artistName || ''),
+    collectionName: String(song.collectionName || ''),
+    language: String(song.language || ''),
+    primaryGenreName: String(song.primaryGenreName || ''),
+    skippedAt: Date.now()
+  };
+
+  // AutoMix should not offer an intentionally skipped track again during the
+  // current station. This only affects the active queue; Home continues to
+  // refresh on its completed-listening milestone.
+  if (onDemandQueueSource === 'autoplay') {
+    relatedTrackCache = relatedTrackCache.filter((track) =>
+      !isSameOnDemandSong(relatedTrackToSong(track), skippedSong));
+    relatedTrackCursor = Math.min(relatedTrackCursor, relatedTrackCache.length);
+    onDemandQueue = onDemandQueue.filter((queuedSong, index) =>
+      index <= onDemandQueueIndex || !isSameOnDemandSong(queuedSong, skippedSong));
+    updateTransportButtonState();
+  }
+
+  // Keep the in-memory exclusion ready for any station refill immediately;
+  // persisting it can wait for idle time.
+  skippedTasteTracks = [skippedSong, ...skippedTasteTracks].slice(0, 100);
   scheduleTasteProfileWork(() => {
-    skippedTasteTracks = [{
-      trackName: String(song.trackName),
-      artistName: String(song.artistName || ''),
-      collectionName: String(song.collectionName || ''),
-      language: String(song.language || ''),
-      primaryGenreName: String(song.primaryGenreName || ''),
-      skippedAt: Date.now()
-    }, ...skippedTasteTracks].slice(0, 100);
     try {
       localStorage.setItem(ON_DEMAND_TASTE_PROFILE_KEY, JSON.stringify({
         completedTracks: completedTasteTracks,
@@ -2565,7 +2581,10 @@ function prefetchRelatedTracks(trackId, isRetry = false) {
       relatedTrackCache = pendingTracks.filter((track) => {
         if (!track?.id || isUnavailableOnDemandSong(relatedTrackToSong(track)) ||
             playedTrackIds.has(track.id) || seenTrackIds.has(track.id) ||
-            onDemandQueue.some((song) => isSameOnDemandSong(song, relatedTrackToSong(track)))) return false;
+            onDemandQueue.some((song) => isSameOnDemandSong(song, relatedTrackToSong(track))) ||
+            (window.ThaalamRecommendationEngine?.isSkippedTrack?.(
+              relatedTrackToSong(track), skippedTasteTracks
+            ) || false)) return false;
         seenTrackIds.add(track.id);
         return true;
       });

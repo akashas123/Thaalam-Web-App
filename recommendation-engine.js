@@ -9,6 +9,23 @@
     .split(/[,/&]|\b(?:feat(?:uring)?|with|x)\b/i)
     .map((artist) => artist.trim())
     .filter(Boolean))];
+  const trackKey = (song) => {
+    return `${normalize(song?.trackName || song?.title)}|${normalize(song?.artistName || song?.artist)}`;
+  };
+
+  // A skip is an exact-track signal: exclude only that song from the active
+  // discovery session, not every song from the same artist.
+  function isSkippedTrack(song, skips = []) {
+    const key = trackKey(song);
+    if (!key || key === '|') return false;
+    const providerId = String(song?.providerTrackId || song?.id || '').trim();
+    return skips.some((skippedSong) => {
+      const skippedProviderId = String(skippedSong?.providerTrackId || skippedSong?.id || '').trim();
+      return providerId && skippedProviderId
+        ? providerId === skippedProviderId
+        : trackKey(skippedSong) === key;
+    });
+  }
 
   function seed({ deviceId, dayKey, key }) {
     const value = `${deviceId}|${dayKey}|${key}`;
@@ -72,7 +89,6 @@
     }));
     const artistSkips = new Map();
     const trackSkips = new Map();
-    const trackKey = (song) => `${normalize(song?.trackName)}|${normalize(song?.artistName)}`;
     skips.forEach((song) => {
       artistNames(song.artistName).forEach((artist) => {
         const key = normalize(artist);
@@ -224,6 +240,6 @@
 
   window.ThaalamRecommendationEngine = Object.freeze({
     seed, shuffle, diversify, personalize, homeGenrePlan, dailyMixes, artistNames,
-    discoveryArtists, nextMixSession
+    discoveryArtists, nextMixSession, isSkippedTrack
   });
 }());
