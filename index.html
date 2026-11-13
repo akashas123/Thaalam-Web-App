@@ -49,7 +49,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=734">
+  <link rel="stylesheet" href="style.css?v=749">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -631,7 +631,9 @@
   <div class="app player-view" id="playerView">
 
     <div class="album-art-card">
-      <img id="albumArtImg" src="album-placeholder.svg?v=3" alt="Album artwork placeholder">
+      <div class="album-art-swipe-track">
+        <img id="albumArtImg" src="album-placeholder.svg?v=3" alt="Album artwork placeholder">
+      </div>
       <div class="player-mode-toggle" role="group" aria-label="Playback mode">
         <button class="player-mode-option" id="liveModeButton" type="button" aria-pressed="true">Live</button>
         <button class="player-mode-option" id="onDemandModeButton" type="button" aria-pressed="false">On-Demand</button>
@@ -996,12 +998,12 @@
   </aside>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
-  <script src="script.js?v=96"></script>
-  <script src="ondemand-player.js?v=222"></script>
+  <script src="script.js?v=98"></script>
+  <script src="ondemand-player.js?v=230"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=18"></script>
-  <script src="player-controls.js?v=61"></script>
+  <script src="player-controls.js?v=62"></script>
   <script src="lyrics.js?v=56"></script>
   <script src="recommendation-engine.js?v=5"></script>
   <script src="storage-maintenance.js?v=1"></script>
@@ -5141,8 +5143,8 @@
             const [keyTitle = '', keyArtist = ''] = trackKey.startsWith('youtube:') ? ['', ''] : trackKey.split('|');
             const rawVideoId = trackKey.startsWith('youtube:') ? trackKey.slice('youtube:'.length) : '';
             const videoId = /^[\w-]{11}$/.test(rawVideoId) ? rawVideoId : '';
-            // Saved rows may predate artwork persistence. A YouTube thumbnail is
-            // better than the blank placeholder while iTunes lookup runs.
+            // Saved rows may predate artwork persistence. Keep a YouTube
+            // thumbnail when available instead of leaving the card blank.
             const fallbackArtwork = videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '';
             return {
               trackKey,
@@ -5194,29 +5196,6 @@
             else updateDesktopLibraryFolder();
           });
         }
-        const missingArtwork = songs.filter((song) => !song.artworkUrl100);
-        if (missingArtwork.length && typeof window.lookupAlbumArtwork === 'function') {
-          void Promise.all(missingArtwork.map(async (song) => {
-            song.artworkUrl100 = await window.lookupAlbumArtwork(song.trackName, song.artistName) || '';
-          })).then(() => {
-            if (!isCurrentRequest()) return;
-            songs.forEach((song) => {
-              const key = song.youtubeVideoId
-                ? `youtube:${song.youtubeVideoId}`
-                : `${song.trackName.trim().toLowerCase().replace(/\s+/g, ' ')}|${song.artistName.trim().toLowerCase().replace(/\s+/g, ' ')}`;
-              const prev = songInfo[key] || {};
-              songInfo[key] = {
-                ...prev,
-                track: song.trackName,
-                artist: song.artistName,
-                ...(song.artworkUrl100 ? { artworkUrl100: song.artworkUrl100 } : {})
-              };
-            });
-            try { localStorage.setItem('thaalam24x7-song-info-v1', JSON.stringify(songInfo)); } catch { /* Keep the resolved covers for this view. */ }
-            if (render) renderGenreResults(songs);
-            else updateDesktopLibraryFolder();
-          });
-        }
         if (render && !songs.length) {
           const empty = genreResults.querySelector('.genre-empty');
           if (empty) empty.textContent = 'No liked songs';
@@ -5259,21 +5238,6 @@
           if (render) renderGenreResults(currentFavouriteSongs);
           else updateDesktopLibraryFolder();
         });
-        // Liked tracks come from the ratings service without catalog artwork.
-        // Resolve missing covers once and keep them beside the cached ratings
-        // so later visits can paint the cards without another iTunes request.
-        const missingArtwork = songs.filter((song) => !song.artworkUrl100);
-        if (missingArtwork.length && typeof window.lookupAlbumArtwork === 'function') {
-          void Promise.all(missingArtwork.map(async (song) => {
-            song.artworkUrl100 = await window.lookupAlbumArtwork(song.trackName, song.artistName) || '';
-          })).then(() => {
-            if (!isCurrentRequest()) return;
-            persistFavouriteArtwork(userId, songs, ratings);
-            currentFavouriteSongs = songs;
-            if (render) patchFavouriteArtworkInPlace(songs);
-            else updateDesktopLibraryFolder();
-          });
-        }
         if (render && !songs.length) {
           const empty = genreResults.querySelector('.genre-empty');
           if (empty) empty.textContent = 'No liked songs';

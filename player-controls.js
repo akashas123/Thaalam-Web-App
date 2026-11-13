@@ -1522,22 +1522,17 @@ async function searchItunes(term, limit = 15) {
 }
 
 async function searchAppleMusicMetadata(artist, title) {
-  const url = new URL('https://itunes.apple.com/search');
-  url.searchParams.set('term', `${artist} ${title}`);
-  url.searchParams.set('entity', 'song');
-  url.searchParams.set('limit', '25');
-  const response = await fetch(url, { cache: 'force-cache' });
-  if (!response.ok) {
-    throw new Error(`Apple song metadata lookup failed (${response.status}).`);
-  }
-  const data = await response.json();
+  // Never call iTunes from the browser: it blocks localhost/production origins
+  // with CORS and can rate-limit the player. The app's same-origin music route
+  // supplies the metadata needed by Now Playing and the mini player instead.
+  const musicData = await searchItunes(`${artist} ${title}`, 25);
   return {
-    results: (data?.results || []).map((song) => ({
+    results: (musicData.results || []).map((song) => ({
       trackName: song.trackName,
       artistName: song.artistName,
       collectionName: song.collectionName,
       releaseDate: song.releaseDate,
-      primaryGenreName: song.primaryGenreName,
+      primaryGenreName: song.primaryGenreName || '',
       artworkUrl100: song.artworkUrl100
     }))
   };

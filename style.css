@@ -855,6 +855,18 @@ html.is-restoring-session .app-loader {
     height: var(--desktop-home-genre-art-size);
     border-radius: .55rem;
   }
+
+  /* Desktop Home mixes are static cards. Keep hover from lifting the cover
+     and stop the equalizer mark from looking like it is dancing. */
+  .home-page .desktop-library-row .thaalam-mix-card:hover .thaalam-mix-art {
+    filter: none;
+    transform: none;
+  }
+
+  .home-page .desktop-library-row .thaalam-mix-art svg rect {
+    animation: none;
+    transform: none;
+  }
 }
 @keyframes appLoaderSpin {
   to { transform: rotate(360deg); }
@@ -7488,6 +7500,71 @@ img {
 /* Keep the mobile player composition consistent: artwork stays compact enough
    that the top of the Lyrics card is visible on every phone height. */
 @media (max-width: 56.1875rem), (pointer: coarse) and (any-pointer: coarse) {
+  /* The album cover is a horizontal touch target for on-demand queue travel.
+     `pan-y` preserves normal vertical scrolling elsewhere on the page. */
+  body.view-now-playing.on-demand-active .album-art-card {
+    --album-swipe-gap: 48px;
+    pointer-events: auto;
+    touch-action: pan-y;
+    cursor: grab;
+  }
+
+  /* A missing cover should not leave an oversized dark placeholder box in
+     the mobile player. Show this surface only once real artwork is available. */
+  body.view-now-playing.on-demand-active .album-art-card:has(#albumArtImg[src*="album-placeholder"]) {
+    display: none;
+  }
+
+  body.view-now-playing.on-demand-active .album-art-swipe-track {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    border-radius: inherit;
+    will-change: transform;
+  }
+
+  body.view-now-playing.on-demand-active .album-art-swipe-incoming {
+    position: absolute;
+    inset: 0;
+    z-index: 6;
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
+    object-fit: cover;
+    pointer-events: none;
+    will-change: transform;
+  }
+
+  body.view-now-playing.on-demand-active .album-art-card.is-track-swiping .album-art-swipe-track {
+    transform: translate3d(var(--track-swipe-offset, 0px), 0, 0);
+  }
+
+  body.view-now-playing.on-demand-active .album-art-card.is-track-swipe-next .album-art-swipe-incoming {
+    transform: translate3d(calc(100% + var(--album-swipe-gap) + var(--track-swipe-offset, 0px)), 0, 0);
+  }
+
+  body.view-now-playing.on-demand-active .album-art-card.is-track-swipe-previous .album-art-swipe-incoming {
+    transform: translate3d(calc(-100% - var(--album-swipe-gap) + var(--track-swipe-offset, 0px)), 0, 0);
+  }
+
+  body.view-now-playing.on-demand-active .album-art-card.is-track-swiping .album-art-swipe-track,
+  body.view-now-playing.on-demand-active .album-art-card.is-track-swiping .album-art-swipe-incoming {
+    cursor: grabbing;
+    transition: none;
+  }
+
+  /* The carousel must sit directly on the Now Playing backdrop, not inside a
+     fixed dark artwork frame. Keep the layout space, but remove that frame
+     and let the two covers pass beyond its former edges while dragging. */
+  body.view-now-playing.on-demand-active .album-art-card.is-track-swiping {
+    overflow: visible;
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
   body.view-now-playing {
     --mobile-player-content-width: min(
       calc(100vw - 4rem),
@@ -7527,6 +7604,13 @@ img {
      press-selection flash without affecting the desktop experience. */
   body.view-library,
   body.view-library * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Home and its in-page Search state use the same native touch controls as
+     Library. Remove the browser's blue press flash from both surfaces. */
+  body.view-home,
+  body.view-home * {
     -webkit-tap-highlight-color: transparent;
   }
 }

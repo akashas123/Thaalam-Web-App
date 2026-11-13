@@ -25,6 +25,8 @@ const playbackProgressThumb = document.getElementById('progressThumb');
 const miniPlayerForProgress = document.getElementById('miniPlayer');
 const onDemandPrevButton = document.getElementById('onDemandPrevButton');
 const onDemandNextButton = document.getElementById('onDemandNextButton');
+const onDemandArtworkCard = document.querySelector('.album-art-card');
+const onDemandArtworkSwipeTrack = onDemandArtwork?.closest('.album-art-swipe-track');
 const onDemandShuffleButton = document.getElementById('onDemandShuffleButton');
 const onDemandRepeatButton = document.getElementById('onDemandRepeatButton');
 const onDemandRepeatOneBadge = onDemandRepeatButton?.querySelector('.repeat-one-badge');
@@ -2206,13 +2208,11 @@ function updateOnDemandMetadata(song, track) {
   onDemandMiniTitle.textContent = title;
   onDemandMiniArtist.textContent = artist;
   // Invalidate any live-radio image load as soon as on-demand metadata changes.
-  // Preload before swapping so a failed/slow thumbnail cannot leave the prior
-  // track's artwork visible.
+  // Keep the current artwork in place while the next thumbnail preloads, so
+  // track changes never flash the dark placeholder.
   const colorRequestId = window.bumpArtworkRequestId?.() ?? 0;
   const artworkRequestId = ++onDemandArtworkRequestId;
-  onDemandArtwork.src = 'album-placeholder.svg?v=3';
   onDemandArtwork.classList.remove('is-wide-thumbnail');
-  onDemandMiniArtwork.src = 'album-placeholder.svg?v=3';
   onDemandMiniArtwork.classList.remove('is-wide-thumbnail');
 
   // Prefer the pick's own artwork (catalog or JioSaavn); the iTunes lookup is
@@ -2500,6 +2500,178 @@ function skipOnDemandSong(offset, manual = true, { crossfade = false } = {}) {
 
 onDemandPrevButton?.addEventListener('click', () => skipOnDemandSong(-1));
 onDemandNextButton?.addEventListener('click', () => skipOnDemandSong(1));
+
+// On phones, make the artwork itself a transport gesture: swipe left for the
+// next track and right for the previous one. Pointer events let this coexist
+// with vertical page scrolling, while the availability checks mirror the
+// visible transport controls.
+function enableArtworkTrackSwipe() {
+  if (!onDemandArtworkCard || !onDemandArtworkSwipeTrack ||
+      !window.matchMedia('(max-width: 56.1875rem), (pointer: coarse)').matches) return;
+
+  const swipe = {
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+    offsetX: 0,
+    isHorizontal: false,
+    direction: 0,
+    incomingArtwork: null,
+    artworkWidth: 1,
+    artworkGap: 12,
+    renderFrame: 0
+  };
+  const swipeThreshold = 48;
+
+  const clearIncomingArtwork = () => {
+    swipe.incomingArtwork?.remove();
+    swipe.incomingArtwork = null;
+  };
+
+  const resetArtworkPosition = () => {
+    window.cancelAnimationFrame(swipe.renderFrame);
+    swipe.renderFrame = 0;
+    onDemandArtworkCard.classList.remove(
+      'is-track-swiping',
+      'is-track-swipe-next',
+      'is-track-swipe-previous',
+      'is-track-swipe-settling'
+    );
+    onDemandArtworkCard.style.setProperty('--track-swipe-offset', '0px');
+  };
+
+  const getSwipeTarget = (direction) => {
+    const queueIndex = onDemandQueueIndex + direction;
+    if (onDemandQueue[queueIndex]) return onDemandQueue[queueIndex];
+    return direction > 0 ? relatedTrackCache[relatedTrackCursor] : null;
+  };
+
+  const canSwipeToTrack = (direction) => {
+    const button = direction > 0 ? onDemandNextButton : onDemandPrevButton;
+    return Boolean(window.onDemandPlaybackActive && !button?.disabled && getSwipeTarget(direction));
+  };
+
+  const showIncomingArtwork = (direction) => {
+    if (!direction || swipe.direction === direction) return;
+    clearIncomingArtwork();
+    swipe.direction = direction;
+    const target = getSwipeTarget(direction);
+    const source = String(target?.artworkUrl100 || target?.thumbnail || '').replace(/^http:/, 'https:');
+    if (!source) return;
+
+    const image = new Image();
+    image.className = 'album-art-swipe-incoming';
+    image.alt = '';
+    image.setAttribute('aria-hidden', 'true');
+    image.src = source;
+    onDemandArtworkCard.appendChild(image);
+    swipe.incomingArtwork = image;
+  };
+
+  const renderSwipePosition = () => {
+    swipe.renderFrame = 0;
+    const direction = swipe.offsetX < 0 ? 1 : -1;
+    showIncomingArtwork(direction);
+    onDemandArtworkCard.classList.add('is-track-swiping');
+    onDemandArtworkCard.classList.toggle('is-track-swipe-next', direction > 0);
+    onDemandArtworkCard.classList.toggle('is-track-swipe-previous', direction < 0);
+    onDemandArtworkCard.style.setProperty('--track-swipe-offset', `${swipe.offsetX}px`);
+  };
+
+  const queueSwipeRender = () => {
+    if (!swipe.renderFrame) swipe.renderFrame = window.requestAnimationFrame(renderSwipePosition);
+  };
+
+  onDemandArtworkCard.addEventListener('pointerdown', (event) => {
+    if (event.pointerType !== 'touch' || !window.onDemandPlaybackActive) return;
+    swipe.pointerId = event.pointerId;
+    swipe.startX = event.clientX;
+    swipe.startY = event.clientY;
+    swipe.offsetX = 0;
+    swipe.isHorizontal = false;
+    swipe.direction = 0;
+    swipe.artworkWidth = onDemandArtworkCard.getBoundingClientRect().width || 1;
+    swipe.artworkGap = parseFloat(
+      getComputedStyle(onDemandArtworkCard).getPropertyValue('--album-swipe-gap')
+    ) || 12;
+    clearIncomingArtwork();
+  });
+
+  onDemandArtworkCard.addEventListener('pointermove', (event) => {
+    if (event.pointerId !== swipe.pointerId) return;
+    const deltaX = event.clientX - swipe.startX;
+    const deltaY = event.clientY - swipe.startY;
+    const direction = deltaX < 0 ? 1 : -1;
+
+    if (!swipe.isHorizontal) {
+      if (Math.abs(deltaY) > Math.abs(deltaX)) return;
+      if (Math.abs(deltaX) < 8) return;
+      // Do not move the artwork at all when the queue has no song in the
+      // requested direction.
+      if (!canSwipeToTrack(direction)) return;
+      swipe.isHorizontal = true;
+      onDemandArtworkCard.setPointerCapture?.(event.pointerId);
+    }
+
+    if (!canSwipeToTrack(direction)) {
+      window.cancelAnimationFrame(swipe.renderFrame);
+      swipe.renderFrame = 0;
+      swipe.isHorizontal = false;
+      swipe.offsetX = 0;
+      clearIncomingArtwork();
+      onDemandArtworkCard.classList.remove(
+        'is-track-swiping',
+        'is-track-swipe-next',
+        'is-track-swipe-previous'
+      );
+      onDemandArtworkCard.style.setProperty('--track-swipe-offset', '0px');
+      return;
+    }
+
+    event.preventDefault();
+    // Let the listener pull a complete cover-width. The incoming artwork
+    // remains locked to that exact position, making this a true carousel
+    // rather than a short nudge before switching tracks.
+    const fullSwipeDistance = swipe.artworkWidth + swipe.artworkGap;
+    swipe.offsetX = Math.max(-fullSwipeDistance, Math.min(fullSwipeDistance, deltaX));
+    queueSwipeRender();
+  }, { passive: false });
+
+  const finishSwipe = (event) => {
+    if (event.pointerId !== swipe.pointerId) return;
+    const offsetX = swipe.offsetX;
+    const shouldChangeTrack = swipe.isHorizontal && Math.abs(offsetX) >= swipeThreshold;
+    const direction = offsetX < 0 ? 1 : -1;
+    swipe.pointerId = null;
+    swipe.offsetX = 0;
+    swipe.isHorizontal = false;
+    swipe.direction = 0;
+
+    if (!shouldChangeTrack || !window.onDemandPlaybackActive) {
+      resetArtworkPosition();
+      clearIncomingArtwork();
+      return;
+    }
+    // Left moves forward through the queue; right returns to the prior track.
+    const button = direction > 0 ? onDemandNextButton : onDemandPrevButton;
+    if (button?.disabled) {
+      resetArtworkPosition();
+      clearIncomingArtwork();
+      return;
+    }
+
+    // No artificial finishing animation: the cover moves only with the
+    // listener's finger, then the selected track replaces it on release.
+    resetArtworkPosition();
+    clearIncomingArtwork();
+    skipOnDemandSong(direction);
+  };
+
+  onDemandArtworkCard.addEventListener('pointerup', finishSwipe);
+  onDemandArtworkCard.addEventListener('pointercancel', finishSwipe);
+}
+
+enableArtworkTrackSwipe();
 
 /* Fetch recommendations from the current autoplay anchor. Keeping the same
    seed across autoplay tracks prevents the radio from drifting into a new
