@@ -287,6 +287,15 @@ function extractAlbumColors(image) {
 }
 
 function updateAlbumColors(imageUrl, requestId) {
+  // AzuraCast station artwork can display in an <img>, but does not grant
+  // canvas access. Skip only that source; third-party album artwork remains
+  // eligible to supply the Now Playing gradient when it allows CORS.
+  try {
+    const artworkUrl = new URL(imageUrl, window.location.href);
+    if (!imageUrl || artworkUrl.hostname === 'radio.thaalam24x7.in') return;
+  } catch {
+    return;
+  }
   const image = new Image();
   image.crossOrigin = 'anonymous';
   image.onload = () => {
