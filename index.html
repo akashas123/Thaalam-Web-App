@@ -49,7 +49,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=776">
+  <link rel="stylesheet" href="style.css?v=795">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -379,7 +379,7 @@
         <p class="library-subtitle liked-folder-subtitle" id="likedFolderSubtitle">Liked songs are saved on this device</p>
         <div class="liked-folder-hero-meta" id="likedFolderHeroMeta">
           <span id="likedFolderSongCount">0 songs</span>
-          <span id="likedFolderHeroSource">On this device</span>
+          <span id="likedFolderHeroSource">From this account</span>
         </div>
       </header>
       <div class="liked-songs-view-title">
@@ -501,6 +501,7 @@
         <div class="library-mixes-row" id="libraryMixesRow"></div>
       </section>
     </div>
+    <p class="library-version" id="libraryVersion" aria-hidden="true">v…</p>
   </main>
 
   <main class="site-page about-page" id="aboutPage" aria-labelledby="aboutTitle">
@@ -513,7 +514,7 @@
       </div>
       <div class="about-signoff">
         <h1 id="aboutTitle" tabindex="-1"><img class="about-signoff-logo" src="thaalam-icon-512.png?v=8" alt="Thaalam 24x7"></h1>
-        <p class="about-signoff-note" id="aboutVersion" data-build="1053">v1.0.5.3</p>
+        <p class="about-signoff-note" id="aboutVersion" aria-live="polite">v…</p>
         <a class="about-documentation-link" href="Documentation/Documentation.html" target="_blank" rel="noopener noreferrer">Read documentation <span aria-hidden="true">↗</span></a>
         <button class="site-page-action" type="button" data-view="home">
           Back to Home
@@ -999,7 +1000,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=98"></script>
-  <script src="ondemand-player.js?v=232"></script>
+  <script src="ondemand-player.js?v=237"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=18"></script>
@@ -1019,12 +1020,46 @@
       addEventListener: (...args) => desktopNavigationQuery.addEventListener(...args)
     };
     const aboutVersion = document.getElementById('aboutVersion');
-    const formatBuildVersion = (build) => {
-      const digits = String(build || '').replace(/\D/g, '');
+    const libraryVersion = document.getElementById('libraryVersion');
+    let displayedServiceWorkerVersion = -1;
+    const formatBuildVersion = (cacheName) => {
+      const versionMatch = String(cacheName || '').match(/-v(\d+)$/);
+      const digits = versionMatch ? versionMatch[1] : '';
       if (!digits) return 'v0.0.0';
       return `v${digits.split('').join('.')}`;
     };
-    if (aboutVersion) aboutVersion.textContent = formatBuildVersion(aboutVersion.dataset.build);
+    const setAboutVersion = (cacheName) => {
+      const versionMatch = String(cacheName || '').match(/-v(\d+)$/);
+      const version = Number(versionMatch?.[1]);
+      if (!Number.isFinite(version) || version < displayedServiceWorkerVersion) return;
+      displayedServiceWorkerVersion = version;
+      const versionText = formatBuildVersion(cacheName);
+      if (aboutVersion) aboutVersion.textContent = versionText;
+      if (libraryVersion) libraryVersion.textContent = versionText;
+    };
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data?.type === 'THAALAM_CACHE_VERSION') setAboutVersion(event.data.cacheName);
+      });
+      const requestServiceWorkerVersion = (worker) => {
+        worker?.postMessage({ type: 'GET_THAALAM_CACHE_VERSION' });
+      };
+      if (navigator.serviceWorker.controller) requestServiceWorkerVersion(navigator.serviceWorker.controller);
+      navigator.serviceWorker.ready.then((registration) => requestServiceWorkerVersion(registration.active));
+
+      // An already-open page can still be controlled by an older worker that
+      // does not understand the version message above. Probe the worker script
+      // with a unique URL so the fetch bypasses that worker's cache entry.
+      fetch(`./sw.js?version-probe=${Date.now()}`, { cache: 'no-store' })
+        .then((response) => response.ok ? response.text() : '')
+        .then((source) => {
+          const cacheName = source.match(/const CACHE_NAME = ['"]([^'"]+)['"]/ )?.[1];
+          if (cacheName) setAboutVersion(cacheName);
+        })
+        .catch(() => {
+          // The active worker response remains a safe offline fallback.
+        });
+    }
     const playerView = document.getElementById('playerView');
     const nowPlayingHeading = document.getElementById('nowPlayingHeading');
     const stationName = document.getElementById('stationName');
@@ -1498,7 +1533,7 @@
     let activeDesktopLibraryFolder = {
       name: 'Liked Songs',
       artworkUrl: '',
-      sourceLabel: 'On this device'
+      sourceLabel: 'From this account'
     };
     let desktopLibraryRequestId = 0;
     const pendingFavouriteRatingChanges = new Map();
@@ -2854,7 +2889,7 @@
         : `Songs in ${name}.`;
       document.querySelector('.liked-songs-view-title h2').textContent = name;
       document.getElementById('likedFolderSongCount').textContent = `${count} ${count === 1 ? 'song' : 'songs'}`;
-      document.getElementById('likedFolderHeroSource').textContent = activeDesktopLibraryFolder.sourceLabel || 'On this device';
+      document.getElementById('likedFolderHeroSource').textContent = activeDesktopLibraryFolder.sourceLabel || 'From this account';
       document.getElementById('likedFolderPlayAll').disabled = count === 0;
       document.getElementById('likedFolderShuffle').disabled = count === 0;
       document.getElementById('likedFolderShuffle').setAttribute('aria-label', `Shuffle ${name.toLocaleLowerCase()}`);
@@ -3177,7 +3212,7 @@
         folder.className = 'desktop-liked-folder';
         folder.dataset.folderName = 'Liked Songs';
         folder.dataset.folderArtwork = '';
-        folder.dataset.folderSource = 'On this device';
+        folder.dataset.folderSource = 'From this account';
         folder.setAttribute('aria-label', `Open Liked Songs, ${currentFavouriteSongs.length} songs`);
         folder.innerHTML = '<span class="desktop-liked-folder-art" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78Z"/></svg></span><span class="desktop-liked-folder-title">Liked Songs</span>';
         folder.addEventListener('click', () => openDesktopLibraryFolder(folder));
@@ -5461,7 +5496,7 @@
       activeDesktopLibraryFolder = {
         name: typeof folder === 'string' ? folder : folder?.dataset.folderName || 'Liked Songs',
         artworkUrl: typeof folder === 'string' ? '' : folder?.dataset.folderArtwork || '',
-        sourceLabel: typeof folder === 'string' ? 'On this device' : folder?.dataset.folderSource || 'On this device',
+        sourceLabel: typeof folder === 'string' ? 'From this account' : folder?.dataset.folderSource || 'From this account',
         songCount: typeof folder === 'string' ? undefined : folder?.dataset.songCount
       };
       const likedSongsHeader = document.getElementById('likedSongsHeader');
@@ -5811,6 +5846,13 @@
       applyView(storedView);
       if (storedView === 'home') void loadMobileHomeGenres();
       requestAnimationFrame(() => {
+        if (storedView === 'now-playing' && desktopNavigation.matches) {
+          window.setTimeout(() => {
+            if (document.body.classList.contains('view-now-playing')) {
+              window.playPlaybackContextEntrance?.();
+            }
+          }, 900);
+        }
         window.updateMiniPlayerMarquees?.();
         // Same zero-width measurement issue as showView(): re-measure the
         // now-playing marquee once the restored view is visible.
@@ -5930,6 +5972,13 @@
       if (view === 'now-playing' && !desktopNavigation.matches) saveMobileNavigationSnapshot();
       storeActiveView(view === 'library' ? 'home' : view);
       requestAnimationFrame(() => {
+        if (view === 'now-playing' && desktopNavigation.matches) {
+          window.setTimeout(() => {
+            if (document.body.classList.contains('view-now-playing')) {
+              window.playPlaybackContextEntrance?.();
+            }
+          }, 900);
+        }
         window.updateMiniPlayerMarquees?.();
         // updateMarquee() measures the tagline width, which is 0 while the
         // player view is display:none (view-home/view-about), so its
