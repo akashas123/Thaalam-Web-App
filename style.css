@@ -9174,21 +9174,14 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
   }
 }
 
-/* Keep the NEW pill composited with the actual desktop shelf cover while the
-   page scrolls. The cards use mobile-genre-track-art on both layouts; the old
-   genre-card-art-frame selector did not match them, so the pill could lag. */
+/* Keep desktop shelf artwork in the same scrolling paint layer as its title
+   and artist. Forcing only the cover onto a GPU layer made its neighbouring
+   metadata visibly drift during fast wheel/trackpad scrolling. */
 @media (min-width: 56.25rem) {
-  body.view-home .mobile-genre-track-art {
-    isolation: isolate;
-    contain: paint;
-    transform: translateZ(0);
-  }
-
   body.view-home .mobile-genre-track-art > .new-release-badge {
     z-index: 3;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
-    transform: translateZ(0);
   }
 }
 
