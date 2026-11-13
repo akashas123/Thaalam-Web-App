@@ -2212,8 +2212,6 @@ function updateOnDemandMetadata(song, track) {
   // track changes never flash the dark placeholder.
   const colorRequestId = window.bumpArtworkRequestId?.() ?? 0;
   const artworkRequestId = ++onDemandArtworkRequestId;
-  onDemandArtwork.classList.remove('is-wide-thumbnail');
-  onDemandMiniArtwork.classList.remove('is-wide-thumbnail');
 
   // Prefer the pick's own artwork (catalog or JioSaavn); the iTunes lookup is
   // the last resort when neither image loads.
@@ -2521,7 +2519,6 @@ function enableArtworkTrackSwipe() {
     artworkGap: 12,
     renderFrame: 0
   };
-  const swipeThreshold = 48;
 
   const clearIncomingArtwork = () => {
     swipe.incomingArtwork?.remove();
@@ -2640,6 +2637,9 @@ function enableArtworkTrackSwipe() {
   const finishSwipe = (event) => {
     if (event.pointerId !== swipe.pointerId) return;
     const offsetX = swipe.offsetX;
+    // Require a deliberate portion of the cover rather than a tiny flick;
+    // otherwise queue changes feel much faster than the drag itself.
+    const swipeThreshold = Math.max(72, swipe.artworkWidth * 0.35);
     const shouldChangeTrack = swipe.isHorizontal && Math.abs(offsetX) >= swipeThreshold;
     const direction = offsetX < 0 ? 1 : -1;
     swipe.pointerId = null;
@@ -2661,7 +2661,10 @@ function enableArtworkTrackSwipe() {
     }
 
     // No artificial finishing animation: the cover moves only with the
-    // listener's finger, then the selected track replaces it on release.
+    // listener's finger. Promote the incoming cover before clearing its
+    // overlay so the completed swipe cannot flash the old/placeholder image.
+    const incomingSource = swipe.incomingArtwork?.currentSrc || swipe.incomingArtwork?.src || '';
+    if (incomingSource) onDemandArtwork.src = incomingSource;
     resetArtworkPosition();
     clearIncomingArtwork();
     skipOnDemandSong(direction);
