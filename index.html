@@ -49,7 +49,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=750">
+  <link rel="stylesheet" href="style.css?v=775">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -4014,18 +4014,28 @@
 
     function getMobileHomePlaceholderCount(shelves) {
       if (!desktopNavigation.matches) return 4;
-      const width = shelves.clientWidth ||
-        shelves.parentElement?.clientWidth ||
+      return getDesktopHomeShelfCardCount(shelves);
+    }
+
+    // Desktop Home shelves deliberately show complete cards only. This uses
+    // the same artwork sizing and gap as the CSS, so a narrow desktop window
+    // never leaves a partial album cover at the right edge.
+    function getDesktopHomeShelfCardCount(shelves, { recents = false } = {}) {
+      const width = shelves?.clientWidth ||
+        shelves?.parentElement?.clientWidth ||
         document.getElementById('homePage')?.clientWidth ||
         window.innerWidth;
-      const artSize = Math.min(176, Math.max(136, window.innerWidth * 0.11));
-      const gap = 16;
-      return Math.max(4, Math.ceil((width + gap) / (artSize + gap)));
+      const cardWidth = recents
+        ? 96
+        : Math.min(176, Math.max(136, window.innerWidth * 0.11));
+      const gap = recents ? 12.8 : 16;
+      return Math.max(1, Math.floor((width + gap) / (cardWidth + gap)));
     }
 
     function renderMobileGenrePlaceholders(category, count = 4) {
       const section = document.createElement('section');
       section.className = 'mobile-genre-row';
+      if (desktopNavigation.matches) section.dataset.desktopShelfCapacity = String(count);
       section.setAttribute('aria-label', `${category.title} songs`);
       const heading = document.createElement('h2');
       heading.textContent = category.title;
@@ -4055,7 +4065,13 @@
         ? personalizeGenreSongs(songs)
         : songs;
       const tracks = shuffle ? shuffleMobileItems(recommendationSongs) : recommendationSongs.slice();
-      (all ? tracks : tracks.slice(0, 10)).forEach((song) => {
+      const desktopCardCount = desktopNavigation.matches
+        ? getDesktopHomeShelfCardCount(document.getElementById('mobileGenreShelves'), {
+            recents: category.title === 'Recents'
+          })
+        : 10;
+      if (desktopNavigation.matches) section.dataset.desktopShelfCapacity = String(desktopCardCount);
+      (all ? tracks : tracks.slice(0, desktopCardCount)).slice(0, desktopCardCount).forEach((song) => {
         const card = document.createElement('article');
         card.className = 'mobile-genre-track';
         card.__onDemandSong = song;
@@ -4227,6 +4243,7 @@
     window.addEventListener('thaalam:nowplaying', refreshDesktopHomePlayButtons);
 
     let mobileRecentsRenderSignature = null;
+    let desktopHomeShelfResizeTimer = 0;
     function updateMobileRecents() {
       const shelves = document.getElementById('mobileGenreShelves');
       if (!shelves) return;
@@ -4234,13 +4251,7 @@
       const isDesktop = window.matchMedia('(min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine)').matches;
       let visibleSongs = songs.slice(0, 10);
       if (isDesktop) {
-        const rowWidth = shelves.clientWidth ||
-          shelves.parentElement?.clientWidth ||
-          document.getElementById('homePage')?.clientWidth ||
-          window.innerWidth;
-        const cardWidth = 96;
-        const cardGap = 12.8;
-        const songsThatFit = Math.max(1, Math.floor((rowWidth + cardGap) / (cardWidth + cardGap)));
+        const songsThatFit = getDesktopHomeShelfCardCount(shelves, { recents: true });
         visibleSongs = songs.slice(0, Math.min(20, songsThatFit));
       }
       const signature = visibleSongs.map((song) => [
@@ -4439,6 +4450,42 @@
       updateMobileRecents();
       updateDesktopHomeTint();
       updateDesktopLibraryFolder();
+    }
+
+    window.addEventListener('resize', () => {
+      // A hidden Home page has no usable shelf width. Wait until it is shown
+      // again instead of calculating from the full browser width.
+      if (!desktopNavigation.matches || !document.body.classList.contains('view-home')) return;
+      window.clearTimeout(desktopHomeShelfResizeTimer);
+      desktopHomeShelfResizeTimer = window.setTimeout(() => {
+        // Card capacity depends on the usable shelf width. Rebuild from the
+        // cache after resizing so every visible cover is whole.
+        mobileHomeGenresLoaded = false;
+        mobileRecentsRenderSignature = null;
+        void loadMobileHomeGenres();
+      }, 120);
+    }, { passive: true });
+
+    function refreshDesktopHomeShelfLayout() {
+      if (!desktopNavigation.matches) return;
+      const shelves = document.getElementById('mobileGenreShelves');
+      if (!shelves) return;
+      const genreCapacity = getDesktopHomeShelfCardCount(shelves);
+      const recentsCapacity = getDesktopHomeShelfCardCount(shelves, { recents: true });
+      const capacityChanged = [...shelves.querySelectorAll('.mobile-genre-row')]
+        .filter((section) => section.classList.contains('mobile-recents-row') ||
+          mobileHomeGenreRows.some((category) =>
+            section.getAttribute('aria-label') === `${category.title} songs`))
+        .some((section) => {
+        const expected = section.classList.contains('mobile-recents-row')
+          ? recentsCapacity
+          : genreCapacity;
+        return Number(section.dataset.desktopShelfCapacity) !== expected;
+        });
+      if (!capacityChanged) return;
+      mobileHomeGenresLoaded = false;
+      mobileRecentsRenderSignature = null;
+      void loadMobileHomeGenres();
     }
 
     // A view/history transition can clear the shelf container after today's
@@ -5899,6 +5946,9 @@
       if (view === 'home') {
         scheduleHomeRefresh();
         ensureMobileHomeShelves();
+        // Home may have been hidden during a resize. Measure after this view
+        // is painted, when the shelf has its real content width again.
+        requestAnimationFrame(refreshDesktopHomeShelfLayout);
         // Restore Liked Songs hero when returning to Home from Now Playing
         if (
           desktopNavigation.matches &&
