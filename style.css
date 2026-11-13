@@ -2356,6 +2356,15 @@ body.view-rises-from-mini.view-now-playing .player-view {
   body.view-about .about-story { font-size: 0.84rem; }
   body.view-about .about-story .site-page-copy { margin-bottom: 0.75rem; }
   body.view-about .about-signoff-logo { width: 4.25rem; }
+  body.view-about .about-page .site-page-content {
+    overflow-x: visible;
+  }
+  body.view-about .about-signoff { min-width: 0; }
+  body.view-about .about-signoff .site-page-action {
+    position: relative;
+    z-index: 1;
+    white-space: nowrap;
+  }
   /* Keep the sign-off action inside the short desktop viewport. The normal
      desktop spacing is generous, but can otherwise push this last control
      beneath the mini player on a compact window. */
