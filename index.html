@@ -513,7 +513,7 @@
       </div>
       <div class="about-signoff">
         <h1 id="aboutTitle" tabindex="-1"><img class="about-signoff-logo" src="thaalam-icon-512.png?v=8" alt="Thaalam 24x7"></h1>
-        <p class="about-signoff-note" id="aboutVersion">v1.0.48</p>
+        <p class="about-signoff-note" id="aboutVersion" data-build="1053">v1.0.5.3</p>
         <a class="about-documentation-link" href="Documentation/Documentation.html" target="_blank" rel="noopener noreferrer">Read documentation <span aria-hidden="true">↗</span></a>
         <button class="site-page-action" type="button" data-view="home">
           Back to Home
@@ -1018,6 +1018,13 @@
       },
       addEventListener: (...args) => desktopNavigationQuery.addEventListener(...args)
     };
+    const aboutVersion = document.getElementById('aboutVersion');
+    const formatBuildVersion = (build) => {
+      const digits = String(build || '').replace(/\D/g, '');
+      if (!digits) return 'v0.0.0';
+      return `v${digits.split('').join('.')}`;
+    };
+    if (aboutVersion) aboutVersion.textContent = formatBuildVersion(aboutVersion.dataset.build);
     const playerView = document.getElementById('playerView');
     const nowPlayingHeading = document.getElementById('nowPlayingHeading');
     const stationName = document.getElementById('stationName');
