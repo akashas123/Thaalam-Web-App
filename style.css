@@ -1322,7 +1322,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
     overflow: hidden;
     border: 0;
     border-top: 1px solid rgba(255, 255, 255, 0.14);
-    border-radius: 0;
+    border-radius: 0 !important;
     background: #05070d;
     box-shadow: none;
     color: #fff;
@@ -9317,6 +9317,179 @@ body.view-about,
 body.view-library,
 body.view-home {
   background-color: #000;
+}
+
+/* Playback companion for the otherwise unused right edge of very wide Home
+   layouts. It is deliberately absent once the window enters compact desktop. */
+.desktop-home-side-panel { display: none; }
+@media (min-width: 110rem) and (pointer: fine) and (any-pointer: fine) {
+  /* Reserve a real column for the companion rather than allowing it to cover
+     the search field or the last cards in each shelf. */
+  body.view-home:not(.desktop-library-active) .home-page .site-page-content {
+    width: min(88rem, calc(100vw - 27.5rem));
+    /* Keep the catalogue anchored where it sat before the side column was
+       introduced; a narrower centered column otherwise drifts right. */
+    transform: translateX(-8.25rem);
+  }
+
+  body.view-home:not(.desktop-library-active) .desktop-home-side-panel {
+    position: fixed;
+    z-index: 5;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    width: min(24rem, 20vw);
+    min-width: 16rem;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0;
+    background: rgba(19, 19, 21, 0.9);
+    box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.3);
+  }
+
+  /* Keep account controls beside the full-height rail, never over it. */
+  body.view-home:not(.desktop-library-active) .desktop-profile-button {
+    right: calc(min(24rem, 20vw) + 1rem);
+  }
+
+  body.view-home:not(.desktop-library-active) .desktop-welcome-greeting:not([hidden]) {
+    right: calc(min(24rem, 20vw) + 4rem);
+  }
+
+  .desktop-home-side-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.2rem;
+    padding: 0.35rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    background: rgba(255, 255, 255, 0.045);
+  }
+
+  .desktop-home-side-tabs button {
+    min-height: 2rem;
+    border: 0;
+    border-radius: 0.42rem;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.58);
+    font: 650 0.72rem/1 system-ui, sans-serif;
+    cursor: pointer;
+  }
+
+  .desktop-home-side-tabs button.is-active {
+    background: #050505;
+    color: #fff;
+    box-shadow: 0 0.1rem 0.35rem rgba(0, 0, 0, 0.34);
+  }
+
+  .desktop-home-side-content {
+    position: relative;
+    min-height: 0;
+    flex: 1;
+    padding: 1rem;
+    overflow: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  }
+
+  .desktop-home-side-empty {
+    position: absolute;
+    top: 50%;
+    right: 1rem;
+    left: 1rem;
+    margin: 0;
+    color: rgba(255, 255, 255, 0.42);
+    font: 0.74rem/1.45 system-ui, sans-serif;
+    text-align: center;
+    transform: translateY(-50%);
+  }
+
+  .desktop-home-side-lyrics {
+    color: rgba(255, 255, 255, 0.72);
+    font: 0.9rem/1.9 system-ui, sans-serif;
+    white-space: pre-line;
+  }
+
+  /* Mirrors Now Playing's synced-lyric emphasis and smooth centred travel. */
+  .desktop-home-side-lyrics.is-synced {
+    padding-block: 45%;
+    white-space: normal;
+  }
+
+  .desktop-home-side-lyrics.is-synced .lyrics-line {
+    margin-bottom: 1.45rem;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.92rem;
+    line-height: 1.55;
+    text-align: center;
+  }
+
+  .desktop-home-side-lyrics.is-synced .lyrics-line.is-active {
+    color: #fff;
+    font-size: 1.22rem;
+    line-height: 1.35;
+  }
+
+  .desktop-home-up-next {
+    display: grid;
+    gap: 0.8rem;
+    margin: 0.75rem 0 0;
+    padding: 0 0 3rem;
+    list-style: none;
+  }
+  .desktop-home-up-next::after {
+    display: block;
+    height: 5rem;
+    content: '';
+  }
+
+  .desktop-home-up-next li {
+    display: grid;
+    grid-template-columns: 2.8rem minmax(0, 1fr);
+    gap: 0.65rem;
+    align-items: center;
+  }
+  .desktop-home-up-next img {
+    width: 2.8rem;
+    height: 2.8rem;
+    border-radius: 0.25rem;
+    object-fit: cover;
+    background: #252525;
+  }
+  .desktop-home-up-next li > div { display: grid; min-width: 0; gap: 0.22rem; }
+  .desktop-home-up-next li.is-current strong,
+  .desktop-home-up-next li.is-current span { color: var(--liked-folder-color, #ff1744); }
+  .desktop-home-up-next li.is-current img {
+    outline: 1px solid var(--liked-folder-color, #ff1744);
+    outline-offset: 2px;
+  }
+  .desktop-home-up-next strong {
+    overflow: hidden;
+    color: rgba(255, 255, 255, 0.92);
+    font: 650 0.82rem/1.25 system-ui, sans-serif;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .desktop-home-up-next span {
+    overflow: hidden;
+    color: rgba(255, 255, 255, 0.5);
+    font: 0.72rem/1.25 system-ui, sans-serif;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .desktop-home-clear-queue {
+    width: 100%;
+    min-height: 2rem;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 0.35rem;
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.82);
+    font: 650 0.72rem/1 system-ui, sans-serif;
+    cursor: pointer;
+  }
+  .desktop-home-clear-queue:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
 }
 
 @media (max-width: 56.1875rem), (pointer: coarse) and (any-pointer: coarse) {

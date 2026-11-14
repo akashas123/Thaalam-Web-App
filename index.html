@@ -49,7 +49,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=819">
+  <link rel="stylesheet" href="style.css?v=837">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -481,6 +481,22 @@
       </div>
     </div>
   </main>
+
+  <aside class="desktop-home-side-panel" aria-label="Playback details">
+    <div class="desktop-home-side-tabs" role="tablist" aria-label="Playback details">
+      <button class="is-active" type="button" role="tab" aria-selected="true" aria-controls="desktopHomeUpNext" id="desktopHomeUpNextTab">Up Next</button>
+      <button type="button" role="tab" aria-selected="false" aria-controls="desktopHomeLyrics" id="desktopHomeLyricsTab">Lyrics</button>
+    </div>
+    <section class="desktop-home-side-content" id="desktopHomeLyrics" role="tabpanel" aria-labelledby="desktopHomeLyricsTab" hidden>
+      <p class="desktop-home-side-empty">Start a song to see its lyrics.</p>
+      <div class="desktop-home-side-lyrics" aria-live="polite"></div>
+    </section>
+    <section class="desktop-home-side-content is-active" id="desktopHomeUpNext" role="tabpanel" aria-labelledby="desktopHomeUpNextTab">
+      <button class="desktop-home-clear-queue" type="button" hidden>Clear queue</button>
+      <p class="desktop-home-side-empty">No upcoming songs.</p>
+      <ol class="desktop-home-up-next"></ol>
+    </section>
+  </aside>
 
   <main class="site-page library-page" id="libraryPage" aria-labelledby="libraryTitle">
     <div class="site-page-content">
@@ -1000,7 +1016,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=98"></script>
-  <script src="ondemand-player.js?v=239"></script>
+  <script src="ondemand-player.js?v=246"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=18"></script>
@@ -6723,6 +6739,93 @@
         requestGoogleAccess();
       });
       window.dispatchEvent(new Event('thaalam:profile-ready'));
+    })();
+  </script>
+  <script>
+    (() => {
+      const panel = document.querySelector('.desktop-home-side-panel');
+      if (!panel) return;
+      const tabs = [...panel.querySelectorAll('[role="tab"]')];
+      const panels = [...panel.querySelectorAll('[role="tabpanel"]')];
+      const lyricsOutput = panel.querySelector('.desktop-home-side-lyrics');
+      const lyricsEmpty = document.querySelector('#desktopHomeLyrics .desktop-home-side-empty');
+      const upNextList = panel.querySelector('.desktop-home-up-next');
+      const upNextEmpty = document.querySelector('#desktopHomeUpNext .desktop-home-side-empty');
+      const clearQueueButton = panel.querySelector('.desktop-home-clear-queue');
+      const sourceLyrics = document.getElementById('lyricsContent');
+      let hasActiveSong = Boolean(window.latestNowPlayingData || window.currentNowPlayingSong);
+
+      const showTab = (tab) => {
+        tabs.forEach((candidate) => {
+          const active = candidate === tab;
+          candidate.classList.toggle('is-active', active);
+          candidate.setAttribute('aria-selected', String(active));
+        });
+        panels.forEach((candidate) => {
+          const active = candidate.id === tab.getAttribute('aria-controls');
+          candidate.hidden = !active;
+          candidate.classList.toggle('is-active', active);
+        });
+      };
+
+      const renderLyrics = () => {
+        const text = sourceLyrics?.innerText?.trim() || '';
+        const syncedLines = sourceLyrics?.querySelectorAll?.('.lyrics-line') || [];
+        const isSynced = syncedLines.length > 0;
+        lyricsOutput.classList.toggle('is-synced', isSynced);
+        if (isSynced) {
+          lyricsOutput.replaceChildren(...[...syncedLines].map((line) => line.cloneNode(true)));
+        } else {
+          lyricsOutput.textContent = text;
+        }
+        lyricsEmpty.hidden = Boolean(text);
+        if (!text) lyricsEmpty.textContent = hasActiveSong
+          ? 'No lyrics yet.'
+          : 'Start a song to see its lyrics.';
+        const activeLine = lyricsOutput.querySelector('.lyrics-line.is-active');
+        activeLine?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      };
+
+      const renderUpNext = () => {
+        const queue = window.getOnDemandQueuePreview?.() || [];
+        upNextList.replaceChildren();
+        queue.forEach((song) => {
+          const item = document.createElement('li');
+          item.classList.toggle('is-current', Boolean(song.isCurrent));
+          const artwork = document.createElement('img');
+          const copy = document.createElement('div');
+          const title = document.createElement('strong');
+          const artist = document.createElement('span');
+          artwork.src = song.artwork || 'album-placeholder.svg?v=3';
+          artwork.alt = '';
+          artwork.loading = 'lazy';
+          title.textContent = song.title || 'Unknown song';
+          artist.textContent = song.artist || '';
+          copy.append(title, artist);
+          item.append(artwork, copy);
+          upNextList.append(item);
+        });
+        upNextEmpty.hidden = queue.length > 0;
+        clearQueueButton.hidden = queue.length === 0;
+      };
+
+      tabs.forEach((tab) => tab.addEventListener('click', () => showTab(tab)));
+      clearQueueButton.addEventListener('click', () => window.clearOnDemandQueue?.());
+      new MutationObserver(renderLyrics).observe(sourceLyrics, {
+        attributes: true,
+        attributeFilter: ['class'],
+        childList: true,
+        characterData: true,
+        subtree: true
+      });
+      window.addEventListener('thaalam:nowplaying', () => {
+        hasActiveSong = true;
+        renderLyrics();
+        renderUpNext();
+      });
+      window.addEventListener('thaalam:queue-change', renderUpNext);
+      renderLyrics();
+      renderUpNext();
     })();
   </script>
 </body>
