@@ -345,6 +345,18 @@ function updateNowPlayingSubtitle(isOnDemand) {
 /* Match the desktop Personalised Picks subtitle entrance when a listener
    opens a fresh Autoplay, Mix, or Favourites session. The session id prevents
    track changes and later visits to Now Playing from replaying the motion. */
+window.preparePlaybackContextEntrance = () => {
+  if (
+    !nowPlayingAutoplayContext ||
+    nowPlayingAutoplayContext.hidden ||
+    playbackContextAnimatedSessionId === onDemandQueueSessionId ||
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
+    !window.matchMedia('(min-width: 56.25rem)').matches
+  ) return;
+  nowPlayingAutoplayContext.dataset.entranceText = nowPlayingAutoplayContext.textContent;
+  nowPlayingAutoplayContext.textContent = '';
+};
+
 window.playPlaybackContextEntrance = () => {
   if (
     !nowPlayingAutoplayContext ||
@@ -355,6 +367,8 @@ window.playPlaybackContextEntrance = () => {
   ) return;
 
   playbackContextAnimatedSessionId = onDemandQueueSessionId;
+  nowPlayingAutoplayContext.textContent = nowPlayingAutoplayContext.dataset.entranceText || '';
+  delete nowPlayingAutoplayContext.dataset.entranceText;
   nowPlayingAutoplayContext.classList.remove('is-autoplay-context-entering');
   void nowPlayingAutoplayContext.offsetWidth;
   nowPlayingAutoplayContext.classList.add('is-autoplay-context-entering');

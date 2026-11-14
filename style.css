@@ -2448,6 +2448,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
 
   #nowPlayingHeading #nowPlayingAutoplayContext {
     margin: 3rem 0 0;
+    min-height: 1.4em;
     color: rgba(255, 255, 255, 0.68);
     font-size: clamp(0.8rem, 1vw, 0.95rem);
     line-height: 1.4;
@@ -9229,14 +9230,14 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
   }
 
   @keyframes nowPlayingContextJump {
-    0% { opacity: 0; transform: translateY(1.1rem) scale(0.96); }
-    68% { opacity: 1; transform: translateY(-0.16rem) scale(1.01); }
+    0% { opacity: 0; transform: translateY(1rem); }
+    72% { opacity: 1; transform: translateY(-0.06rem); }
     100% { opacity: 1; transform: translateY(0); }
   }
 
   /* Shares the Personalised Picks subtitle's one-time rise-in treatment. */
   body.view-now-playing #nowPlayingAutoplayContext.is-autoplay-context-entering {
-    animation: nowPlayingContextJump 0.78s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: nowPlayingContextJump 1.2s cubic-bezier(0.4, 0, 0.2, 1) both;
   }
 
   body.view-home .home-catalog-header .site-page-copy.is-subtitle-changing {
@@ -9278,13 +9279,13 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
    pointer media query. */
 @media (min-width: 56.25rem) {
   @keyframes nowPlayingContextJump {
-    0% { opacity: 0; transform: translateY(1.1rem) scale(0.96); }
-    68% { opacity: 1; transform: translateY(-0.16rem) scale(1.01); }
+    0% { opacity: 0; transform: translateY(1rem); }
+    72% { opacity: 1; transform: translateY(-0.06rem); }
     100% { opacity: 1; transform: translateY(0); }
   }
 
   body.view-now-playing #nowPlayingAutoplayContext.is-autoplay-context-entering {
-    animation: nowPlayingContextJump 0.78s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: nowPlayingContextJump 1.2s cubic-bezier(0.4, 0, 0.2, 1) both;
   }
 }
 
