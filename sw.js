@@ -1,4 +1,4 @@
-const CACHE_NAME = 'thaalam-24x7-v1084';
+const CACHE_NAME = 'thaalam-24x7-v1119';
 const ALBUM_ART_CACHE_NAME = 'thaalam-album-art-v2';
 const ALBUM_ART_CACHE_LIMIT = 240;
 
@@ -6,14 +6,14 @@ const APP_FILES = [
   './',
   './index.html',
   './Documentation/Documentation.html',
-  './style.css?v=776',
+  './style.css?v=803',
   './script.js?v=98',
   './audio-recovery.js?v=3',
   './marquee.js?v=4',
   './media-metadata.js?v=18',
   './recommendation-engine.js?v=5',
   './player-controls.js?v=62',
-  './ondemand-player.js?v=232',
+  './ondemand-player.js?v=239',
   './storage-maintenance.js?v=1',
   './lyrics.js?v=56',
   './manifest.json',
@@ -29,6 +29,9 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => cache.addAll(APP_FILES))
+      // Downloaded updates should be ready for the next app open without
+      // prompting or interrupting the listener's current session.
+      .then(() => self.skipWaiting())
   );
 });
 
@@ -43,6 +46,11 @@ self.addEventListener('activate', (event) => {
           .map((cacheName) => caches.delete(cacheName))
       ))
   );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type !== 'GET_THAALAM_CACHE_VERSION') return;
+  event.source?.postMessage({ type: 'THAALAM_CACHE_VERSION', cacheName: CACHE_NAME });
 });
 
 self.addEventListener('fetch', (event) => {

@@ -803,7 +803,8 @@ html.is-restoring-session .app-loader {
 }
 
 .liked-playlist-art svg,
-.desktop-liked-folder-art svg {
+.desktop-liked-folder-art svg,
+.liked-folder-hero-heart {
   transform-origin: center;
   animation: thaalamLikedHeartbeat 7.2s cubic-bezier(.36,.07,.19,.97) infinite;
 }
@@ -843,6 +844,7 @@ html.is-restoring-session .app-loader {
 .library-mixes h2 { margin: 0 0 .8rem; color: #fff; font-size: 1.05rem; }
 .library-mixes-row { display: flex; gap: .9rem; overflow-x: auto; padding: .05rem .1rem .35rem; scrollbar-width: none; }
 .library-mixes-row::-webkit-scrollbar { display: none; }
+.library-version { display: none; }
 
 @media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) {
   .home-page .desktop-library-row .thaalam-mix-card {
@@ -856,15 +858,10 @@ html.is-restoring-session .app-loader {
     border-radius: .55rem;
   }
 
-  /* Desktop Home mixes are static cards. Keep hover from lifting the cover
-     and stop the equalizer mark from looking like it is dancing. */
+  /* Keep desktop hover from lifting the cover; the equalizer remains live,
+     matching the Mix card treatment on smaller layouts. */
   .home-page .desktop-library-row .thaalam-mix-card:hover .thaalam-mix-art {
     filter: none;
-    transform: none;
-  }
-
-  .home-page .desktop-library-row .thaalam-mix-art svg rect {
-    animation: none;
     transform: none;
   }
 }
@@ -876,7 +873,8 @@ html.is-restoring-session .app-loader {
   .thaalam-mix-art svg rect,
   .mobile-genre-track-art.is-thaalam-mix-recent svg rect,
   .liked-playlist-art svg,
-  .desktop-liked-folder-art svg { animation: none; }
+  .desktop-liked-folder-art svg,
+  .liked-folder-hero-heart { animation: none; }
 }
 .login-card {
   position: absolute;
@@ -2450,6 +2448,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
 
   #nowPlayingHeading #nowPlayingAutoplayContext {
     margin: 3rem 0 0;
+    min-height: 1.4em;
     color: rgba(255, 255, 255, 0.68);
     font-size: clamp(0.8rem, 1vw, 0.95rem);
     line-height: 1.4;
@@ -5726,6 +5725,24 @@ body.has-lyrics .lyrics-panel {
     height: calc(100dvh - 8.5rem - env(safe-area-inset-bottom, 0px));
   }
 
+  /* A quiet release marker lives in the open space just above the mobile
+     player. Its text is supplied by the active service worker. */
+  body.mini-player-visible.view-library .library-version {
+    position: absolute;
+    z-index: 12;
+    bottom: calc(8.5rem + env(safe-area-inset-bottom, 0px));
+    left: 50%;
+    display: block;
+    margin: 0;
+    color: rgba(255, 255, 255, 0.32);
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    pointer-events: none;
+    transform: translateX(-50%);
+  }
+
   .library-header h1 { font-size: 1.65rem; line-height: 1.15; }
   .library-subtitle { max-width: 22rem; margin: 0.4rem 0 0; color: rgba(255,255,255,.64); font-size: 0.82rem; line-height: 1.45; }
   body.view-library .liked-playlist-card { display: flex; width: 100%; min-height: 5.9rem; margin-top: 2rem; align-items: center; gap: 0.9rem; padding: 0.65rem; border: 0 !important; border-radius: 0.9rem; outline: 0; background: transparent !important; box-shadow: none !important; color: #fff; text-align: left; cursor: pointer; }
@@ -6154,6 +6171,12 @@ body.has-lyrics .lyrics-panel {
   body.mini-player-visible.view-about .site-page-content,
   body.mini-player-visible.view-library .site-page-content {
     padding-bottom: calc(8rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* The Library viewport already subtracts the player and bottom navigation
+     from its height. Reserving them again here shrinks the final Mix row. */
+  body.mini-player-visible.view-library .library-page .site-page-content {
+    padding-bottom: 0;
   }
 
   .home-page .site-page-content {
@@ -6916,14 +6939,28 @@ img {
 }
 
 @media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) and (max-width: 75rem) {
+  /* Compact desktop windows have a narrower outer gutter. Keep the Liked
+     Songs back button fully inside it without changing the wide layout. */
+  body.view-home.desktop-library-active #likedSongsHeader #closeLikedSongs {
+    left: -2.25rem;
+  }
+
   body.view-now-playing .now-playing-track > .on-demand-like-button {
     left: -0.65rem;
   }
 }
 
+
 /* Compact-height Browse layout: reclaim heading whitespace so the chart and
    search grids get a taller, scrollable viewport above the mini-player. */
 @media (max-height: 48rem) {
+  /* Library's fixed player leaves less usable height on short phone windows.
+     Tighten its top inset so the complete Made for you card, including its
+     caption, remains above the player. */
+  body.view-library .library-page .site-page-content {
+    padding-top: 3.5rem;
+  }
+
   body.view-home .site-page.home-page {
     padding-top: 3.25rem;
   }
@@ -8582,8 +8619,8 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
   }
 
   .desktop-liked-folder-art svg {
-    width: 1.8rem;
-    height: 1.8rem;
+    width: 2.5rem;
+    height: 2.5rem;
     fill: #fff;
   }
 
@@ -8722,7 +8759,7 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
     top: calc(50% - 0.9rem);
     /* Fits entirely in the Home page's existing left padding, keeping the
        cover in its original position while avoiding horizontal clipping. */
-    left: calc(-2.25rem - 1rem);
+    left: calc(-2.25rem - 1.85rem);
     transform: translateY(-50%);
     display: grid;
     width: 2.25rem;
@@ -9192,6 +9229,17 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
     transition: opacity 0.22s ease, transform 0.22s ease;
   }
 
+  @keyframes nowPlayingContextJump {
+    0% { opacity: 0; transform: translateY(1rem); }
+    72% { opacity: 1; transform: translateY(-0.06rem); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Shares the Personalised Picks subtitle's one-time rise-in treatment. */
+  body.view-now-playing #nowPlayingAutoplayContext.is-autoplay-context-entering {
+    animation: nowPlayingContextJump 1.2s cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+
   body.view-home .home-catalog-header .site-page-copy.is-subtitle-changing {
     opacity: 0;
     transform: translateY(0.3rem);
@@ -9211,6 +9259,33 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
     z-index: 3;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
+  }
+}
+
+/* Compact desktop windows have a narrower outer gutter than the wide Library
+   layout. Declare this last so it overrides the wide-screen back-button offset. */
+@media (min-width: 56.25rem) and (max-width: 75rem) {
+  body.view-home.desktop-library-active #likedSongsHeader #closeLikedSongs {
+    left: -3rem;
+  }
+
+  body.view-home.desktop-library-active .liked-folder-toolbar .catalog-search {
+    flex-basis: 18rem;
+    max-width: 18rem;
+  }
+}
+
+/* Desktop Now Playing also supports desktop-width devices without a fine
+   pointer media query. */
+@media (min-width: 56.25rem) {
+  @keyframes nowPlayingContextJump {
+    0% { opacity: 0; transform: translateY(1rem); }
+    72% { opacity: 1; transform: translateY(-0.06rem); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+
+  body.view-now-playing #nowPlayingAutoplayContext.is-autoplay-context-entering {
+    animation: nowPlayingContextJump 1.2s cubic-bezier(0.4, 0, 0.2, 1) both;
   }
 }
 

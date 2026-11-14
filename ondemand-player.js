@@ -277,6 +277,7 @@ function createOnDemandQueueSessionId() {
 let onDemandQueueSessionId = createOnDemandQueueSessionId();
 let onDemandQueueSource = 'autoplay';
 let onDemandMixName = '';
+let playbackContextAnimatedSessionId = '';
 function queueSourceForIndex(index) {
   if (onDemandFavouriteQueueLength > 0 && index < onDemandFavouriteQueueLength) {
     return 'favourites';
@@ -340,6 +341,41 @@ function updateNowPlayingSubtitle(isOnDemand) {
       : '';
   }
 }
+
+/* Match the desktop Personalised Picks subtitle entrance when a listener
+   opens a fresh Autoplay, Mix, or Favourites session. The session id prevents
+   track changes and later visits to Now Playing from replaying the motion. */
+window.preparePlaybackContextEntrance = () => {
+  if (
+    !nowPlayingAutoplayContext ||
+    nowPlayingAutoplayContext.hidden ||
+    playbackContextAnimatedSessionId === onDemandQueueSessionId ||
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
+    !window.matchMedia('(min-width: 56.25rem)').matches
+  ) return;
+  nowPlayingAutoplayContext.dataset.entranceText = nowPlayingAutoplayContext.textContent;
+  nowPlayingAutoplayContext.textContent = '';
+};
+
+window.playPlaybackContextEntrance = () => {
+  if (
+    !nowPlayingAutoplayContext ||
+    nowPlayingAutoplayContext.hidden ||
+    playbackContextAnimatedSessionId === onDemandQueueSessionId ||
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
+    !window.matchMedia('(min-width: 56.25rem)').matches
+  ) return;
+
+  playbackContextAnimatedSessionId = onDemandQueueSessionId;
+  nowPlayingAutoplayContext.textContent = nowPlayingAutoplayContext.dataset.entranceText || '';
+  delete nowPlayingAutoplayContext.dataset.entranceText;
+  nowPlayingAutoplayContext.classList.remove('is-autoplay-context-entering');
+  void nowPlayingAutoplayContext.offsetWidth;
+  nowPlayingAutoplayContext.classList.add('is-autoplay-context-entering');
+  nowPlayingAutoplayContext.addEventListener('animationend', () => {
+    nowPlayingAutoplayContext.classList.remove('is-autoplay-context-entering');
+  }, { once: true });
+};
 
 /* On-demand state survives refreshes and closed tabs. The selected mode,
    transport state, saved position and queue are restored from local storage.
