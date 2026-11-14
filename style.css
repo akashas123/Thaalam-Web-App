@@ -9275,6 +9275,13 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
   }
 }
 
+/* Larger shelf rhythm is desktop-only. The shared shelf rules above also
+   serve mobile Home, so keep this enhancement behind the desktop query. */
+@media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) {
+  .home-page .mobile-genre-shelves { gap: 3.5rem; }
+  .home-page .mobile-genre-row h2 { font-size: 1.75rem; }
+}
+
 /* Desktop Now Playing also supports desktop-width devices without a fine
    pointer media query. */
 @media (min-width: 56.25rem) {
@@ -9286,6 +9293,23 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
 
   body.view-now-playing #nowPlayingAutoplayContext.is-autoplay-context-entering {
     animation: nowPlayingContextJump 1.2s cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+}
+
+/* AMOLED base: retain Home's gradient layers and Now Playing's album-driven
+   gradient, but make every shared flat surface true black. */
+html,
+body:not(.view-now-playing),
+body.view-about,
+body.view-library,
+body.view-home {
+  background-color: #000;
+}
+
+@media (max-width: 56.1875rem), (pointer: coarse) and (any-pointer: coarse) {
+  body.view-library,
+  body.mobile-search-active.view-home {
+    background: #000 !important;
   }
 }
 
