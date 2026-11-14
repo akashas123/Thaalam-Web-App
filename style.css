@@ -911,8 +911,8 @@ html.is-restoring-session .app-loader {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.55rem;
-  width: min(31.25rem, 90%);
+  gap: 0.22rem;
+  width: min(24rem, 90%);
   padding: 1.1rem 1.5rem;
   border: 0;
   border-radius: 999px;
@@ -938,6 +938,7 @@ html.is-restoring-session .app-loader {
   height: 2.25rem;
   display: block;
   box-sizing: border-box;
+  transform: translateY(0.06rem);
   padding: 0.12rem;
   object-fit: contain;
 }
