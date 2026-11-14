@@ -269,7 +269,48 @@ const albumArtworkCache = new Map();
    buttons walk this list; the live feed is not part of it. */
 let onDemandQueue = [];
 let onDemandQueueIndex = -1;
+window.getOnDemandQueuePreview = () => {
+  const queuedSongs = onDemandQueue
+    .slice(Math.max(0, onDemandQueueIndex))
+    .map((song, index) => ({ ...song, isCurrentQueueSong: index === 0 }));
+  const relatedSongs = relatedTrackCache.slice(relatedTrackCursor).map(relatedTrackToSong);
+  const seen = new Set();
+  return [...queuedSongs, ...relatedSongs]
+    .filter((song) => {
+      const key = `${song?.trackName || song?.title || ''}|${song?.artistName || song?.artist || ''}`.toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .map((song) => ({
+      title: String(song?.trackName || song?.title || ''),
+      artist: String(song?.artistName || song?.artist || ''),
+      artwork: String(song?.artworkUrl100 || song?.artworkUrl || song?.thumbnail || ''),
+      isCurrent: Boolean(song?.isCurrentQueueSong)
+    }));
+};
+
+window.clearOnDemandQueue = () => {
+  onDemandQueue = [];
+  onDemandQueueIndex = -1;
+  onDemandQueueStartIndex = 0;
+  onDemandFavouriteQueueLength = 0;
+  relatedTrackCache = [];
+  relatedTrackCursor = 0;
+  onDemandQueueWasCleared = true;
+  prefetchToken += 1;
+  pendingShouldPlay = false;
+  autoplayTrackTransition = false;
+  standbyOnDemandAudio.pause();
+  standbyOnDemandAudio.removeAttribute('src');
+  standbyOnDemandAudio.load();
+  updateTransportButtonState();
+  try { localStorage.removeItem(ON_DEMAND_STORAGE_KEY); } catch (_) { /* ignore */ }
+  window.dispatchEvent(new Event('thaalam:on-demand-playback-state'));
+  window.dispatchEvent(new Event('thaalam:queue-change'));
+};
 let onDemandQueueStartIndex = 0;
+let onDemandQueueWasCleared = false;
 function createOnDemandQueueSessionId() {
   return window.crypto?.randomUUID?.() ||
     `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
@@ -2809,6 +2850,7 @@ function prefetchRelatedTracks(trackId, isRetry = false) {
       prefetchUpcomingTrackArtwork();
       void prefetchNextOnDemandAudio();
       updateTransportButtonState();
+      window.dispatchEvent(new Event('thaalam:queue-change'));
     })
     .finally(() => {
       if (token === prefetchToken) isFetchingRelated = false;
@@ -2862,6 +2904,16 @@ function prefetchUpcomingTrackArtwork() {
 /* Called when a track ends. Plays the next prefetched queue item. */
 function advanceToSimilarSong({ crossfade = false } = {}) {
   if (!window.onDemandPlaybackActive) return;
+
+  // Clearing the queue lets the current song finish, but prevents autoplay
+  // from waiting for or launching another track once it has ended.
+  if (onDemandQueueWasCleared) {
+    autoplayTrackTransition = false;
+    onDemandModeLabel.textContent = 'ON DEMAND';
+    onDemandStation.textContent = 'Queue cleared';
+    setOnDemandPlaying(false);
+    return;
+  }
 
   if (onDemandRepeatMode === 'one' && onDemandAudio?.getAttribute('src')) {
     onDemandAudio.currentTime = 0;
@@ -3177,6 +3229,7 @@ async function startOnDemandSong(song, {
   crossfade = false
 } = {}) {
   if (!song?.trackName) return;
+  onDemandQueueWasCleared = false;
   prepareOnDemandAudioGraph();
   // On a fresh mobile visit, the audio context begins suspended. Complete its
   // user-gesture resume before the asynchronous track lookup so the first
@@ -3402,6 +3455,7 @@ function startOnDemandQueue(songs, startIndex = 0, options = {}) {
   prefetchToken += 1;
   prepareLikedQueue(queue, selectedIndex);
   updateTransportButtonState();
+  window.dispatchEvent(new Event('thaalam:queue-change'));
 
   pendingLikedQueueStartKey = selectedKey;
   const recentSong = options.recordLikedRecent
