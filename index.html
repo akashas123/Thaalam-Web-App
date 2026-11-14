@@ -49,7 +49,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=837">
+  <link rel="stylesheet" href="style.css?v=839">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -6754,18 +6754,28 @@
       const clearQueueButton = panel.querySelector('.desktop-home-clear-queue');
       const sourceLyrics = document.getElementById('lyricsContent');
       let hasActiveSong = Boolean(window.latestNowPlayingData || window.currentNowPlayingSong);
+      let tabTransitionTimer = 0;
 
       const showTab = (tab) => {
+        const nextPanel = panels.find((candidate) => candidate.id === tab.getAttribute('aria-controls'));
+        const currentPanel = panels.find((candidate) => !candidate.hidden);
+        if (!nextPanel || nextPanel === currentPanel) return;
+        window.clearTimeout(tabTransitionTimer);
         tabs.forEach((candidate) => {
           const active = candidate === tab;
           candidate.classList.toggle('is-active', active);
           candidate.setAttribute('aria-selected', String(active));
         });
-        panels.forEach((candidate) => {
-          const active = candidate.id === tab.getAttribute('aria-controls');
-          candidate.hidden = !active;
-          candidate.classList.toggle('is-active', active);
-        });
+        nextPanel.hidden = false;
+        nextPanel.classList.remove('is-tab-leaving');
+        void nextPanel.offsetWidth;
+        nextPanel.classList.add('is-tab-entering', 'is-active');
+        currentPanel?.classList.add('is-tab-leaving');
+        tabTransitionTimer = window.setTimeout(() => {
+          currentPanel?.classList.remove('is-active', 'is-tab-leaving');
+          if (currentPanel) currentPanel.hidden = true;
+          nextPanel.classList.remove('is-tab-entering');
+        }, 380);
       };
 
       const renderLyrics = () => {
