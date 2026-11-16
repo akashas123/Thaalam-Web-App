@@ -297,10 +297,15 @@ window.getOnDemandQueuePreview = () => {
 window.removeOnDemandQueueItem = (queueIndex) => {
   const index = Number(queueIndex);
   if (!Number.isInteger(index) || index <= onDemandQueueIndex) return false;
-  if (index < onDemandQueue.length) onDemandQueue.splice(index, 1);
+  if (index < onDemandQueue.length) {
+    removedQueueSongs.push(onDemandQueue[index]);
+    onDemandQueue.splice(index, 1);
+    if (index < onDemandFavouriteQueueLength) onDemandFavouriteQueueLength -= 1;
+  }
   else {
     const relatedIndex = relatedTrackCursor + index - onDemandQueue.length;
     if (!relatedTrackCache[relatedIndex]) return false;
+    removedQueueSongs.push(relatedTrackToSong(relatedTrackCache[relatedIndex]));
     relatedTrackCache.splice(relatedIndex, 1);
   }
   persistCurrentOnDemandSession();
@@ -380,6 +385,7 @@ let scrubPointerId = null;
 /* Radio recommendations for the playing track, fetched ahead so autoplay
    can continue without waiting for the current song to end. */
 let relatedTrackCache = [];
+let removedQueueSongs = [];
 let relatedTrackCursor = 0;
 let isFetchingRelated = false;
 let prefetchToken = 0;
@@ -1213,6 +1219,8 @@ function saveOnDemandSession(song, trackId, position = 0) {
       trackId,
       position: Math.max(0, Number(position) || 0),
       queue: onDemandQueue,
+      relatedTracks: relatedTrackCache.slice(relatedTrackCursor),
+      removedQueueSongs,
       queueIndex: onDemandQueueIndex,
       queueStartIndex: onDemandQueueStartIndex,
       queueSessionId: onDemandQueueSessionId,
@@ -2871,6 +2879,7 @@ function prefetchRelatedTracks(trackId, isRetry = false) {
       const seenTrackIds = new Set();
       relatedTrackCache = pendingTracks.filter((track) => {
         if (!track?.id || isUnavailableOnDemandSong(relatedTrackToSong(track)) ||
+            removedQueueSongs.some((song) => isSameOnDemandSong(song, relatedTrackToSong(track))) ||
             playedTrackIds.has(track.id) || seenTrackIds.has(track.id) ||
             onDemandQueue.some((song) => isSameOnDemandSong(song, relatedTrackToSong(track))) ||
             (window.ThaalamRecommendationEngine?.isSkippedTrack?.(
@@ -2881,6 +2890,7 @@ function prefetchRelatedTracks(trackId, isRetry = false) {
       });
       relatedTrackCursor = 0;
       shufflePreparedCursor = -1;
+      persistCurrentOnDemandSession();
       // Give the next few songs time to fetch lyrics while the current track
       // is still playing, even if audio preloading starts later.
       relatedTrackCache.slice(0, 1).forEach((track) => {
@@ -3303,6 +3313,7 @@ async function startOnDemandSong(song, {
       onDemandQueueIndex = -1;
       onDemandQueueStartIndex = 0;
       onDemandQueueSessionId = createOnDemandQueueSessionId();
+      removedQueueSongs = [];
       onDemandQueueSource = 'autoplay';
       onDemandMixName = '';
       onDemandFavouriteQueueLength = 0;
@@ -3479,6 +3490,7 @@ function startOnDemandQueue(songs, startIndex = 0, options = {}) {
   onDemandQueueIndex = selectedIndex;
   onDemandQueueStartIndex = selectedIndex;
   onDemandQueueSessionId = createOnDemandQueueSessionId();
+  removedQueueSongs = [];
   onDemandQueueSource = queueSource;
   onDemandMixName = queueSource === 'mix' ? String(options.mixName || 'Thaalam Mix') : '';
   onDemandFavouriteQueueLength = queueSource === 'favourites' ? queue.length : 0;
@@ -3570,6 +3582,13 @@ async function restoreOnDemandSession() {
     ? stored.queue.filter((entry) => entry?.trackName)
     : [];
   const savedIndex = Number.isInteger(stored.queueIndex) ? stored.queueIndex : -1;
+  relatedTrackCache = Array.isArray(stored.relatedTracks)
+    ? stored.relatedTracks.filter((track) => track?.id)
+    : [];
+  relatedTrackCursor = 0;
+  removedQueueSongs = Array.isArray(stored.removedQueueSongs)
+    ? stored.removedQueueSongs.filter((entry) => entry?.trackName)
+    : [];
   autoplayAnchorTrackId = String(stored.autoplayAnchorTrackId || '');
    onDemandShuffle = stored.shuffle === true;
    onDemandRepeatMode = (stored.repeatMode === 'one' || stored.repeatMode === 'all') ? stored.repeatMode : 'off';
