@@ -9407,6 +9407,12 @@ body.view-home {
     transition-delay: 0s;
   }
 
+  /* Navigation must not leave the outgoing rail fading over another view. */
+  body:not(.view-home) .desktop-home-side-panel,
+  body.desktop-library-active .desktop-home-side-panel {
+    transition: none;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .desktop-home-side-panel {
       transition: none;
