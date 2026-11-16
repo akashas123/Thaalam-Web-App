@@ -49,7 +49,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=853">
+  <link rel="stylesheet" href="style.css?v=880">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -1016,7 +1016,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=100"></script>
-  <script src="ondemand-player.js?v=246"></script>
+  <script src="ondemand-player.js?v=250"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=18"></script>
@@ -6827,6 +6827,10 @@
         queue.forEach((song) => {
           const item = document.createElement('li');
           item.classList.toggle('is-current', Boolean(song.isCurrent));
+          item.classList.toggle('is-queued', !song.isCurrent);
+          item.dataset.queueIndex = String(song.queueIndex ?? -1);
+          item.draggable = !song.isCurrent && Number(song.queueIndex) >= 0;
+          if (song.isCurrent) item.classList.add('has-current-marker');
           const artwork = document.createElement('img');
           const copy = document.createElement('div');
           const title = document.createElement('strong');
@@ -6837,12 +6841,114 @@
           title.textContent = song.title || 'Unknown song';
           artist.textContent = song.artist || '';
           copy.append(title, artist);
-          item.append(artwork, copy);
+          const remove = document.createElement('button');
+          remove.className = 'desktop-home-queue-remove';
+          remove.type = 'button';
+          remove.title = 'Remove from queue';
+          remove.setAttribute('aria-label', `Remove ${title.textContent} from queue`);
+          remove.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
+          item.append(artwork, copy, remove);
           upNextList.append(item);
         });
         upNextEmpty.hidden = queue.length > 0;
         clearQueueButton.hidden = queue.length === 0;
       };
+
+      upNextList.addEventListener('click', (event) => {
+        const remove = event.target.closest('.desktop-home-queue-remove');
+        if (!remove) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const row = remove.closest('li[data-queue-index]');
+        window.removeOnDemandQueueItem?.(row?.dataset.queueIndex);
+      });
+
+      let draggedItem = null;
+      let dragDestination = null;
+      let dragCommitted = false;
+      let pointerDrag = null;
+      upNextList.addEventListener('pointerdown', (event) => {
+        const row = event.target.closest('li.is-queued');
+        if (!row || event.target.closest('button')) return;
+        event.preventDefault();
+        pointerDrag = { row, startY: event.clientY, active: false, clone: null, draggable: row.draggable };
+        row.draggable = false;
+        row.setPointerCapture?.(event.pointerId);
+      });
+      upNextList.addEventListener('pointermove', (event) => {
+        if (!pointerDrag) return;
+        if (!pointerDrag.active && Math.abs(event.clientY - pointerDrag.startY) < 6) return;
+        if (!pointerDrag.active) {
+          pointerDrag.active = true;
+          const listRect = upNextList.getBoundingClientRect();
+          pointerDrag.clone = pointerDrag.row.cloneNode(true);
+          pointerDrag.clone.classList.add('is-pointer-dragging');
+          pointerDrag.clone.style.width = `${pointerDrag.row.getBoundingClientRect().width}px`;
+          pointerDrag.clone.style.left = '0px';
+          pointerDrag.clone.style.top = `${event.clientY - listRect.top - pointerDrag.row.offsetHeight / 2}px`;
+          upNextList.append(pointerDrag.clone);
+          pointerDrag.row.style.visibility = 'hidden';
+        }
+        pointerDrag.active = true;
+        if (pointerDrag.clone) {
+          const listRect = upNextList.getBoundingClientRect();
+          pointerDrag.clone.style.top = `${event.clientY - listRect.top - pointerDrag.row.offsetHeight / 2}px`;
+        }
+        const target = document.elementFromPoint(event.clientX, event.clientY)?.closest('.desktop-home-up-next li.is-queued');
+        if (!target || target === pointerDrag.row) return;
+        const rect = target.getBoundingClientRect();
+        const before = event.clientY < rect.top + rect.height / 2;
+        upNextList.insertBefore(pointerDrag.row, before ? target : target.nextSibling);
+        pointerDrag.destination = Number(target.dataset.queueIndex) + (before ? 0 : 1);
+      });
+      upNextList.addEventListener('pointerup', () => {
+        if (pointerDrag?.active && Number.isInteger(pointerDrag.destination)) {
+          window.reorderOnDemandQueueItem?.(pointerDrag.row.dataset.queueIndex, pointerDrag.destination);
+        }
+        pointerDrag?.clone?.remove();
+        if (pointerDrag?.row) { pointerDrag.row.style.visibility = ''; pointerDrag.row.draggable = pointerDrag.draggable; }
+        pointerDrag = null;
+      });
+      upNextList.addEventListener('pointercancel', () => {
+        pointerDrag?.clone?.remove();
+        if (pointerDrag?.row) { pointerDrag.row.style.visibility = ''; pointerDrag.row.draggable = pointerDrag.draggable; }
+        pointerDrag = null;
+      });
+      upNextList.addEventListener('dragstart', (event) => {
+        draggedItem = event.target.closest('li.is-queued');
+        if (!draggedItem) return;
+        draggedItem.classList.add('is-dragging');
+        dragCommitted = false;
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', draggedItem.dataset.queueIndex || '');
+      });
+      upNextList.addEventListener('dragover', (event) => {
+        const target = event.target.closest('li.is-queued');
+        if (!draggedItem) return;
+        event.preventDefault();
+        if (!target || target === draggedItem) return;
+        const rect = target.getBoundingClientRect();
+        const before = event.clientY < rect.top + rect.height / 2;
+        dragDestination = Number(target.dataset.queueIndex) + (before ? 0 : 1);
+        upNextList.insertBefore(draggedItem, before ? target : target.nextSibling);
+      });
+      upNextList.addEventListener('drop', (event) => {
+        if (!draggedItem) return;
+        event.preventDefault();
+        const from = Number(draggedItem.dataset.queueIndex);
+        if (Number.isInteger(dragDestination)) window.reorderOnDemandQueueItem?.(from, dragDestination);
+        dragCommitted = true;
+      });
+      upNextList.addEventListener('dragend', () => {
+        if (!draggedItem) return;
+        const from = Number(draggedItem.dataset.queueIndex);
+        const destination = dragDestination;
+        draggedItem.classList.remove('is-dragging');
+        if (!dragCommitted && Number.isInteger(destination)) window.reorderOnDemandQueueItem?.(from, destination);
+        draggedItem = null;
+        dragDestination = null;
+        dragCommitted = false;
+      });
 
       tabs.forEach((tab) => tab.addEventListener('click', () => showTab(tab)));
       clearQueueButton.addEventListener('click', () => window.clearOnDemandQueue?.());

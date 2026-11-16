@@ -272,8 +272,11 @@ let onDemandQueueIndex = -1;
 window.getOnDemandQueuePreview = () => {
   const queuedSongs = onDemandQueue
     .slice(Math.max(0, onDemandQueueIndex))
-    .map((song, index) => ({ ...song, isCurrentQueueSong: index === 0 }));
-  const relatedSongs = relatedTrackCache.slice(relatedTrackCursor).map(relatedTrackToSong);
+    .map((song, index) => ({ ...song, isCurrentQueueSong: index === 0, queueIndex: Math.max(0, onDemandQueueIndex) + index }));
+  const relatedSongs = relatedTrackCache.slice(relatedTrackCursor).map((track, index) => ({
+    ...relatedTrackToSong(track),
+    queueIndex: onDemandQueue.length + index
+  }));
   const seen = new Set();
   return [...queuedSongs, ...relatedSongs]
     .filter((song) => {
@@ -286,8 +289,44 @@ window.getOnDemandQueuePreview = () => {
       title: String(song?.trackName || song?.title || ''),
       artist: String(song?.artistName || song?.artist || ''),
       artwork: String(song?.artworkUrl100 || song?.artworkUrl || song?.thumbnail || ''),
-      isCurrent: Boolean(song?.isCurrentQueueSong)
+      isCurrent: Boolean(song?.isCurrentQueueSong),
+      queueIndex: Number.isInteger(song?.queueIndex) ? song.queueIndex : -1
     }));
+};
+
+window.removeOnDemandQueueItem = (queueIndex) => {
+  const index = Number(queueIndex);
+  if (!Number.isInteger(index) || index <= onDemandQueueIndex) return false;
+  if (index < onDemandQueue.length) onDemandQueue.splice(index, 1);
+  else {
+    const relatedIndex = relatedTrackCursor + index - onDemandQueue.length;
+    if (!relatedTrackCache[relatedIndex]) return false;
+    relatedTrackCache.splice(relatedIndex, 1);
+  }
+  persistCurrentOnDemandSession();
+  window.dispatchEvent(new Event('thaalam:queue-change'));
+  return true;
+};
+
+window.reorderOnDemandQueueItem = (fromIndex, toIndex) => {
+  const from = Number(fromIndex), to = Number(toIndex);
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from <= onDemandQueueIndex || to <= onDemandQueueIndex) return false;
+  if (from >= onDemandQueue.length && to >= onDemandQueue.length) {
+    const relatedFrom = relatedTrackCursor + from - onDemandQueue.length;
+    const relatedTo = relatedTrackCursor + to - onDemandQueue.length;
+    if (!relatedTrackCache[relatedFrom]) return false;
+    const [track] = relatedTrackCache.splice(relatedFrom, 1);
+    relatedTrackCache.splice(Math.min(relatedTo, relatedTrackCache.length), 0, track);
+    persistCurrentOnDemandSession();
+    window.dispatchEvent(new Event('thaalam:queue-change'));
+    return true;
+  }
+  if (from >= onDemandQueue.length || to >= onDemandQueue.length || !onDemandQueue[from]) return false;
+  const [song] = onDemandQueue.splice(from, 1);
+  onDemandQueue.splice(Math.min(to, onDemandQueue.length), 0, song);
+  persistCurrentOnDemandSession();
+  window.dispatchEvent(new Event('thaalam:queue-change'));
+  return true;
 };
 
 window.clearOnDemandQueue = () => {
