@@ -49,7 +49,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=890">
+  <link rel="stylesheet" href="style.css?v=896">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -1516,6 +1516,7 @@
     // the results grid: fetch 20, rank by relevance, show the top 20.
     const SEARCH_FETCH_LIMIT = 20;
     const SEARCH_RESULT_LIMIT = 20;
+    const MOBILE_HOME_ROW_LIMIT = 10;
     const GENRE_CACHE_TTL = 12 * 60 * 60 * 1000;
     const ARTIST_INFO_STORAGE_KEY = 'thaalam-catalog-artist-info-v5';
     const ARTIST_INFO_CACHE_LIMIT = 600;
@@ -4132,7 +4133,7 @@
         ? getDesktopHomeShelfCardCount(document.getElementById('mobileGenreShelves'), {
             recents: category.title === 'Recents'
           })
-        : 10;
+        : MOBILE_HOME_ROW_LIMIT;
       if (desktopNavigation.matches) section.dataset.desktopShelfCapacity = String(desktopCardCount);
       (all ? tracks : tracks.slice(0, desktopCardCount)).slice(0, desktopCardCount).forEach((song) => {
         const card = document.createElement('article');
@@ -4330,7 +4331,11 @@
     function syncSpotlightBackdrop() {
       cancelAnimationFrame(spotlightBackdropFrame);
       spotlightBackdropFrame = requestAnimationFrame(() => {
-        if (artistSpotlight.hidden || !artistSpotlight.getClientRects().length) return;
+        const isHomeView = document.body.classList.contains('view-home');
+        if (!isHomeView || artistSpotlight.hidden || !artistSpotlight.getClientRects().length) {
+          spotlightPortrait.hidden = true;
+          return;
+        }
         const shelves = document.getElementById('mobileGenreShelves');
         const recents = shelves.querySelector('.mobile-recents-row');
         const edge = recents ? recents.getBoundingClientRect().top : artistSpotlight.getBoundingClientRect().bottom;
@@ -4521,9 +4526,73 @@
 
     let mobileRecentsRenderSignature = null;
     let desktopHomeShelfResizeTimer = 0;
+    const horizontalRowDragState = new WeakMap();
+    function enableMobileRowDragging(shelves) {
+      shelves.querySelectorAll('.mobile-genre-track-row').forEach((row) => {
+        if (row.dataset.dragReady === 'true') return;
+        row.dataset.dragReady = 'true';
+        row.addEventListener('pointerdown', (event) => {
+          if (event.pointerType === 'mouse' && event.button !== 0) return;
+          horizontalRowDragState.set(row, {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            startScrollLeft: row.scrollLeft,
+            dragging: false
+          });
+        }, { passive: true });
+        row.addEventListener('pointermove', (event) => {
+          const state = horizontalRowDragState.get(row);
+          if (!state || state.pointerId !== event.pointerId) return;
+          const deltaX = event.clientX - state.startX;
+          const deltaY = event.clientY - state.startY;
+          if (!state.dragging) {
+            if (Math.abs(deltaY) > Math.abs(deltaX) || Math.abs(deltaX) < 8) return;
+            state.dragging = true;
+            row.setPointerCapture?.(event.pointerId);
+          }
+          event.preventDefault();
+          row.scrollLeft = state.startScrollLeft - deltaX;
+        }, { passive: false });
+        const clearDrag = (event) => {
+          const state = horizontalRowDragState.get(row);
+          if (state?.pointerId === event.pointerId) horizontalRowDragState.delete(row);
+        };
+        row.addEventListener('pointerup', clearDrag, { passive: true });
+        row.addEventListener('pointercancel', clearDrag, { passive: true });
+        row.addEventListener('lostpointercapture', clearDrag, { passive: true });
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let touchStartScrollLeft = 0;
+        let touchDragging = false;
+        row.addEventListener('touchstart', (event) => {
+          const touch = event.touches[0];
+          if (!touch) return;
+          touchStartX = touch.clientX;
+          touchStartY = touch.clientY;
+          touchStartScrollLeft = row.scrollLeft;
+          touchDragging = false;
+        }, { passive: true });
+        row.addEventListener('touchmove', (event) => {
+          const touch = event.touches[0];
+          if (!touch) return;
+          const deltaX = touch.clientX - touchStartX;
+          const deltaY = touch.clientY - touchStartY;
+          if (!touchDragging) {
+            if (Math.abs(deltaY) > Math.abs(deltaX) || Math.abs(deltaX) < 8) return;
+            touchDragging = true;
+          }
+          event.preventDefault();
+          row.scrollLeft = touchStartScrollLeft - deltaX;
+        }, { passive: false });
+        row.addEventListener('touchend', () => { touchDragging = false; }, { passive: true });
+        row.addEventListener('touchcancel', () => { touchDragging = false; }, { passive: true });
+      });
+    }
     function updateMobileRecents() {
       const shelves = document.getElementById('mobileGenreShelves');
       if (!shelves) return;
+      enableMobileRowDragging(shelves);
       updateArtistSpotlight(shelves);
       if (!desktopNavigation.matches && artistSpotlight.hidden) {
         const firstMobileTrack = [...shelves.querySelectorAll('.mobile-genre-track')]
@@ -4541,7 +4610,7 @@
       syncSpotlightBackdrop();
       const songs = window.getOnDemandHistory?.() || [];
       const isDesktop = window.matchMedia('(min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine)').matches;
-      let visibleSongs = songs.slice(0, 10);
+      let visibleSongs = songs.slice(0, MOBILE_HOME_ROW_LIMIT);
       if (isDesktop) {
         const songsThatFit = getDesktopHomeShelfCardCount(shelves, { recents: true });
         visibleSongs = songs.slice(0, Math.min(20, songsThatFit));
