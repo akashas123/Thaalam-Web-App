@@ -1,7 +1,7 @@
-const CACHE_NAME = 'thaalam-24x7-v1212';
+const CACHE_NAME = 'thaalam-24x7-v1214';
 const ALBUM_ART_CACHE_NAME = 'thaalam-album-art-v2';
 const ALBUM_ART_CACHE_LIMIT = 240;
-const ARTIST_IMAGE_CACHE_NAME = 'thaalam-artist-image-v1';
+const ARTIST_IMAGE_CACHE_NAME = 'thaalam-artist-image-v4';
 const ARTIST_IMAGE_CACHE_LIMIT = 240;
 
 const APP_FILES = [
@@ -68,7 +68,7 @@ self.addEventListener('fetch', (event) => {
     ) {
       if (
         (url.hostname.endsWith('wikimedia.org') || url.hostname.endsWith('wikipedia.org')) &&
-        url.pathname.includes('/')
+        request.destination === 'image'
       ) {
         event.respondWith(fetchAndCacheArtistImage(request));
         return;
@@ -154,7 +154,7 @@ async function fetchAndCacheArtistImage(request) {
   }
 
   const response = await fetch(request);
-  if (response.ok || response.type === 'opaque') {
+  if ((response.ok || response.type === 'opaque') && request.destination === 'image') {
     try {
       const cachedRequests = await cache.keys();
       const expiredRequests = cachedRequests.slice(
