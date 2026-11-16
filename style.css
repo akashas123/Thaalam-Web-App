@@ -453,6 +453,103 @@ body.view-now-playing::after {
   display: none;
 }
 
+.artist-spotlight,
+.artist-spotlight-portrait { display: none; }
+
+@media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) {
+  .artist-spotlight:not([hidden]) {
+    position: relative;
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    isolation: isolate;
+    min-height: clamp(16rem, 32vh, 20rem);
+    overflow: hidden;
+    background: transparent;
+    border-radius: 0;
+  }
+  body.view-home:not(.desktop-library-active):not(.desktop-catalog-active):not(.mobile-search-active):has(.artist-spotlight:not([hidden])) > .artist-spotlight-portrait:not([hidden]) {
+    display: block;
+    position: fixed;
+    z-index: 0;
+    inset: 0 0 0 auto;
+    width: 64vw;
+    height: var(--spotlight-backdrop-height, 0px);
+    clip-path: inset(0 0 var(--spotlight-backdrop-clip, 0px) 0);
+    object-fit: cover;
+    object-position: center 25%;
+    pointer-events: none;
+    filter: grayscale(1) brightness(0.6);
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 50%), linear-gradient(to top, transparent, #000 40%);
+    mask-image: linear-gradient(to right, transparent, #000 50%), linear-gradient(to top, transparent, #000 40%);
+    mask-composite: intersect;
+  }
+  .artist-spotlight-copy {
+    width: 66%;
+    padding: 1.25rem 0 3rem;
+    color: #fff;
+  }
+  .artist-spotlight-eyebrow {
+    margin: 0 0 1.3rem;
+    color: #c8c8cc;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+  }
+  .home-page .artist-spotlight-title {
+    margin: 0;
+    font-size: clamp(1.8rem, 2.7vw, 3rem);
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    line-height: 1.06;
+    letter-spacing: -0.045em;
+    overflow-wrap: anywhere;
+    text-wrap: balance;
+  }
+  .artist-spotlight-name { margin: 1rem 0 1.8rem; font-size: 1.05rem; color: #d6d6da; }
+  .artist-spotlight-listen {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.85rem 1.4rem;
+    border: 0;
+    border-radius: 2rem;
+    background: var(--liked-folder-color);
+    color: #fff;
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .artist-spotlight-listen:hover { background: color-mix(in srgb, var(--liked-folder-color) 84%, black); }
+  .artist-spotlight-listen:disabled { opacity: 0.6; cursor: wait; }
+  .artist-spotlight-status { margin: 0.75rem 0 0; font-size: 0.8rem; }
+  .artist-spotlight-status:empty { display: none; }
+  .artist-spotlight-controls {
+    position: absolute;
+    bottom: 1.2rem;
+    right: 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    color: #ddd;
+    font-size: 0.75rem;
+  }
+  .artist-spotlight-controls button {
+    width: 2.2rem;
+    height: 2.2rem;
+    border: 1px solid #ffffff30;
+    border-radius: 50%;
+    background: #101010b3;
+    color: #fff;
+    cursor: pointer;
+  }
+  .artist-spotlight-controls button:hover { background: #3a3a3a; }
+  .artist-spotlight button:focus-visible { outline: 2px solid var(--liked-folder-color); outline-offset: 4px; }
+}
+
 .mobile-genre-shelves {
   display: none;
 }

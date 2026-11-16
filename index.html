@@ -49,7 +49,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=881">
+  <link rel="stylesheet" href="style.css?v=886">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -1016,7 +1016,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=100"></script>
-  <script src="ondemand-player.js?v=250"></script>
+  <script src="ondemand-player.js?v=251"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=18"></script>
@@ -4293,11 +4293,170 @@
     window.addEventListener('thaalam:on-demand-playback-state', refreshDesktopHomePlayButtons);
     window.addEventListener('thaalam:nowplaying', refreshDesktopHomePlayButtons);
 
+    // Desktop artist spotlight shares the catalog's portrait lookup and player.
+    const artistSpotlight = document.createElement('section');
+    artistSpotlight.className = 'artist-spotlight';
+    artistSpotlight.hidden = true;
+    artistSpotlight.setAttribute('aria-label', 'Your top artists');
+    artistSpotlight.innerHTML = `
+      <img class="artist-spotlight-portrait" alt="" decoding="async">
+      <div class="artist-spotlight-copy">
+        <p class="artist-spotlight-eyebrow">YOUR TOP ARTISTS</p>
+        <h2 class="artist-spotlight-title"></h2>
+        <p class="artist-spotlight-name"></p>
+        <button class="artist-spotlight-listen" type="button"><span aria-hidden="true">▶</span> Listen now</button>
+        <p class="artist-spotlight-status" role="status"></p>
+      </div>
+      <div class="artist-spotlight-controls">
+        <button type="button" data-spotlight="previous" aria-label="Previous featured artist">←</button>
+        <span class="artist-spotlight-count"></span>
+        <button type="button" data-spotlight="next" aria-label="Next featured artist">→</button>
+        <button type="button" data-spotlight="pause" aria-label="Pause artist rotation" aria-pressed="false">Ⅱ</button>
+      </div>`;
+    // Keep the backdrop outside the scrolling shelves so it reaches the viewport top.
+    const spotlightPortrait = artistSpotlight.querySelector('img');
+    spotlightPortrait.hidden = true;
+    spotlightPortrait.alt = '';
+    spotlightPortrait.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(spotlightPortrait);
+    let spotlightBackdropFrame = 0;
+    function syncSpotlightBackdrop() {
+      cancelAnimationFrame(spotlightBackdropFrame);
+      spotlightBackdropFrame = requestAnimationFrame(() => {
+        if (!desktopNavigation.matches || artistSpotlight.hidden || !artistSpotlight.getClientRects().length) return;
+        const shelves = document.getElementById('mobileGenreShelves');
+        const recents = shelves.querySelector('.mobile-recents-row');
+        const edge = recents ? recents.getBoundingClientRect().top : artistSpotlight.getBoundingClientRect().bottom;
+        const height = Math.max(0, edge + shelves.scrollTop);
+        spotlightPortrait.style.setProperty('--spotlight-backdrop-height', `${height}px`);
+        spotlightPortrait.style.setProperty('--spotlight-backdrop-clip', `${Math.max(0, height - Math.max(0, edge))}px`);
+      });
+    }
+    const spotlightBackdropObserver = new ResizeObserver(syncSpotlightBackdrop);
+    spotlightBackdropObserver.observe(artistSpotlight);
+    spotlightBackdropObserver.observe(document.getElementById('mobileGenreShelves'));
+    window.addEventListener('resize', syncSpotlightBackdrop);
+    document.addEventListener('scroll', syncSpotlightBackdrop, { capture: true, passive: true });
+    let spotlightArtists = [];
+    let spotlightIndex = -1;
+    let spotlightSong = null;
+    let spotlightRequest = 0;
+    let spotlightSignature = '';
+    let spotlightPaused = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const spotlightCache = new Map();
+    const spotlightPause = artistSpotlight.querySelector('[data-spotlight="pause"]');
+    function syncSpotlightPause() {
+      spotlightPause.textContent = spotlightPaused ? '▶' : 'Ⅱ';
+      spotlightPause.setAttribute('aria-pressed', String(spotlightPaused));
+      spotlightPause.setAttribute('aria-label', spotlightPaused ? 'Resume artist rotation' : 'Pause artist rotation');
+    }
+    syncSpotlightPause();
+
+    async function showArtistSpotlight(index) {
+      if (!spotlightArtists.length || !desktopNavigation.matches) return;
+      spotlightIndex = (index + spotlightArtists.length) % spotlightArtists.length;
+      const entry = spotlightArtists[spotlightIndex];
+      const request = ++spotlightRequest;
+      if (!spotlightCache.has(entry.artist)) {
+        spotlightCache.set(entry.artist, Promise.allSettled([
+          getWikipediaArtistInfo(entry.artist)
+        ]));
+      }
+      const [portraitResult] = await spotlightCache.get(entry.artist);
+      if (request !== spotlightRequest) return;
+      const choices = entry.songs;
+      if (!choices.length) return;
+      spotlightSong = choices[Math.floor(Math.random() * choices.length)];
+      artistSpotlight.querySelector('.artist-spotlight-title').textContent = spotlightSong.trackName;
+      artistSpotlight.querySelector('.artist-spotlight-name').textContent = entry.artist;
+      artistSpotlight.querySelector('.artist-spotlight-count').textContent = `${spotlightIndex + 1} / ${spotlightArtists.length}`;
+      artistSpotlight.querySelector('.artist-spotlight-status').textContent = '';
+      const portrait = spotlightPortrait;
+      const portraitUrl = portraitResult.status === 'fulfilled' ? portraitResult.value?.image : '';
+      const artworkUrl = portraitUrl || spotlightSong.artworkUrl100;
+      portrait.hidden = !artworkUrl;
+      portrait.alt = portraitUrl ? `${entry.artist} portrait` : `${spotlightSong.trackName} artwork`;
+      portrait.onerror = () => { portrait.hidden = true; };
+      if (artworkUrl) portrait.src = artworkUrl;
+      else portrait.removeAttribute('src');
+      artistSpotlight.hidden = false;
+      syncSpotlightBackdrop();
+    }
+
+    let spotlightChartRequest = 0;
+    async function updateArtistSpotlight(shelves) {
+      if (!desktopNavigation.matches) return;
+      if (shelves.firstElementChild !== artistSpotlight) shelves.prepend(artistSpotlight);
+      const history = window.getOnDemandPlaybackHistory?.() || [];
+      const taste = history.length ? history : window.getOnDemandTasteProfile?.() || [];
+      const genre = getGenreOrderFromHistory()[0] || 'international';
+      const request = ++spotlightChartRequest;
+      let chart = getAnyCachedGenreChart(genre);
+      try { chart = await loadDailyGenreChart(genre); } catch { /* Use cached chart when offline. */ }
+      if (request !== spotlightChartRequest) return;
+      const artistScores = new Map();
+      taste.forEach((song, index) => {
+        mixArtistNames(song.artistName).forEach((artist) => {
+          const key = artist.toLocaleLowerCase();
+          artistScores.set(key, (artistScores.get(key) || 0) + 1 / (1 + index * 0.03));
+        });
+      });
+      const ranked = new Map();
+      chart.filter((song) => song.trackName && !song.recentDisplayType).forEach((song) => {
+        mixArtistNames(song.artistName).forEach((artist) => {
+          const key = artist.toLocaleLowerCase();
+          const entry = ranked.get(key) || { artist, score: artistScores.get(key) || 0, songs: [] };
+          if (!entry.songs.some((other) => other.trackName === song.trackName)) entry.songs.push(song);
+          ranked.set(key, entry);
+        });
+      });
+      const artists = [...ranked.values()].sort((a, b) => b.score - a.score).slice(0, 5);
+      const signature = genre + ':' + artists.map((entry) => entry.artist + ':' + entry.songs.map((song) => song.providerTrackId || song.trackName).join(',')).join('|');
+      if (signature === spotlightSignature) return;
+      spotlightSignature = signature;
+      spotlightArtists = artists;
+      const genreTitle = mobileHomeGenreRows.find((category) => category.key === genre)?.title || 'International';
+      artistSpotlight.querySelector('.artist-spotlight-eyebrow').textContent = `${genreTitle.toUpperCase()} · ${taste.length ? 'PICKED FOR YOU' : 'CHART PICKS'}`;
+      if (!artists.length) {
+        spotlightRequest += 1;
+        artistSpotlight.hidden = true;
+        return;
+      }
+      void showArtistSpotlight(0);
+    }
+    artistSpotlight.querySelector('.artist-spotlight-listen').addEventListener('click', async () => {
+      if (!spotlightSong) return;
+      const button = artistSpotlight.querySelector('.artist-spotlight-listen');
+      button.disabled = true;
+      try {
+        await window.startOnDemandSong?.(spotlightSong, { openNowPlaying: false });
+      } catch {
+        artistSpotlight.querySelector('.artist-spotlight-status').textContent = 'Could not play this song. Try another pick.';
+      } finally { button.disabled = false; }
+    });
+    artistSpotlight.querySelectorAll('[data-spotlight]').forEach((button) => {
+      button.addEventListener('click', () => {
+        if (button.dataset.spotlight === 'pause') {
+          spotlightPaused = !spotlightPaused;
+          syncSpotlightPause();
+        } else {
+          void showArtistSpotlight(spotlightIndex + (button.dataset.spotlight === 'next' ? 1 : -1));
+        }
+      });
+    });
+    window.setInterval(() => {
+      if (spotlightPaused || document.hidden || spotlightArtists.length < 2 ||
+          !artistSpotlight.getClientRects().length || artistSpotlight.matches(':hover, :focus-within')) return;
+      void showArtistSpotlight(spotlightIndex + 1);
+    }, 12000);
+
     let mobileRecentsRenderSignature = null;
     let desktopHomeShelfResizeTimer = 0;
     function updateMobileRecents() {
       const shelves = document.getElementById('mobileGenreShelves');
       if (!shelves) return;
+      updateArtistSpotlight(shelves);
+      syncSpotlightBackdrop();
       const songs = window.getOnDemandHistory?.() || [];
       const isDesktop = window.matchMedia('(min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine)').matches;
       let visibleSongs = songs.slice(0, 10);
@@ -4327,7 +4486,8 @@
           { title: 'Recents' }, visibleSongs, { shuffle: false, all: true }
         );
         recents.classList.add('mobile-recents-row');
-        shelves.prepend(recents);
+        if (desktopNavigation.matches && artistSpotlight.parentElement === shelves) artistSpotlight.after(recents);
+        else shelves.prepend(recents);
         if (previousPositions.size && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
           requestAnimationFrame(() => {
             recents.querySelectorAll('[data-recent-track-key]').forEach((card) => {
