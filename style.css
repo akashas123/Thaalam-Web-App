@@ -457,6 +457,17 @@ body.view-now-playing::after {
 .artist-spotlight-portrait { display: none; }
 
 @media (max-width: 56.24rem) {
+  body:not(.view-home) .artist-spotlight,
+  body:not(.view-home) .artist-spotlight-portrait {
+    display: none !important;
+  }
+
+  body.view-home .home-page .mobile-genre-track-row {
+    overflow-x: auto !important;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x pan-y !important;
+  }
+
   .artist-spotlight:not([hidden]) {
     position: relative;
     display: flex;
@@ -9390,7 +9401,14 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
     justify-content: flex-start;
     overscroll-behavior-x: contain;
     -webkit-overflow-scrolling: touch;
-    touch-action: pan-x;
+    touch-action: pan-x pan-y !important;
+  }
+
+  body.view-home .home-page .mobile-genre-track-row {
+    overflow-x: auto !important;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x !important;
   }
 
   body.view-home .home-page .mobile-recents-row .mobile-genre-track {
