@@ -510,10 +510,10 @@ body.view-now-playing::after {
   .home-page .artist-spotlight-title {
     margin: 0;
     font-size: clamp(1.8rem, 2.7vw, 3rem);
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
+    display: block;
     overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     line-height: 1.06;
     letter-spacing: -0.045em;
     overflow-wrap: anywhere;
@@ -7083,7 +7083,6 @@ body {
 
 img {
   -webkit-user-drag: none;
-  user-drag: none;
 }
 
 /* Keep keyboard interaction working without showing browser-style selection
