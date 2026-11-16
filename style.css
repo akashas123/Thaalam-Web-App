@@ -8662,8 +8662,20 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
     padding: 3rem 0 3rem;
     overflow-x: hidden;
     overflow-y: auto;
-    overscroll-behavior-y: contain;
+    overscroll-behavior-y: auto;
+    touch-action: pan-y;
     scrollbar-width: none;
+  }
+
+  .home-page .mobile-genre-shelves,
+  .home-page .mobile-genre-row,
+  .home-page .mobile-genre-track-row,
+  .home-page .mobile-genre-track,
+  .home-page .mobile-recents-row,
+  .home-page .mobile-recents-row .mobile-genre-track-row,
+  .home-page .mobile-recents-row .mobile-genre-track,
+  .home-page .mobile-recents-row .mobile-genre-track-art {
+    touch-action: pan-y !important;
   }
 
   .home-page .mobile-genre-row {
