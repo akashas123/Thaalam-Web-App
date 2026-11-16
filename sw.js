@@ -1,7 +1,7 @@
-const CACHE_NAME = 'thaalam-24x7-v1212';
+const CACHE_NAME = 'thaalam-24x7-v1216';
 const ALBUM_ART_CACHE_NAME = 'thaalam-album-art-v2';
 const ALBUM_ART_CACHE_LIMIT = 240;
-const ARTIST_IMAGE_CACHE_NAME = 'thaalam-artist-image-v1';
+const ARTIST_IMAGE_CACHE_NAME = 'thaalam-artist-image-v4';
 const ARTIST_IMAGE_CACHE_LIMIT = 240;
 
 const APP_FILES = [
@@ -15,7 +15,7 @@ const APP_FILES = [
   './media-metadata.js?v=18',
   './recommendation-engine.js?v=5',
   './player-controls.js?v=62',
-  './ondemand-player.js?v=251',
+  './ondemand-player.js?v=253',
   './storage-maintenance.js?v=1',
   './lyrics.js?v=56',
   './manifest.json',
@@ -68,7 +68,7 @@ self.addEventListener('fetch', (event) => {
     ) {
       if (
         (url.hostname.endsWith('wikimedia.org') || url.hostname.endsWith('wikipedia.org')) &&
-        url.pathname.includes('/')
+        request.destination === 'image'
       ) {
         event.respondWith(fetchAndCacheArtistImage(request));
         return;
@@ -154,7 +154,7 @@ async function fetchAndCacheArtistImage(request) {
   }
 
   const response = await fetch(request);
-  if (response.ok || response.type === 'opaque') {
+  if ((response.ok || response.type === 'opaque') && request.destination === 'image') {
     try {
       const cachedRequests = await cache.keys();
       const expiredRequests = cachedRequests.slice(

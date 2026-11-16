@@ -1016,7 +1016,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=100"></script>
-  <script src="ondemand-player.js?v=251"></script>
+  <script src="ondemand-player.js?v=253"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=18"></script>
@@ -1517,7 +1517,7 @@
     const SEARCH_FETCH_LIMIT = 20;
     const SEARCH_RESULT_LIMIT = 20;
     const GENRE_CACHE_TTL = 12 * 60 * 60 * 1000;
-    const ARTIST_INFO_STORAGE_KEY = 'thaalam-catalog-artist-info-v4';
+    const ARTIST_INFO_STORAGE_KEY = 'thaalam-catalog-artist-info-v5';
     const ARTIST_INFO_CACHE_LIMIT = 600;
     const ARTIST_INFO_PREFETCH_CONCURRENCY = 3;
     let storedArtistInfoRecords;
@@ -1857,6 +1857,16 @@
       }
     }
 
+    function isArtistPortraitUrl(value) {
+      if (!value) return false;
+      try {
+        const filename = decodeURIComponent(new URL(value).pathname).toLocaleLowerCase();
+        return !/(album|artwork|cover|single|ep[-_ ]|mixtape|logo|poster|screenshot|discography|soundtrack|film|record|vinyl|label)/i.test(filename);
+      } catch {
+        return false;
+      }
+    }
+
     async function fetchWikipediaArtistInfo(artistName, cacheKey) {
       const search = new URLSearchParams({
         action: 'query',
@@ -1891,7 +1901,8 @@
         exintro: '1',
         exsentences: '3',
         explaintext: '1',
-        pithumbsize: '640',
+        pithumbsize: '1600',
+        pilicense: 'any',
         titles: article.title,
         redirects: '1',
         format: 'json',
@@ -1906,7 +1917,7 @@
         summary: (page.extract || '')
           .replace(/\s*\(transl\.\s*[^)]*\)/gi, '')
           .trim(),
-        image: page.thumbnail?.source || '',
+        image: isArtistPortraitUrl(page.originalimage?.source) ? page.originalimage.source : '',
         url: `https://en.wikipedia.org/?curid=${page.pageid}`
       } : null;
       artistInfoCache.set(cacheKey, info);
@@ -1921,7 +1932,7 @@
       );
       if (!response.ok) return '';
       const page = await response.json();
-      return page.thumbnail?.source || page.originalimage?.source || '';
+      return isArtistPortraitUrl(page.originalimage?.source) ? page.originalimage.source : '';
     }
 
     function loadAboutArtistPortraits() {
@@ -4323,9 +4334,15 @@
         const shelves = document.getElementById('mobileGenreShelves');
         const recents = shelves.querySelector('.mobile-recents-row');
         const edge = recents ? recents.getBoundingClientRect().top : artistSpotlight.getBoundingClientRect().bottom;
-        const height = Math.max(0, edge + shelves.scrollTop);
+        const spotlightTop = artistSpotlight.getBoundingClientRect().top;
+        const fadeScroll = Math.max(window.scrollY || 0, shelves.scrollTop || 0, -spotlightTop);
+        const fadeOverlap = 48;
+        const height = Math.max(0, edge + shelves.scrollTop + fadeOverlap);
+        const scrollFade = Math.max(0, Math.min(1, 1 - fadeScroll / 150));
         spotlightPortrait.style.setProperty('--spotlight-backdrop-height', `${height}px`);
-        spotlightPortrait.style.setProperty('--spotlight-backdrop-clip', `${Math.max(0, height - Math.max(0, edge))}px`);
+        spotlightPortrait.style.setProperty('--spotlight-backdrop-clip', `${Math.max(0, height - Math.max(0, edge) - fadeOverlap)}px`);
+        spotlightPortrait.style.setProperty('--spotlight-scroll-opacity', scrollFade.toFixed(3));
+        spotlightPortrait.hidden = scrollFade <= 0.01;
       });
     }
     const spotlightBackdropObserver = new ResizeObserver(syncSpotlightBackdrop);
@@ -4333,6 +4350,7 @@
     spotlightBackdropObserver.observe(document.getElementById('mobileGenreShelves'));
     window.addEventListener('resize', syncSpotlightBackdrop);
     document.addEventListener('scroll', syncSpotlightBackdrop, { capture: true, passive: true });
+    window.addEventListener('scroll', syncSpotlightBackdrop, { passive: true });
     let spotlightArtists = [];
     let spotlightIndex = -1;
     let spotlightSong = null;
@@ -4346,14 +4364,28 @@
         // Every artist tried — none had a Wikipedia image; keep section visible without portrait
         return;
       }
-      spotlightIndex = index;
+      spotlightIndex = ((index % spotlightArtists.length) + spotlightArtists.length) % spotlightArtists.length;
       const entry = spotlightArtists[spotlightIndex];
+      if (!entry?.artist || !entry.songs?.length) return;
       const request = ++spotlightRequest;
       if (!spotlightCache.has(entry.artist)) {
         spotlightCache.set(entry.artist, Promise.allSettled([
           getWikipediaArtistInfo(entry.artist),
           fetchWikipediaArtistPortrait(entry.artist)
-        ]));
+        ]).then(async (results) => {
+          const infoImage = results[0].status === 'fulfilled' ? results[0].value?.image : '';
+          const portraitImage = results[1].status === 'fulfilled' ? results[1].value : '';
+          const portraitUrl = infoImage || portraitImage;
+          if (portraitUrl) {
+            await new Promise((resolve) => {
+              const image = new Image();
+              image.onload = resolve;
+              image.onerror = resolve;
+              image.src = portraitUrl;
+            });
+          }
+          return results;
+        }));
       }
       const [infoResult, portraitResult] = await spotlightCache.get(entry.artist);
       if (request !== spotlightRequest) return;
@@ -4410,11 +4442,41 @@
           ranked.set(key, entry);
         });
       });
-      const artists = [...ranked.values()].sort((a, b) => b.score - a.score).slice(0, 5);
+      const rankedArtists = [...ranked.values()].sort((a, b) => b.score - a.score);
+      // Collaborations are split into artist tokens above, which can place the
+      // same track under multiple artists. A spotlight card must represent one
+      // song and one artist only, and a track must never return later in the
+      // same spotlight rotation under a different credited artist.
+      const usedSpotlightSongs = new Set();
+      const normalizeSpotlightSong = (value) => String(value || '')
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLocaleLowerCase()
+        .replace(/[^\p{L}\p{N}]/gu, '');
+      const artists = rankedArtists.map((entry) => ({
+        ...entry,
+        songs: entry.songs.filter((song) => {
+          const key = normalizeSpotlightSong(song.trackName);
+          if (!key || usedSpotlightSongs.has(key)) return false;
+          usedSpotlightSongs.add(key);
+          return true;
+        })
+      })).filter((entry) => entry.songs.length).slice(0, 5);
       const signature = genre + ':' + artists.map((entry) => entry.artist + ':' + entry.songs.map((song) => song.providerTrackId || song.trackName).join(',')).join('|');
       if (signature === spotlightSignature) return;
       spotlightSignature = signature;
       spotlightArtists = artists;
+      // Resolve and decode the full rotation before showing the first slide.
+      // This prevents a network request from interrupting the endless loop.
+      await Promise.all(artists.map((entry) => {
+        if (!spotlightCache.has(entry.artist)) {
+          spotlightCache.set(entry.artist, Promise.allSettled([
+            getWikipediaArtistInfo(entry.artist),
+            fetchWikipediaArtistPortrait(entry.artist)
+          ]));
+        }
+        return spotlightCache.get(entry.artist);
+      }));
       const genreTitle = mobileHomeGenreRows.find((category) => category.key === genre)?.title || 'International';
       artistSpotlight.querySelector('.artist-spotlight-eyebrow').textContent = `${genreTitle.toUpperCase()} · ${taste.length ? 'PICKED FOR YOU' : 'CHART PICKS'}`;
       if (!artists.length) {
@@ -4437,7 +4499,7 @@
     });
     window.setInterval(() => {
       if (document.hidden || spotlightArtists.length < 2 ||
-          !artistSpotlight.getClientRects().length || artistSpotlight.matches(':hover, :focus-within')) return;
+          !artistSpotlight.getClientRects().length) return;
       void showArtistSpotlight(spotlightIndex + 1);
     }, 12000);
 

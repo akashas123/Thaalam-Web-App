@@ -390,6 +390,8 @@ let relatedTrackCursor = 0;
 let isFetchingRelated = false;
 let prefetchToken = 0;
 let autoplayRetryTimer = 0;
+let onDemandStallTimer = 0;
+let onDemandStallRecoveryAttempts = 0;
 let autoplayPrefetchRetryTimer = 0;
 let autoplayPrefetchRetryAttempt = 0;
 let autoplayPrefetchFailed = false;
@@ -1904,6 +1906,36 @@ function finishOnDemandTrack(audio) {
   advanceToSimilarSong();
 }
 
+function clearOnDemandStallRecovery() {
+  window.clearTimeout(onDemandStallTimer);
+  onDemandStallTimer = 0;
+}
+
+function scheduleOnDemandStallRecovery(audio) {
+  clearOnDemandStallRecovery();
+  if (audio !== onDemandAudio || !window.onDemandPlaybackActive || audio.paused) return;
+  const requestId = songRequestId;
+  const stalledAt = Number(audio.currentTime) || 0;
+  onDemandStallTimer = window.setTimeout(() => {
+    onDemandStallTimer = 0;
+    if (audio !== onDemandAudio || requestId !== songRequestId ||
+        !window.onDemandPlaybackActive || audio.paused || audio.ended) return;
+    const stillStalled = Math.abs((Number(audio.currentTime) || 0) - stalledAt) < 0.25;
+    if (!stillStalled) return;
+    onDemandStallRecoveryAttempts += 1;
+    if (onDemandStallRecoveryAttempts <= 2) {
+      onDemandModeLabel.textContent = 'RECONNECTING';
+      void handlePlaybackError();
+      return;
+    }
+    // A CDN stream can remain stuck without firing `error`; after bounded
+    // retries, release the transition and continue with the next song.
+    onDemandStallRecoveryAttempts = 0;
+    autoplayTrackTransition = false;
+    advanceToSimilarSong();
+  }, 8000);
+}
+
 function bindOnDemandAudioEvents(audio) {
   audio.addEventListener('timeupdate', () => {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
@@ -1913,6 +1945,10 @@ function bindOnDemandAudioEvents(audio) {
       ? 'seeking'
       : (!audio.paused && !audio.ended ? 'playing' : 'paused'));
     updatePlaybackProgress();
+    if (!audio.paused && audio.currentTime > 0) {
+      clearOnDemandStallRecovery();
+      onDemandStallRecoveryAttempts = 0;
+    }
   });
   audio.addEventListener('play', () => {
     if (audio !== onDemandAudio || !window.onDemandPlaybackActive) return;
@@ -1950,6 +1986,8 @@ function bindOnDemandAudioEvents(audio) {
     void acquireOnDemandWakeLock();
     if (window.onDemandPlaybackActive) startOnDemandSilentLoop();
     resumeOnDemandAudioContext();
+    clearOnDemandStallRecovery();
+    onDemandStallRecoveryAttempts = 0;
   });
   audio.addEventListener('pause', () => {
     if (activeOnDemandCrossfade?.outgoingAudio === audio && audio.ended) {
@@ -1983,6 +2021,7 @@ function bindOnDemandAudioEvents(audio) {
       onDemandModeLabel.textContent = 'BUFFERING';
       onDemandPlayButton?.classList.add('is-loading');
       onDemandMiniToggle?.classList.add('is-loading');
+      scheduleOnDemandStallRecovery(audio);
     });
   }
   audio.addEventListener('ended', () => {
@@ -2928,7 +2967,7 @@ function relatedTrackToSong(track) {
 
 function prefetchTrackArtwork(track) {
   if (track.artworkUrl100 || track.artworkPromise) {
-    return track.artworkPromise || Promise.resolve(track.artworkUrl100);
+    return Promise.resolve(track.artworkPromise || track.artworkUrl100);
   }
 
   track.artworkPromise = Promise.resolve(
