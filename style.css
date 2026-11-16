@@ -9353,6 +9353,18 @@ body.view-home {
    layouts. It is deliberately absent once the window enters compact desktop. */
 .desktop-home-side-panel { display: none; }
 @media (min-width: 110rem) and (pointer: fine) and (any-pointer: fine) {
+  @media (prefers-reduced-motion: no-preference) {
+    body.view-home.mini-player-panel-shift:not(.desktop-library-active) .home-page .site-page-content {
+      transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    body.view-home.mini-player-panel-shift:not(.desktop-library-active) .desktop-profile-button,
+    body.view-home.mini-player-panel-shift:not(.desktop-library-active) .desktop-welcome-greeting {
+      transition: right 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+  }
+
   /* Reserve a real column for the companion rather than allowing it to cover
      the search field or the last cards in each shelf. */
   body.view-home.playback-active:not(.desktop-library-active) .home-page .site-page-content {
@@ -9362,7 +9374,9 @@ body.view-home {
     transform: translateX(-8.25rem);
   }
 
-  body.view-home:not(.desktop-library-active) .desktop-home-side-panel {
+  /* Keep the offscreen state rendered across views so returning Home during
+     playback can transition in from the right. */
+  .desktop-home-side-panel {
     position: fixed;
     z-index: 5;
     top: 0;
@@ -9394,7 +9408,7 @@ body.view-home {
   }
 
   @media (prefers-reduced-motion: reduce) {
-    body.view-home:not(.desktop-library-active) .desktop-home-side-panel {
+    .desktop-home-side-panel {
       transition: none;
     }
   }
