@@ -462,12 +462,6 @@ body.view-now-playing::after {
     display: none !important;
   }
 
-  body.view-home .home-page .mobile-genre-track-row {
-    overflow-x: auto !important;
-    overscroll-behavior-x: contain;
-    touch-action: pan-x pan-y !important;
-  }
-
   .artist-spotlight:not([hidden]) {
     position: relative;
     display: flex;
@@ -8678,17 +8672,6 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
     scrollbar-width: none;
   }
 
-  .home-page .mobile-genre-shelves,
-  .home-page .mobile-genre-row,
-  .home-page .mobile-genre-track-row,
-  .home-page .mobile-genre-track,
-  .home-page .mobile-recents-row,
-  .home-page .mobile-recents-row .mobile-genre-track-row,
-  .home-page .mobile-recents-row .mobile-genre-track,
-  .home-page .mobile-recents-row .mobile-genre-track-art {
-    touch-action: pan-y !important;
-  }
-
   .home-page .mobile-genre-row {
     min-width: 0;
     flex: 0 0 auto;
@@ -9401,14 +9384,14 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
     justify-content: flex-start;
     overscroll-behavior-x: contain;
     -webkit-overflow-scrolling: touch;
-    touch-action: pan-x pan-y !important;
+    touch-action: auto;
   }
 
   body.view-home .home-page .mobile-genre-track-row {
     overflow-x: auto !important;
     overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
-    touch-action: pan-x !important;
+    touch-action: auto;
   }
 
   body.view-home .home-page .mobile-recents-row .mobile-genre-track {
