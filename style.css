@@ -18,6 +18,7 @@
   body.mini-player-visible .mini-player-title,
   body.mini-player-visible .mini-player-artist {
     position: relative;
+    overflow: visible;
     display: block;
     width: 100%;
     max-width: 100%;
@@ -1699,7 +1700,7 @@ body.view-rises-from-mini.view-now-playing .player-view {
   .mini-player-title.is-marquee::before,
   .mini-player-artist.is-marquee::before {
     position: absolute;
-    top: 0;
+    top: 0.3rem;
     left: 0;
     width: max-content;
     white-space: nowrap;
@@ -5823,7 +5824,7 @@ body.has-lyrics .lyrics-panel {
     min-height: 0;
     flex-direction: column;
     align-items: stretch;
-    gap: 0.8rem;
+    gap: 0.15rem;
     padding: 1.15rem 1rem 0;
     overflow: hidden;
     text-align: left;
@@ -7355,7 +7356,7 @@ img {
   .mobile-search-result-row img {
     display: block;
     width: 3.35rem;
-    height: 3.35rem;
+    height: 2.8rem;
     border-radius: 0.45rem;
     object-fit: cover;
   }
@@ -9351,8 +9352,47 @@ body.view-home {
 
 /* Playback companion for the otherwise unused right edge of very wide Home
    layouts. It is deliberately absent once the window enters compact desktop. */
+@media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) {
+  /* Keep the existing viewport height; include dock clearance in the actual
+     scrollable grid instead of clipping more rows by shrinking its parent. */
+  body.mini-player-visible.view-home.desktop-library-active .home-page .genre-results,
+  body.mini-player-visible.view-home .home-page:has(.genre-results.favourites-list-layout) .genre-results.favourites-list-layout,
+  body.mini-player-visible.view-home .home-page:has(.catalog-search input:not(:placeholder-shown)) .genre-results {
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+    scroll-padding-bottom: 2rem;
+  }
+
+  body.mini-player-visible.view-home.desktop-library-active .home-page .genre-results::after,
+  body.mini-player-visible.view-home .home-page .genre-results.favourites-list-layout::after,
+  body.mini-player-visible.view-home .home-page:has(.catalog-search input:not(:placeholder-shown)) .genre-results::after {
+    content: '';
+    display: block;
+    grid-column: 1 / -1;
+    height: 2rem;
+    pointer-events: none;
+  }
+
+  body.mini-player-visible.view-home .home-page .genre-results::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 .desktop-home-side-panel { display: none; }
 @media (min-width: 110rem) and (pointer: fine) and (any-pointer: fine) {
+  @media (prefers-reduced-motion: no-preference) {
+    body.view-home.mini-player-panel-shift:not(.desktop-library-active) .home-page .site-page-content {
+      transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    body.view-home.mini-player-panel-shift:not(.desktop-library-active) .desktop-profile-button,
+    body.view-home.mini-player-panel-shift:not(.desktop-library-active) .desktop-welcome-greeting {
+      transition: right 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+  }
+
   /* Reserve a real column for the companion rather than allowing it to cover
      the search field or the last cards in each shelf. */
   body.view-home.playback-active:not(.desktop-library-active) .home-page .site-page-content {
@@ -9362,7 +9402,9 @@ body.view-home {
     transform: translateX(-8.25rem);
   }
 
-  body.view-home:not(.desktop-library-active) .desktop-home-side-panel {
+  /* Keep the offscreen state rendered across views so returning Home during
+     playback can transition in from the right. */
+  .desktop-home-side-panel {
     position: fixed;
     z-index: 5;
     top: 0;
@@ -9393,8 +9435,14 @@ body.view-home {
     transition-delay: 0s;
   }
 
+  /* Navigation must not leave the outgoing rail fading over another view. */
+  body:not(.view-home) .desktop-home-side-panel,
+  body.desktop-library-active .desktop-home-side-panel {
+    transition: none;
+  }
+
   @media (prefers-reduced-motion: reduce) {
-    body.view-home:not(.desktop-library-active) .desktop-home-side-panel {
+    .desktop-home-side-panel {
       transition: none;
     }
   }
@@ -9414,7 +9462,7 @@ body.view-home {
     gap: 0.2rem;
     padding: 0.35rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-    background: rgba(255, 255, 255, 0.045);
+    background: transparent;
   }
 
   .desktop-home-side-tabs button {
@@ -9499,6 +9547,7 @@ body.view-home {
   }
 
   .desktop-home-up-next {
+    position: relative;
     display: grid;
     gap: 0.8rem;
     margin: 0.75rem 0 0;
@@ -9513,9 +9562,35 @@ body.view-home {
 
   .desktop-home-up-next li {
     display: grid;
-    grid-template-columns: 2.8rem minmax(0, 1fr);
+    grid-template-columns: 2.8rem minmax(0, 1fr) 1.75rem;
     gap: 0.65rem;
     align-items: center;
+    position: relative;
+    padding: 0;
+    border-radius: 0.35rem;
+    background: transparent;
+    transition: background-color 0.18s ease, transform 0.18s ease, opacity 0.18s ease;
+  }
+  .desktop-home-up-next li.is-queued:hover { background: rgba(255, 255, 255, 0.12); }
+  .desktop-home-up-next li.is-dragging {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.01);
+    background: rgba(255, 255, 255, 0.14);
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.35);
+  }
+  .desktop-home-up-next li.is-current { background: transparent; }
+  .desktop-home-up-next li.is-queued { cursor: grab; }
+  .desktop-home-up-next li.is-queued:active { cursor: grabbing; }
+  .desktop-home-up-next li.is-queued { user-select: none; touch-action: none; }
+  .desktop-home-up-next li.is-queued { -webkit-user-drag: element; }
+  .desktop-home-up-next .is-pointer-dragging {
+    position: absolute;
+    z-index: 4;
+    pointer-events: none;
+    opacity: 1;
+    transform: scale(1.02);
+    background: rgba(45, 45, 48, 0.98);
+    box-shadow: 0 0.7rem 1.4rem rgba(0, 0, 0, 0.42);
   }
   .desktop-home-up-next img {
     width: 2.8rem;
@@ -9525,11 +9600,28 @@ body.view-home {
     background: #252525;
   }
   .desktop-home-up-next li > div { display: grid; min-width: 0; gap: 0.22rem; }
+  .desktop-home-queue-remove {
+    display: grid;
+    place-items: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    border: 0;
+    border-radius: 0.3rem;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.5);
+    opacity: 0;
+    cursor: pointer;
+    transition: opacity 0.18s ease, color 0.18s ease, background-color 0.18s ease;
+  }
+  .desktop-home-up-next li.is-queued:hover .desktop-home-queue-remove,
+  .desktop-home-up-next li.is-queued:focus-within .desktop-home-queue-remove { opacity: 1; }
+  .desktop-home-queue-remove:hover { color: #ff1744; background: rgba(255, 255, 255, 0.1); }
+  .desktop-home-queue-remove svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
   .desktop-home-up-next li.is-current strong,
   .desktop-home-up-next li.is-current span { color: var(--liked-folder-color, #ff1744); }
   .desktop-home-up-next li.is-current img {
-    outline: 1px solid var(--liked-folder-color, #ff1744);
-    outline-offset: 2px;
+    outline: 0;
+    border-right: 0;
   }
   .desktop-home-up-next strong {
     overflow: hidden;
