@@ -49,7 +49,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=839">
+  <link rel="stylesheet" href="style.css?v=845">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -1015,7 +1015,7 @@
   </aside>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
-  <script src="script.js?v=98"></script>
+  <script src="script.js?v=100"></script>
   <script src="ondemand-player.js?v=246"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
@@ -5525,6 +5525,9 @@
       updateDesktopLibraryHero();
       moveLikedFolderControls(true);
       loadGenre('you-like');
+      document.body.style.setProperty('--view-slide-dir', '1');
+      replayEntrance('.home-page', 'viewSlideIn');
+      replayEntrance('.mini-player', 'miniPlayerDockIn');
     }
 
     function restoreMobileLikedSongsHeading() {
@@ -5567,6 +5570,7 @@
         void homePage.offsetWidth;
         homePage.style.animation = '';
       }
+      replayEntrance('.mini-player', 'miniPlayerDockIn');
       scheduleHomeRefresh();
       void loadMobileHomeGenres();
     }
@@ -5812,7 +5816,25 @@
     // brings the new page in from the right, going back from the left.
     const VIEW_ORDER = ['home', 'now-playing', 'about', 'library'];
 
+    function replayEntrance(selector, animationName) {
+      if (animationName === 'miniPlayerDockIn') {
+        document.body.classList.remove('mini-player-panel-shift');
+      }
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      const element = document.querySelector(selector);
+      if (!element) return;
+      const names = getComputedStyle(element).animationName.split(',').map((name) => name.trim());
+      if (!names.includes(animationName)) return;
+      // Finished animations without a fill mode disappear from getAnimations().
+      // Remove and restore the CSS name to create a fresh entrance every time.
+      const previousName = element.style.animationName;
+      element.style.animationName = names.map((name) => name === animationName ? 'none' : name).join(', ');
+      void element.offsetWidth;
+      element.style.animationName = previousName;
+    }
+
     function applyView(view) {
+      document.body.classList.remove('mini-player-panel-shift');
       const previousView = document.body.classList.contains('view-library')
         ? 'library'
         : VIEW_ORDER.find((name) => document.body.classList.contains(`view-${name}`));
@@ -5834,6 +5856,9 @@
       );
       document.body.classList.add(`view-${view}`);
       if (view === 'library') document.body.classList.add('view-home');
+      if (previousView !== view && view !== 'now-playing') {
+        replayEntrance('.mini-player', 'miniPlayerDockIn');
+      }
       if (view !== 'home') document.body.classList.remove('library-playlist-open');
       if (view !== 'home' && view !== 'library') document.getElementById('likedSongsHeader').hidden = true;
       markCurrentView(view);
