@@ -49,7 +49,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=887">
+  <link rel="stylesheet" href="style.css?v=888">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -4330,7 +4330,7 @@
     function syncSpotlightBackdrop() {
       cancelAnimationFrame(spotlightBackdropFrame);
       spotlightBackdropFrame = requestAnimationFrame(() => {
-        if (!desktopNavigation.matches || artistSpotlight.hidden || !artistSpotlight.getClientRects().length) return;
+        if (artistSpotlight.hidden || !artistSpotlight.getClientRects().length) return;
         const shelves = document.getElementById('mobileGenreShelves');
         const recents = shelves.querySelector('.mobile-recents-row');
         const edge = recents ? recents.getBoundingClientRect().top : artistSpotlight.getBoundingClientRect().bottom;
@@ -4359,7 +4359,7 @@
     const spotlightCache = new Map();
 
     async function showArtistSpotlight(index, tried = 0) {
-      if (!spotlightArtists.length || !desktopNavigation.matches) return;
+      if (!spotlightArtists.length) return;
       if (tried >= spotlightArtists.length) {
         // Every artist tried — none had a Wikipedia image; keep section visible without portrait
         return;
@@ -4393,6 +4393,12 @@
       const portraitImage = portraitResult.status === 'fulfilled' ? portraitResult.value : '';
       const portraitUrl = infoImage || portraitImage;
       if (!portraitUrl) {
+        if (window.matchMedia('(max-width: 56.24rem)').matches && entry.songs?.length) {
+          spotlightSong = entry.songs[0];
+          artistSpotlight.querySelector('.artist-spotlight-title').textContent = spotlightSong.trackName;
+          artistSpotlight.querySelector('.artist-spotlight-name').textContent = entry.artist;
+          artistSpotlight.hidden = false;
+        }
         // Artist image not found — loop to next artist
         void showArtistSpotlight((spotlightIndex + 1) % spotlightArtists.length, tried + 1);
         return;
@@ -4417,7 +4423,7 @@
 
     let spotlightChartRequest = 0;
     async function updateArtistSpotlight(shelves) {
-      if (!desktopNavigation.matches) return;
+      if (!desktopNavigation.matches && !window.matchMedia('(max-width: 56.24rem)').matches) return;
       if (shelves.firstElementChild !== artistSpotlight) shelves.prepend(artistSpotlight);
       const history = window.getOnDemandPlaybackHistory?.() || [];
       const taste = history.length ? history : window.getOnDemandTasteProfile?.() || [];
@@ -4453,7 +4459,7 @@
         .replace(/[\u0300-\u036f]/g, '')
         .toLocaleLowerCase()
         .replace(/[^\p{L}\p{N}]/gu, '');
-      const artists = rankedArtists.map((entry) => ({
+      let artists = rankedArtists.map((entry) => ({
         ...entry,
         songs: entry.songs.filter((song) => {
           const key = normalizeSpotlightSong(song.trackName);
@@ -4462,6 +4468,16 @@
           return true;
         })
       })).filter((entry) => entry.songs.length).slice(0, 5);
+      if (!artists.length && chart.length && window.matchMedia('(max-width: 56.24rem)').matches) {
+        const fallbackSong = chart.find((song) => song?.trackName && (song.artistName || song.artist));
+        if (fallbackSong) {
+          artists = [{
+            artist: String(fallbackSong.artistName || fallbackSong.artist).trim(),
+            score: 0,
+            songs: [fallbackSong]
+          }];
+        }
+      }
       const signature = genre + ':' + artists.map((entry) => entry.artist + ':' + entry.songs.map((song) => song.providerTrackId || song.trackName).join(',')).join('|');
       if (signature === spotlightSignature) return;
       spotlightSignature = signature;
@@ -4509,6 +4525,19 @@
       const shelves = document.getElementById('mobileGenreShelves');
       if (!shelves) return;
       updateArtistSpotlight(shelves);
+      if (!desktopNavigation.matches && artistSpotlight.hidden) {
+        const firstMobileTrack = [...shelves.querySelectorAll('.mobile-genre-track')]
+          .find((card) => !card.classList.contains('mobile-genre-loading-card') &&
+            !card.closest('.mobile-recents-row'))?.__onDemandSong;
+        if (firstMobileTrack?.trackName && firstMobileTrack?.artistName) {
+          spotlightSong = firstMobileTrack;
+          artistSpotlight.querySelector('.artist-spotlight-eyebrow').textContent = 'PICKED FOR YOU';
+          artistSpotlight.querySelector('.artist-spotlight-title').textContent = firstMobileTrack.trackName;
+          artistSpotlight.querySelector('.artist-spotlight-name').textContent = firstMobileTrack.artistName;
+          artistSpotlight.hidden = false;
+          shelves.prepend(artistSpotlight);
+        }
+      }
       syncSpotlightBackdrop();
       const songs = window.getOnDemandHistory?.() || [];
       const isDesktop = window.matchMedia('(min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine)').matches;
@@ -4567,6 +4596,9 @@
       updateMobileHomeTint();
       updateDesktopHomeTint();
       updateDesktopLibraryFolder();
+      if (!desktopNavigation.matches && artistSpotlight.parentElement === shelves) {
+        shelves.prepend(artistSpotlight);
+      }
     }
 
     window.addEventListener('resize', () => {

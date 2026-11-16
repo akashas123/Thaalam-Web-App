@@ -456,6 +456,81 @@ body.view-now-playing::after {
 .artist-spotlight,
 .artist-spotlight-portrait { display: none; }
 
+@media (max-width: 56.24rem) {
+  .artist-spotlight:not([hidden]) {
+    position: relative;
+    display: flex;
+    min-height: clamp(19rem, 62vw, 25rem);
+    align-items: flex-end;
+    isolation: isolate;
+    overflow: hidden;
+    padding: 2rem 1rem 2.2rem;
+    background: transparent;
+  }
+  body.view-home .artist-spotlight-portrait:not([hidden]) {
+    display: block;
+    position: fixed;
+    z-index: 0;
+    top: 0;
+    right: 0;
+    bottom: auto;
+    left: 0;
+    width: 100%;
+    height: min(32rem, 78vh);
+    object-fit: cover;
+    object-position: center 20%;
+    pointer-events: none;
+    filter: grayscale(1) brightness(.56);
+    opacity: var(--spotlight-scroll-opacity, 1);
+    transition: opacity 180ms linear;
+    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 48%, rgba(0,0,0,.72) 70%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 0%, #000 48%, rgba(0,0,0,.72) 70%, transparent 100%);
+  }
+  .artist-spotlight-copy {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    color: #fff;
+  }
+  .artist-spotlight-eyebrow {
+    margin: 0 0 .8rem;
+    color: #c8c8cc;
+    font-size: .62rem;
+    font-weight: 700;
+    letter-spacing: .16em;
+  }
+  .home-page .artist-spotlight-title {
+    max-width: 100%;
+    font-size: clamp(1.65rem, 7vw, 2.5rem);
+  }
+  .artist-spotlight-name { margin: .65rem 0 1.15rem; font-size: .92rem; color: #d6d6da; }
+  .artist-spotlight-listen {
+    display: inline-flex;
+    align-items: center;
+    gap: .55rem;
+    padding: .72rem 1.15rem;
+    border: 0;
+    border-radius: 999px;
+    background: var(--liked-folder-color, #ff1744);
+    color: #fff;
+    font: inherit;
+    font-size: .8rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .artist-spotlight-listen:hover,
+  .artist-spotlight-listen:focus-visible {
+    background: color-mix(in srgb, var(--liked-folder-color, #ff1744) 84%, black);
+  }
+  .artist-spotlight-status { margin: .55rem 0 0; font-size: .72rem; }
+}
+
+@media (max-width: 56.24rem) {
+  body.view-home .mobile-genre-shelves > .artist-spotlight:not([hidden]) {
+    display: flex !important;
+  }
+}
+
 @media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) {
   .artist-spotlight:not([hidden]) {
     position: relative;
