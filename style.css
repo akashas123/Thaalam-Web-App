@@ -9381,6 +9381,13 @@ body.view-home {
 
 .desktop-home-side-panel { display: none; }
 @media (min-width: 110rem) and (pointer: fine) and (any-pointer: fine) {
+  /* Crossing this breakpoint reveals a display:none panel, which cannot
+     start a transition. An entrance animation also runs on maximize. */
+  @keyframes desktopHomeSidePanelIn {
+    from { opacity: 0; transform: translateX(100%); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
   @media (prefers-reduced-motion: no-preference) {
     body.view-home.mini-player-panel-shift:not(.desktop-library-active) .home-page .site-page-content {
       transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1),
@@ -9433,6 +9440,7 @@ body.view-home {
     visibility: visible;
     pointer-events: auto;
     transition-delay: 0s;
+    animation: desktopHomeSidePanelIn 0.8s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   /* Navigation must not leave the outgoing rail fading over another view. */
@@ -9444,6 +9452,10 @@ body.view-home {
   @media (prefers-reduced-motion: reduce) {
     .desktop-home-side-panel {
       transition: none;
+    }
+
+    body.view-home.playback-active:not(.desktop-library-active) .desktop-home-side-panel {
+      animation: none;
     }
   }
 
