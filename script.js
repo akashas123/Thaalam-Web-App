@@ -322,6 +322,10 @@ function setVisualState(isPlaying) {
   }
 
   document.body.classList.toggle('mini-player-visible', hasStartedPlayback);
+  if (document.body.classList.contains('playback-active') !== Boolean(isPlaying)) {
+    document.body.classList.add('mini-player-panel-shift');
+  }
+  document.body.classList.toggle('playback-active', isPlaying);
   miniPlayer?.classList.toggle('is-playing', isPlaying);
   if (miniPlayer) miniPlayer.hidden = !hasStartedPlayback;
   playButton?.setAttribute('aria-label', isPlaying ? 'Pause' : 'Play');
