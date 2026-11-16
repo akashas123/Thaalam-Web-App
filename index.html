@@ -1016,7 +1016,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="script.js?v=100"></script>
-  <script src="ondemand-player.js?v=251"></script>
+  <script src="ondemand-player.js?v=253"></script>
   <script src="audio-recovery.js?v=3"></script>
   <script src="marquee.js?v=4"></script>
   <script src="media-metadata.js?v=18"></script>
@@ -4364,8 +4364,9 @@
         // Every artist tried — none had a Wikipedia image; keep section visible without portrait
         return;
       }
-      spotlightIndex = index;
+      spotlightIndex = ((index % spotlightArtists.length) + spotlightArtists.length) % spotlightArtists.length;
       const entry = spotlightArtists[spotlightIndex];
+      if (!entry?.artist || !entry.songs?.length) return;
       const request = ++spotlightRequest;
       if (!spotlightCache.has(entry.artist)) {
         spotlightCache.set(entry.artist, Promise.allSettled([
@@ -4441,7 +4442,26 @@
           ranked.set(key, entry);
         });
       });
-      const artists = [...ranked.values()].sort((a, b) => b.score - a.score).slice(0, 5);
+      const rankedArtists = [...ranked.values()].sort((a, b) => b.score - a.score);
+      // Collaborations are split into artist tokens above, which can place the
+      // same track under multiple artists. A spotlight card must represent one
+      // song and one artist only, and a track must never return later in the
+      // same spotlight rotation under a different credited artist.
+      const usedSpotlightSongs = new Set();
+      const normalizeSpotlightSong = (value) => String(value || '')
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLocaleLowerCase()
+        .replace(/[^\p{L}\p{N}]/gu, '');
+      const artists = rankedArtists.map((entry) => ({
+        ...entry,
+        songs: entry.songs.filter((song) => {
+          const key = normalizeSpotlightSong(song.trackName);
+          if (!key || usedSpotlightSongs.has(key)) return false;
+          usedSpotlightSongs.add(key);
+          return true;
+        })
+      })).filter((entry) => entry.songs.length).slice(0, 5);
       const signature = genre + ':' + artists.map((entry) => entry.artist + ':' + entry.songs.map((song) => song.providerTrackId || song.trackName).join(',')).join('|');
       if (signature === spotlightSignature) return;
       spotlightSignature = signature;
