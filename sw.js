@@ -1,6 +1,8 @@
-const CACHE_NAME = 'thaalam-24x7-v1211';
+const CACHE_NAME = 'thaalam-24x7-v1212';
 const ALBUM_ART_CACHE_NAME = 'thaalam-album-art-v2';
 const ALBUM_ART_CACHE_LIMIT = 240;
+const ARTIST_IMAGE_CACHE_NAME = 'thaalam-artist-image-v1';
+const ARTIST_IMAGE_CACHE_LIMIT = 240;
 
 const APP_FILES = [
   './',
@@ -41,7 +43,7 @@ self.addEventListener('activate', (event) => {
       .then((cacheNames) => Promise.all(
         cacheNames
           .filter((cacheName) =>
-            cacheName !== CACHE_NAME && cacheName !== ALBUM_ART_CACHE_NAME
+            cacheName !== CACHE_NAME && cacheName !== ALBUM_ART_CACHE_NAME && cacheName !== ARTIST_IMAGE_CACHE_NAME
           )
           .map((cacheName) => caches.delete(cacheName))
       ))
@@ -63,7 +65,16 @@ self.addEventListener('fetch', (event) => {
     if (
       !url.hostname.endsWith('.mzstatic.com') ||
       !url.pathname.includes('/image/thumb/')
-    ) return;
+    ) {
+      if (
+        (url.hostname.endsWith('wikimedia.org') || url.hostname.endsWith('wikipedia.org')) &&
+        url.pathname.includes('/')
+      ) {
+        event.respondWith(fetchAndCacheArtistImage(request));
+        return;
+      }
+      return;
+    }
 
     event.respondWith(fetchAndCacheAlbumArt(request));
     return;
@@ -123,6 +134,32 @@ async function fetchAndCacheAlbumArt(request) {
       const expiredRequests = cachedRequests.slice(
         0,
         Math.max(0, cachedRequests.length - ALBUM_ART_CACHE_LIMIT + 1)
+      );
+      await Promise.all(expiredRequests.map((cachedRequest) => cache.delete(cachedRequest)));
+      await cache.put(request, response.clone());
+    } catch {
+    }
+  }
+  return response;
+}
+
+async function fetchAndCacheArtistImage(request) {
+  let cache;
+  try {
+    cache = await caches.open(ARTIST_IMAGE_CACHE_NAME);
+    const cachedResponse = await cache.match(request);
+    if (cachedResponse) return cachedResponse;
+  } catch {
+    return fetch(request);
+  }
+
+  const response = await fetch(request);
+  if (response.ok || response.type === 'opaque') {
+    try {
+      const cachedRequests = await cache.keys();
+      const expiredRequests = cachedRequests.slice(
+        0,
+        Math.max(0, cachedRequests.length - ARTIST_IMAGE_CACHE_LIMIT + 1)
       );
       await Promise.all(expiredRequests.map((cachedRequest) => cache.delete(cachedRequest)));
       await cache.put(request, response.clone());

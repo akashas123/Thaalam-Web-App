@@ -464,7 +464,7 @@ body.view-now-playing::after {
     align-items: center;
     isolation: isolate;
     min-height: clamp(16rem, 32vh, 20rem);
-    overflow: hidden;
+    overflow: visible;
     background: transparent;
     border-radius: 0;
   }
@@ -487,6 +487,7 @@ body.view-now-playing::after {
   .artist-spotlight-copy {
     width: 66%;
     padding: 1.25rem 0 3rem;
+    overflow: visible;
     color: #fff;
   }
   .artist-spotlight-eyebrow {
@@ -522,6 +523,9 @@ body.view-now-playing::after {
     font-size: 0.85rem;
     font-weight: 700;
     cursor: pointer;
+    position: sticky;
+    top: 0.5rem;
+    z-index: 10;
   }
   .artist-spotlight-listen:hover { background: color-mix(in srgb, var(--liked-folder-color) 84%, black); }
   .artist-spotlight-listen:disabled { opacity: 0.6; cursor: wait; }

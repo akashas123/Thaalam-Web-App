@@ -1877,7 +1877,7 @@
       const results = searchData.query?.search || [];
       const article = results.find((result) =>
         normalize(result.title) === normalize(artistName)
-      ) || results[0];
+      );
       if (!article) {
         artistInfoCache.set(cacheKey, null);
         saveStoredArtistInfo(cacheKey, null);
@@ -1954,6 +1954,7 @@
 
           const portrait = document.createElement('img');
           portrait.src = portraitUrl;
+      portrait.onerror = () => { portrait.hidden = true; };
           portrait.alt = '';
           portrait.loading = 'lazy';
           portrait.decoding = 'async';
@@ -4307,12 +4308,7 @@
         <button class="artist-spotlight-listen" type="button"><span aria-hidden="true">▶</span> Listen now</button>
         <p class="artist-spotlight-status" role="status"></p>
       </div>
-      <div class="artist-spotlight-controls">
-        <button type="button" data-spotlight="previous" aria-label="Previous featured artist">←</button>
-        <span class="artist-spotlight-count"></span>
-        <button type="button" data-spotlight="next" aria-label="Next featured artist">→</button>
-        <button type="button" data-spotlight="pause" aria-label="Pause artist rotation" aria-pressed="false">Ⅱ</button>
-      </div>`;
+`;
     // Keep the backdrop outside the scrolling shelves so it reaches the viewport top.
     const spotlightPortrait = artistSpotlight.querySelector('img');
     spotlightPortrait.hidden = true;
@@ -4342,43 +4338,47 @@
     let spotlightSong = null;
     let spotlightRequest = 0;
     let spotlightSignature = '';
-    let spotlightPaused = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const spotlightCache = new Map();
-    const spotlightPause = artistSpotlight.querySelector('[data-spotlight="pause"]');
-    function syncSpotlightPause() {
-      spotlightPause.textContent = spotlightPaused ? '▶' : 'Ⅱ';
-      spotlightPause.setAttribute('aria-pressed', String(spotlightPaused));
-      spotlightPause.setAttribute('aria-label', spotlightPaused ? 'Resume artist rotation' : 'Pause artist rotation');
-    }
-    syncSpotlightPause();
 
-    async function showArtistSpotlight(index) {
+    async function showArtistSpotlight(index, tried = 0) {
       if (!spotlightArtists.length || !desktopNavigation.matches) return;
-      spotlightIndex = (index + spotlightArtists.length) % spotlightArtists.length;
+      if (tried >= spotlightArtists.length) {
+        // Every artist tried — none had a Wikipedia image; keep section visible without portrait
+        return;
+      }
+      spotlightIndex = index;
       const entry = spotlightArtists[spotlightIndex];
       const request = ++spotlightRequest;
       if (!spotlightCache.has(entry.artist)) {
         spotlightCache.set(entry.artist, Promise.allSettled([
-          getWikipediaArtistInfo(entry.artist)
+          getWikipediaArtistInfo(entry.artist),
+          fetchWikipediaArtistPortrait(entry.artist)
         ]));
       }
-      const [portraitResult] = await spotlightCache.get(entry.artist);
+      const [infoResult, portraitResult] = await spotlightCache.get(entry.artist);
       if (request !== spotlightRequest) return;
+      const infoImage = infoResult.status === 'fulfilled' ? infoResult.value?.image : '';
+      const portraitImage = portraitResult.status === 'fulfilled' ? portraitResult.value : '';
+      const portraitUrl = infoImage || portraitImage;
+      if (!portraitUrl) {
+        // Artist image not found — loop to next artist
+        void showArtistSpotlight((spotlightIndex + 1) % spotlightArtists.length, tried + 1);
+        return;
+      }
       const choices = entry.songs;
-      if (!choices.length) return;
+      if (!choices.length) {
+        void showArtistSpotlight((spotlightIndex + 1) % spotlightArtists.length, tried + 1);
+        return;
+      }
       spotlightSong = choices[Math.floor(Math.random() * choices.length)];
       artistSpotlight.querySelector('.artist-spotlight-title').textContent = spotlightSong.trackName;
       artistSpotlight.querySelector('.artist-spotlight-name').textContent = entry.artist;
-      artistSpotlight.querySelector('.artist-spotlight-count').textContent = `${spotlightIndex + 1} / ${spotlightArtists.length}`;
       artistSpotlight.querySelector('.artist-spotlight-status').textContent = '';
       const portrait = spotlightPortrait;
-      const portraitUrl = portraitResult.status === 'fulfilled' ? portraitResult.value?.image : '';
-      const artworkUrl = portraitUrl || spotlightSong.artworkUrl100;
-      portrait.hidden = !artworkUrl;
-      portrait.alt = portraitUrl ? `${entry.artist} portrait` : `${spotlightSong.trackName} artwork`;
+      portrait.hidden = false;
+      portrait.alt = `${entry.artist} portrait`;
+      portrait.src = portraitUrl;
       portrait.onerror = () => { portrait.hidden = true; };
-      if (artworkUrl) portrait.src = artworkUrl;
-      else portrait.removeAttribute('src');
       artistSpotlight.hidden = false;
       syncSpotlightBackdrop();
     }
@@ -4422,6 +4422,7 @@
         artistSpotlight.hidden = true;
         return;
       }
+      artistSpotlight.hidden = false;
       void showArtistSpotlight(0);
     }
     artistSpotlight.querySelector('.artist-spotlight-listen').addEventListener('click', async () => {
@@ -4434,18 +4435,8 @@
         artistSpotlight.querySelector('.artist-spotlight-status').textContent = 'Could not play this song. Try another pick.';
       } finally { button.disabled = false; }
     });
-    artistSpotlight.querySelectorAll('[data-spotlight]').forEach((button) => {
-      button.addEventListener('click', () => {
-        if (button.dataset.spotlight === 'pause') {
-          spotlightPaused = !spotlightPaused;
-          syncSpotlightPause();
-        } else {
-          void showArtistSpotlight(spotlightIndex + (button.dataset.spotlight === 'next' ? 1 : -1));
-        }
-      });
-    });
     window.setInterval(() => {
-      if (spotlightPaused || document.hidden || spotlightArtists.length < 2 ||
+      if (document.hidden || spotlightArtists.length < 2 ||
           !artistSpotlight.getClientRects().length || artistSpotlight.matches(':hover, :focus-within')) return;
       void showArtistSpotlight(spotlightIndex + 1);
     }, 12000);
