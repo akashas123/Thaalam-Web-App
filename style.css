@@ -9351,6 +9351,33 @@ body.view-home {
 
 /* Playback companion for the otherwise unused right edge of very wide Home
    layouts. It is deliberately absent once the window enters compact desktop. */
+@media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) {
+  /* Keep the existing viewport height; include dock clearance in the actual
+     scrollable grid instead of clipping more rows by shrinking its parent. */
+  body.mini-player-visible.view-home.desktop-library-active .home-page .genre-results,
+  body.mini-player-visible.view-home .home-page:has(.genre-results.favourites-list-layout) .genre-results.favourites-list-layout,
+  body.mini-player-visible.view-home .home-page:has(.catalog-search input:not(:placeholder-shown)) .genre-results {
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+    scroll-padding-bottom: 2rem;
+  }
+
+  body.mini-player-visible.view-home.desktop-library-active .home-page .genre-results::after,
+  body.mini-player-visible.view-home .home-page .genre-results.favourites-list-layout::after,
+  body.mini-player-visible.view-home .home-page:has(.catalog-search input:not(:placeholder-shown)) .genre-results::after {
+    content: '';
+    display: block;
+    grid-column: 1 / -1;
+    height: 2rem;
+    pointer-events: none;
+  }
+
+  body.mini-player-visible.view-home .home-page .genre-results::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 .desktop-home-side-panel { display: none; }
 @media (min-width: 110rem) and (pointer: fine) and (any-pointer: fine) {
   @media (prefers-reduced-motion: no-preference) {
