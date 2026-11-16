@@ -625,7 +625,7 @@ function recordCompletedTasteTrack() {
       trackName: String(song.trackName),
       artistName: String(song.artistName || ''),
       collectionName: String(song.collectionName || ''),
-      artworkUrl100: String(song.artworkUrl100 || ''),
+      artworkUrl100: normalizeArtworkUrl(song.artworkUrl100),
       language: String(song.language || ''),
       primaryGenreName: String(song.primaryGenreName || ''),
       playedAt: Date.now()
@@ -757,7 +757,7 @@ function rememberOnDemandPlayback(song) {
     trackName: String(song.trackName),
     artistName: String(song.artistName || ''),
     collectionName: String(song.collectionName || ''),
-    artworkUrl100: String(song.artworkUrl100 || ''),
+    artworkUrl100: normalizeArtworkUrl(song.artworkUrl100),
     trackTimeMillis: Number(song.trackTimeMillis) || 0,
     language: String(song.language || ''),
     primaryGenreName: String(song.primaryGenreName || ''),
@@ -2321,6 +2321,12 @@ async function loadTrack(candidate, requestId, startSeconds = 0, shouldPlay = tr
   }
 }
 
+function normalizeArtworkUrl(value) {
+  if (typeof value === 'string') return value;
+  if (!value || typeof value !== 'object') return '';
+  return String(value.url || value.href || value.source || value.artworkUrl100 || '').trim();
+}
+
 function updateOnDemandMetadata(song, track) {
   track = track || {};
   const title = song?.trackName || track.title || 'Unknown song';
@@ -2336,8 +2342,8 @@ function updateOnDemandMetadata(song, track) {
     track?.releaseDate || track?.year || song?.releaseDate || song?.year || ''
   );
   if (releaseDate) song.releaseDate = releaseDate;
-  const catalogArtwork = song?.artworkUrl100
-    ?.replace(/^http:/, 'https:')
+  const catalogArtwork = normalizeArtworkUrl(song?.artworkUrl100)
+    .replace(/^http:/, 'https:')
     .replace(/\d+x\d+bb\./, '600x600bb.') || '';
   const providerArtwork = String(track.thumbnail || '').replace(/^http:/, 'https:');
   const artwork = catalogArtwork || providerArtwork;
@@ -3338,7 +3344,7 @@ async function startOnDemandSong(song, {
     trackName: String(song.trackName || '').trim(),
     artistName: String(song.artistName || '').trim(),
     collectionName: String(song.collectionName || '').trim(),
-    artworkUrl100: String(song.artworkUrl100 || '')
+    artworkUrl100: normalizeArtworkUrl(song.artworkUrl100)
   };
   if (!song.trackName) return;
   const hadProviderTrackId = Boolean(song.providerTrackId);
