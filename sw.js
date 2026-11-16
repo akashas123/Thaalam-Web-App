@@ -1,4 +1,4 @@
-const CACHE_NAME = 'thaalam-24x7-v1218';
+const CACHE_NAME = 'thaalam-24x7-v1224';
 const ALBUM_ART_CACHE_NAME = 'thaalam-album-art-v2';
 const ALBUM_ART_CACHE_LIMIT = 240;
 const ARTIST_IMAGE_CACHE_NAME = 'thaalam-artist-image-v4';
@@ -8,7 +8,7 @@ const APP_FILES = [
   './',
   './index.html',
   './Documentation/Documentation.html',
-  './style.css?v=887',
+  './style.css?v=888',
   './script.js?v=100',
   './audio-recovery.js?v=3',
   './marquee.js?v=4',
