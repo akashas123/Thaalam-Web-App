@@ -576,6 +576,8 @@ body.view-now-playing::after {
   }
   .artist-spotlight-copy {
     width: 66%;
+    min-width: 0;
+    max-width: 100%;
     padding: 1.25rem 0 3rem;
     overflow: visible;
     color: #fff;
@@ -589,6 +591,8 @@ body.view-now-playing::after {
   }
   .home-page .artist-spotlight-title {
     margin: 0;
+    width: 100%;
+    max-width: 100%;
     font-size: clamp(1.8rem, 2.7vw, 3rem);
     display: block;
     overflow: hidden;
