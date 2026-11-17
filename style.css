@@ -7426,6 +7426,7 @@ img {
     align-items: stretch;
     gap: 0.65rem;
     margin: 0 0 1rem;
+    margin-top: .7rem;
     padding-bottom: 1rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   }
@@ -7556,7 +7557,9 @@ img {
   .mobile-search-result-row img {
     display: block;
     width: 3.35rem;
-    height: 2.8rem;
+    height: 3.35rem;
+    aspect-ratio: 1 / 1;
+    flex: 0 0 3.35rem;
     border-radius: 0.45rem;
     object-fit: cover;
   }
