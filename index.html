@@ -4390,7 +4390,9 @@
         const edge = recents ? recents.getBoundingClientRect().top : artistSpotlight.getBoundingClientRect().bottom;
         const spotlightTop = artistSpotlight.getBoundingClientRect().top;
         const fadeScroll = Math.max(window.scrollY || 0, shelves.scrollTop || 0, -spotlightTop);
-        const fadeOverlap = 48;
+        // Leave enough room for the portrait mask to dissolve naturally before
+        // the shelves begin, instead of ending the image at their top edge.
+        const fadeOverlap = 180;
         const height = Math.max(0, edge + shelves.scrollTop + fadeOverlap);
         const scrollFade = Math.max(0, Math.min(1, 1 - fadeScroll / 150));
         spotlightPortrait.style.setProperty('--spotlight-backdrop-height', `${height}px`);
