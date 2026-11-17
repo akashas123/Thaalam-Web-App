@@ -9635,6 +9635,13 @@ body.view-home {
     box-sizing: border-box;
     min-width: 0;
   }
+  body.mini-player-visible:not(.view-home) .mini-player,
+  body.mini-player-visible.view-home.desktop-library-active .mini-player {
+    left: calc(50% - (100vw - min(24rem, 20vw) - 2rem) / 2) !important;
+    right: auto !important;
+    width: calc(100vw - min(24rem, 20vw) - 2rem) !important;
+    transition: left .8s cubic-bezier(.4,0,.2,1);
+  }
   body.view-home.playback-active:not(.desktop-library-active).desktop-home-side-panel-closed .mini-player {
     left: calc(50% - (100vw - min(24rem, 20vw) - 2rem) / 2) !important;
     right: auto !important;
