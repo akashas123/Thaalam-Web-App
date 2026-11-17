@@ -49,7 +49,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=898">
+  <link rel="stylesheet" href="style.css?v=914">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -1520,8 +1520,11 @@
     const GENRE_CACHE_TTL = 12 * 60 * 60 * 1000;
     const ARTIST_INFO_STORAGE_KEY = 'thaalam-catalog-artist-info-v5';
     const ARTIST_INFO_CACHE_LIMIT = 600;
+    const ARTIST_PORTRAIT_STORAGE_KEY = 'thaalam-spotlight-artist-portraits-v1';
+    const ARTIST_PORTRAIT_CACHE_LIMIT = 10;
     const ARTIST_INFO_PREFETCH_CONCURRENCY = 3;
     let storedArtistInfoRecords;
+    let storedArtistPortraitRecords;
     let catalogSongInfoRequestId = 0;
     const catalogArtworkObserver = 'IntersectionObserver' in window
       ? new IntersectionObserver((entries) => {
@@ -1839,6 +1842,42 @@
       }
     }
 
+    function getStoredArtistPortrait(key) {
+      if (!storedArtistPortraitRecords) {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(ARTIST_PORTRAIT_STORAGE_KEY) || '{}');
+          storedArtistPortraitRecords = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+            ? parsed
+            : {};
+        } catch {
+          storedArtistPortraitRecords = {};
+        }
+      }
+      const entry = storedArtistPortraitRecords[key];
+      return entry?.url || '';
+    }
+
+    function saveStoredArtistPortrait(key, url) {
+      if (!url) return;
+      try {
+        getStoredArtistPortrait(key);
+        storedArtistPortraitRecords[key] = { url, savedAt: Date.now() };
+        const oldestKeys = Object.keys(storedArtistPortraitRecords)
+          .sort((first, second) =>
+            (storedArtistPortraitRecords[first]?.savedAt || 0) -
+            (storedArtistPortraitRecords[second]?.savedAt || 0)
+          );
+        while (oldestKeys.length > ARTIST_PORTRAIT_CACHE_LIMIT) {
+          delete storedArtistPortraitRecords[oldestKeys.shift()];
+        }
+        localStorage.setItem(
+          ARTIST_PORTRAIT_STORAGE_KEY,
+          JSON.stringify(storedArtistPortraitRecords)
+        );
+      } catch {
+      }
+    }
+
     async function getWikipediaArtistInfo(artistName) {
       const cacheKey = artistName.trim().toLowerCase();
       if (artistInfoCache.has(cacheKey)) return artistInfoCache.get(cacheKey);
@@ -1921,19 +1960,27 @@
         image: isArtistPortraitUrl(page.originalimage?.source) ? page.originalimage.source : '',
         url: `https://en.wikipedia.org/?curid=${page.pageid}`
       } : null;
+      if (info?.image) saveStoredArtistPortrait(cacheKey, info.image);
       artistInfoCache.set(cacheKey, info);
       saveStoredArtistInfo(cacheKey, info);
       return info;
     }
 
     async function fetchWikipediaArtistPortrait(artistName) {
+      const cacheKey = artistName.trim().toLowerCase();
+      const cachedPortrait = getStoredArtistPortrait(cacheKey);
+      if (cachedPortrait) return cachedPortrait;
       const title = artistName.trim().replace(/\s+/g, '_');
       const response = await fetch(
         `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`
       );
       if (!response.ok) return '';
       const page = await response.json();
-      return isArtistPortraitUrl(page.originalimage?.source) ? page.originalimage.source : '';
+      const portraitUrl = isArtistPortraitUrl(page.originalimage?.source)
+        ? page.originalimage.source
+        : '';
+      saveStoredArtistPortrait(cacheKey, portraitUrl);
+      return portraitUrl;
     }
 
     function loadAboutArtistPortraits() {
