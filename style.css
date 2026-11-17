@@ -595,10 +595,11 @@ body.view-now-playing::after {
     max-width: 100%;
     font-size: clamp(1.8rem, 2.7vw, 3rem);
     display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    overflow: visible;
+    text-overflow: clip;
     white-space: nowrap;
-    line-height: 1.12;
+    line-height: 1.18;
+    padding-bottom: 0.12em;
     letter-spacing: -0.045em;
     overflow-wrap: anywhere;
     text-wrap: balance;
