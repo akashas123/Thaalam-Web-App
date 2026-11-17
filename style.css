@@ -1528,7 +1528,6 @@ body.view-rises-from-mini.view-now-playing .player-view {
     color: #fff;
     backdrop-filter: blur(0.5rem);
     -webkit-backdrop-filter: blur(0.5rem);
-    animation: miniPlayerDockIn 0.35s ease-out both;
   }
 
   /* Match the companion panel breakpoint; center the dock when it is absent. */
@@ -1556,11 +1555,6 @@ body.view-rises-from-mini.view-now-playing .player-view {
   body:has(.home-page .genre-results.favourites-list-layout) .mini-player,
   body:has(.home-page .catalog-search input:not(:placeholder-shown)) .mini-player {
     border-top: 0;
-  }
-
-  @keyframes miniPlayerDockIn {
-    from { opacity: 0; transform: translateY(calc(100% + 1.5rem)); }
-    to { opacity: 1; transform: translateY(0); }
   }
 
   body.mini-player-visible.view-home .site-page-content,
@@ -2815,8 +2809,9 @@ body.view-rises-from-mini.view-now-playing .player-view {
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.1);
     box-shadow: inset 0 1px rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(1rem);
-    -webkit-backdrop-filter: blur(1rem);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    transition: none;
   }
 
   .catalog-suggestions {
@@ -9963,6 +9958,10 @@ body.view-home {
     visibility: visible;
     pointer-events: auto;
     transition-delay: .8s, .8s;
+  }
+  body:not(.view-home) .desktop-home-side-open,
+  body.desktop-library-active .desktop-home-side-open {
+    display: none !important;
   }
   body.desktop-home-side-panel-closed.on-demand-paused .desktop-home-side-open {
     opacity: 0;
