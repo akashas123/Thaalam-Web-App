@@ -7191,7 +7191,7 @@ img {
   /* Compact desktop windows have a narrower outer gutter. Keep the Liked
      Songs back button fully inside it without changing the wide layout. */
   body.view-home.desktop-library-active #likedSongsHeader #closeLikedSongs {
-    left: -2.25rem;
+    left: -2.45rem;
   }
 
   body.view-now-playing .now-playing-track > .on-demand-like-button {
@@ -9602,14 +9602,17 @@ body.view-home {
   }
 
   @media (prefers-reduced-motion: no-preference) {
-    body.view-home.mini-player-panel-shift:not(.desktop-library-active) .home-page .site-page-content {
+    body.view-home:not(.desktop-library-active) .home-page .site-page-content {
       transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1),
         transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    body.view-home.mini-player-panel-shift:not(.desktop-library-active) .desktop-profile-button,
-    body.view-home.mini-player-panel-shift:not(.desktop-library-active) .desktop-welcome-greeting {
+    body.view-home:not(.desktop-library-active) .desktop-profile-button,
+    body.view-home:not(.desktop-library-active) .desktop-welcome-greeting {
       transition: right 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    body.view-home.playback-active:not(.desktop-library-active) .mini-player {
+      transition: left 0.8s cubic-bezier(0.4, 0, 0.2, 1);
     }
   }
 
@@ -9620,6 +9623,41 @@ body.view-home {
     /* Keep the catalogue anchored where it sat before the side column was
        introduced; a narrower centered column otherwise drifts right. */
     transform: translateX(-8.25rem);
+  }
+  body.view-home.playback-active:not(.desktop-library-active).desktop-home-side-panel-closed .home-page .site-page-content {
+    width: min(88rem, calc(100vw - 2rem));
+    transform: none;
+  }
+  body.view-home.playback-active:not(.desktop-library-active) .mini-player {
+    left: 1rem !important;
+    right: auto !important;
+    width: calc(100vw - min(24rem, 20vw) - 2rem) !important;
+    box-sizing: border-box;
+    min-width: 0;
+  }
+  body.mini-player-visible.view-home .mini-player {
+    width: calc(100vw - min(24rem, 20vw) - 2rem) !important;
+    box-sizing: border-box;
+    min-width: 0;
+  }
+  body.view-home.playback-active:not(.desktop-library-active).desktop-home-side-panel-closed .mini-player {
+    left: calc(50% - (100vw - min(24rem, 20vw) - 2rem) / 2) !important;
+    right: auto !important;
+    width: calc(100vw - min(24rem, 20vw) - 2rem) !important;
+    transform: none !important;
+    transition: left .8s cubic-bezier(.4,0,.2,1);
+  }
+  body.view-home.playback-active:not(.desktop-library-active).desktop-home-side-panel-closed .desktop-profile-button {
+    right: 1rem;
+  }
+  body.view-home.playback-active:not(.desktop-library-active).desktop-home-side-panel-closed .desktop-welcome-greeting {
+    right: 4.25rem;
+  }
+  body.view-home.desktop-home-side-panel-closed .desktop-profile-button {
+    right: 1rem;
+  }
+  body.view-home.desktop-home-side-panel-closed .desktop-welcome-greeting:not([hidden]) {
+    right: 4.25rem;
   }
 
   /* Keep the offscreen state rendered across views so returning Home during
@@ -9634,7 +9672,7 @@ body.view-home {
     grid-template-rows: auto minmax(0, 1fr);
     width: min(24rem, 20vw);
     min-width: 16rem;
-    overflow: hidden;
+    overflow: visible;
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 0;
     background: rgba(19, 19, 21, 0.9);
@@ -9646,8 +9684,9 @@ body.view-home {
     transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1),
       opacity 0.8s ease, visibility 0s linear 0.8s;
   }
+  .desktop-home-side-content { min-height: 0; overflow: hidden; }
 
-  body.view-home.playback-active:not(.desktop-library-active) .desktop-home-side-panel {
+  body.view-home.playback-active:not(.desktop-library-active):not(.desktop-home-side-panel-closed) .desktop-home-side-panel {
     opacity: 1;
     transform: translateX(0);
     visibility: visible;
@@ -9673,11 +9712,11 @@ body.view-home {
   }
 
   /* Keep account controls beside the full-height rail, never over it. */
-  body.view-home.playback-active:not(.desktop-library-active) .desktop-profile-button {
+  body.view-home.playback-active:not(.desktop-library-active):not(.desktop-home-side-panel-closed) .desktop-profile-button {
     right: calc(min(24rem, 20vw) + 1rem);
   }
 
-  body.view-home.playback-active:not(.desktop-library-active) .desktop-welcome-greeting:not([hidden]) {
+  body.view-home.playback-active:not(.desktop-library-active):not(.desktop-home-side-panel-closed) .desktop-welcome-greeting:not([hidden]) {
     right: calc(min(24rem, 20vw) + 4rem);
   }
 
@@ -9872,6 +9911,69 @@ body.view-home {
     color: rgba(255, 255, 255, 0.82);
     font: 650 0.72rem/1 system-ui, sans-serif;
     cursor: pointer;
+  }
+  .desktop-home-side-close {
+    position: absolute;
+    left: -2.45rem;
+    top: 50%;
+    width: 2.45rem;
+    height: 3.5rem;
+    transform: translateY(-50%);
+    border: 1px solid rgba(255,255,255,.16);
+    border-right: 0;
+    border-radius: .75rem 0 0 .75rem;
+    background: transparent !important;
+    box-shadow: none;
+    border-color: transparent;
+    color: rgba(255,255,255,.8);
+    font-size: 0;
+    cursor: pointer;
+  }
+  .desktop-home-side-close::before {
+    content: '‹';
+    display: block;
+    transform: translateY(-.08rem);
+    color: #fff;
+    font: 700 2rem/.8 Arial, sans-serif;
+  }
+  .desktop-home-side-close:hover { background: rgba(255,255,255,.12); color: #fff; }
+  .desktop-home-side-open {
+    position: fixed;
+    z-index: 8;
+    top: 50%;
+    right: 0;
+    display: block;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    width: 1.75rem;
+    height: 3.5rem;
+    transform: translateY(-50%);
+    border: 1px solid rgba(255,255,255,.14);
+    border-right: 0;
+    border-radius: .75rem 0 0 .75rem;
+    background: rgba(19,19,21,.92);
+    color: #fff;
+    font-size: 1.5rem;
+    cursor: pointer;
+    transition: opacity .2s ease, visibility 0s linear .2s;
+  }
+  body.desktop-home-side-panel-closed:not(.on-demand-paused) .desktop-home-side-open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition-delay: .8s, .8s;
+  }
+  body.desktop-home-side-panel-closed.on-demand-paused .desktop-home-side-open {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .desktop-home-side-open::before {
+    content: '‹';
+    display: block;
+    color: #fff;
+    font: 700 2rem/.8 Arial, sans-serif;
   }
   .desktop-home-clear-queue:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
 }
