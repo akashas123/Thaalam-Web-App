@@ -565,8 +565,8 @@ body.view-now-playing::after {
     transition: opacity 180ms linear;
     image-rendering: auto;
     will-change: opacity;
-    -webkit-mask-image: linear-gradient(to right, transparent 0%, rgba(0,0,0,.08) 24%, rgba(0,0,0,.45) 43%, #000 58%, #000 100%), linear-gradient(to bottom, #000 0%, #000 50%, rgba(0,0,0,.72) 68%, rgba(0,0,0,.12) 84%, transparent 96%);
-    mask-image: linear-gradient(to right, transparent 0%, rgba(0,0,0,.08) 24%, rgba(0,0,0,.45) 43%, #000 58%, #000 100%), linear-gradient(to bottom, #000 0%, #000 50%, rgba(0,0,0,.72) 68%, rgba(0,0,0,.12) 84%, transparent 96%);
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, rgba(0,0,0,.08) 14%, rgba(0,0,0,.45) 32%, #000 46%, #000 100%), linear-gradient(to bottom, #000 0%, #000 58%, rgba(0,0,0,.72) 74%, rgba(0,0,0,.12) 89%, transparent 99%);
+    mask-image: linear-gradient(to right, transparent 0%, rgba(0,0,0,.08) 14%, rgba(0,0,0,.45) 32%, #000 46%, #000 100%), linear-gradient(to bottom, #000 0%, #000 58%, rgba(0,0,0,.72) 74%, rgba(0,0,0,.12) 89%, transparent 99%);
     -webkit-mask-composite: destination-in;
     mask-composite: intersect;
     -webkit-mask-repeat: no-repeat;
