@@ -1117,7 +1117,7 @@ html.is-restoring-session .app-loader {
   color: #fff;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   font-weight: 700;
-  font-size: clamp(1rem, 1.35vw, 1.25rem);
+  font-size: clamp(0.95rem, 1.15vw, 1.08rem);
   line-height: 1;
   cursor: pointer;
   box-shadow: 0 0.35rem 1rem rgba(0, 0, 0, 0.35);
@@ -1131,8 +1131,8 @@ html.is-restoring-session .app-loader {
   opacity: 0.92;
 }
 .login-button-icon {
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2.1rem;
+  height: 2.1rem;
   display: block;
   box-sizing: border-box;
   transform: translateY(0.06rem);
@@ -1169,17 +1169,18 @@ html.is-restoring-session .app-loader {
   .login-heading {
     margin: 0 0 0.75rem;
     width: 100%;
-    font-size: clamp(1.25rem, 6vw, 2rem);
+    font-size: clamp(1.3rem, 6.5vw, 2.15rem);
     letter-spacing: -0.045em;
     line-height: 1.08;
     transform: none;
     white-space: nowrap !important;
-    overflow: hidden;
+    overflow: visible;
     text-overflow: clip;
+    padding-bottom: 0.12em;
   }
 
   .login-subtitle {
-    margin: 0 0 1.05rem;
+    margin: 0 0 1.2rem;
     color: rgba(255, 255, 255, 0.86);
     font-size: clamp(0.7rem, 3vw, 0.82rem);
     line-height: 1.4;
@@ -1189,12 +1190,18 @@ html.is-restoring-session .app-loader {
     width: min(64%, 14rem);
     min-width: 9.5rem;
     padding: 0.56rem 0.72rem;
-    font-size: 0.78rem;
+    font-size: 0.88rem;
+    line-height: 1;
+    gap: 0.16rem;
   }
 
   .login-button-icon {
-    width: 1.55rem;
-    height: 1.55rem;
+    width: 1.65rem;
+    height: 1.65rem;
+    flex: 0 0 auto;
+    align-self: center;
+    margin: 0;
+    transform: none;
   }
 }
 
