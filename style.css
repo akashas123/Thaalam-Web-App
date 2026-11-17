@@ -1174,7 +1174,7 @@ html.is-restoring-session .app-loader {
   }
 
   .login-subtitle {
-    margin: 0 0 0.8rem;
+    margin: 0 0 1.05rem;
     color: rgba(255, 255, 255, 0.86);
     font-size: clamp(0.7rem, 3vw, 0.82rem);
     line-height: 1.4;
@@ -1184,12 +1184,12 @@ html.is-restoring-session .app-loader {
     width: min(64%, 14rem);
     min-width: 9.5rem;
     padding: 0.56rem 0.72rem;
-    font-size: 0.64rem;
+    font-size: 0.78rem;
   }
 
   .login-button-icon {
-    width: 1.35rem;
-    height: 1.35rem;
+    width: 1.55rem;
+    height: 1.55rem;
   }
 }
 
