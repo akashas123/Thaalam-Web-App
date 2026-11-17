@@ -22,8 +22,8 @@
     display: block;
     width: 100%;
     max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    overflow: visible;
+    text-overflow: clip;
     white-space: nowrap;
   }
 
@@ -598,7 +598,7 @@ body.view-now-playing::after {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    line-height: 1.06;
+    line-height: 1.12;
     letter-spacing: -0.045em;
     overflow-wrap: anywhere;
     text-wrap: balance;
