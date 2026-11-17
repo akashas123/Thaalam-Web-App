@@ -4386,13 +4386,19 @@
           return;
         }
         const shelves = document.getElementById('mobileGenreShelves');
-        const recents = shelves.querySelector('.mobile-recents-row');
-        const edge = recents ? recents.getBoundingClientRect().top : artistSpotlight.getBoundingClientRect().bottom;
+        const firstGenreShelf = [...shelves.children].find((section) =>
+          section !== artistSpotlight &&
+          mobileHomeGenreRows.some((category) =>
+            section.getAttribute('aria-label') === `${category.title} songs`)
+        );
+        const edge = firstGenreShelf
+          ? firstGenreShelf.getBoundingClientRect().top + 48
+          : artistSpotlight.getBoundingClientRect().bottom;
         const spotlightTop = artistSpotlight.getBoundingClientRect().top;
         const fadeScroll = Math.max(window.scrollY || 0, shelves.scrollTop || 0, -spotlightTop);
-        // Leave enough room for the portrait mask to dissolve naturally before
-        // the shelves begin, instead of ending the image at their top edge.
-        const fadeOverlap = 180;
+        // End the backdrop with the first genre shelf; Recents and later rows
+        // must not extend the portrait further down the Home feed.
+        const fadeOverlap = 0;
         const height = Math.max(0, edge + shelves.scrollTop + fadeOverlap);
         const scrollFade = Math.max(0, Math.min(1, 1 - fadeScroll / 150));
         spotlightPortrait.style.setProperty('--spotlight-backdrop-height', `${height}px`);
@@ -4624,8 +4630,14 @@
           { title: 'Recents' }, visibleSongs, { shuffle: false, all: true }
         );
         recents.classList.add('mobile-recents-row');
-        if (desktopNavigation.matches && artistSpotlight.parentElement === shelves) artistSpotlight.after(recents);
-        else shelves.prepend(recents);
+        const firstGenreShelf = [...shelves.children].find((section) =>
+          section !== artistSpotlight &&
+          mobileHomeGenreRows.some((category) =>
+            section.getAttribute('aria-label') === `${category.title} songs`)
+        );
+        if (firstGenreShelf) firstGenreShelf.after(recents);
+        else if (artistSpotlight.parentElement === shelves) artistSpotlight.after(recents);
+        else shelves.append(recents);
         if (previousPositions.size && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
           requestAnimationFrame(() => {
             recents.querySelectorAll('[data-recent-track-key]').forEach((card) => {
@@ -4652,6 +4664,18 @@
       updateMobileHomeTint();
       updateDesktopHomeTint();
       updateDesktopLibraryFolder();
+      // Keep the personalized top-genre shelf ahead of Recents after every
+      // async refresh or history update.
+      const topGenreKey = getGenreOrderFromHistory()[0] || 'international';
+      const topGenre = [...shelves.children].find((section) =>
+        section.getAttribute('aria-label') === `${mobileHomeGenreRows.find((category) => category.key === topGenreKey)?.title || 'International'} songs`
+      );
+      const currentRecents = shelves.querySelector('.mobile-recents-row');
+      if (topGenre) {
+        if (artistSpotlight.parentElement === shelves) shelves.insertBefore(topGenre, artistSpotlight.nextSibling);
+        else shelves.prepend(topGenre);
+        if (currentRecents) topGenre.after(currentRecents);
+      }
       if (!desktopNavigation.matches && artistSpotlight.parentElement === shelves) {
         shelves.prepend(artistSpotlight);
       }
@@ -4853,12 +4877,18 @@
     function reorderMobileGenreRowsFromHistory() {
       const shelves = document.getElementById('mobileGenreShelves');
       if (!shelves) return;
-      getGenreOrderFromHistory().forEach((key) => {
+      const genreOrder = getGenreOrderFromHistory();
+      genreOrder.forEach((key) => {
         const category = mobileHomeGenreRows.find((item) => item.key === key);
         const section = category && [...shelves.children].find((item) =>
           item.getAttribute('aria-label') === `${category.title} songs`);
         if (section) shelves.append(section);
       });
+      const topGenreCategory = mobileHomeGenreRows.find((item) => item.key === (genreOrder[0] || 'international'));
+      const topGenre = topGenreCategory && [...shelves.children].find((item) =>
+        item.getAttribute('aria-label') === `${topGenreCategory.title} songs`);
+      const recents = shelves.querySelector('.mobile-recents-row');
+      if (topGenre && recents) topGenre.after(recents);
       updateDesktopLibraryFolder();
     }
 

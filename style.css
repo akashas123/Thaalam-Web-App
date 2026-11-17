@@ -553,7 +553,7 @@ body.view-now-playing::after {
     position: fixed;
     z-index: 0;
     inset: 0 0 0 auto;
-    width: 72vw;
+    width: 80vw;
     height: var(--spotlight-backdrop-height, 0px);
     clip-path: inset(0);
     object-fit: cover;
