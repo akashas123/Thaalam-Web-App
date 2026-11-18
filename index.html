@@ -4418,6 +4418,7 @@
     let spotlightSong = null;
     let spotlightRequest = 0;
     let spotlightSignature = '';
+    let spotlightGenre = '';
     const spotlightCache = new Map();
 
     async function showArtistSpotlight(index, tried = 0) {
@@ -4491,8 +4492,34 @@
       const taste = history.length ? history : window.getOnDemandTasteProfile?.() || [];
       const genre = getGenreOrderFromHistory()[0] || 'international';
       const request = ++spotlightChartRequest;
+      if (spotlightGenre !== genre) {
+        spotlightGenre = genre;
+        spotlightArtists = [];
+        spotlightIndex = -1;
+        spotlightSong = null;
+        spotlightSignature = '';
+        spotlightRequest += 1;
+      }
       let chart = getAnyCachedGenreChart(genre);
-      try { chart = await loadDailyGenreChart(genre); } catch { /* Use cached chart when offline. */ }
+      const genreTitle = mobileHomeGenreRows.find((category) => category.key === genre)?.title || 'International';
+      const pendingChart = loadDailyGenreChart(genre).catch(() => []);
+      // Show a new listener a pick from the already-rendered top genre shelf
+      // while the full chart request is still loading.
+      if (!taste.length && !chart.length) {
+        const topGenreShelf = [...shelves.children].find((section) =>
+          section.getAttribute('aria-label') === `${genreTitle} songs`
+        );
+        const firstGenreSong = topGenreShelf?.querySelector('.mobile-genre-track')?.__onDemandSong;
+        if (firstGenreSong?.trackName && (firstGenreSong.artistName || firstGenreSong.artist)) {
+          spotlightSong = firstGenreSong;
+          artistSpotlight.querySelector('.artist-spotlight-eyebrow').textContent = `${genreTitle.toUpperCase()} · CHART PICKS`;
+          artistSpotlight.querySelector('.artist-spotlight-title').textContent = firstGenreSong.trackName;
+          artistSpotlight.querySelector('.artist-spotlight-name').textContent = firstGenreSong.artistName || firstGenreSong.artist;
+          artistSpotlight.hidden = false;
+          syncSpotlightBackdrop();
+        }
+      }
+      try { chart = await pendingChart; } catch { /* Use cached chart when offline. */ }
       if (request !== spotlightChartRequest) return;
       const artistScores = new Map();
       taste.forEach((song, index) => {
@@ -4515,21 +4542,24 @@
       // same track under multiple artists. A spotlight card must represent one
       // song and one artist only, and a track must never return later in the
       // same spotlight rotation under a different credited artist.
-      const usedSpotlightSongs = new Set();
       const normalizeSpotlightSong = (value) => String(value || '')
         .normalize('NFKD')
         .replace(/[\u0300-\u036f]/g, '')
         .toLocaleLowerCase()
         .replace(/[^\p{L}\p{N}]/gu, '');
-      let artists = rankedArtists.map((entry) => ({
-        ...entry,
-        songs: entry.songs.filter((song) => {
+      const usedSpotlightSongs = new Set();
+      let artists = [];
+      for (const entry of rankedArtists) {
+        const uniqueSongs = entry.songs.filter((song) => {
           const key = normalizeSpotlightSong(song.trackName);
           if (!key || usedSpotlightSongs.has(key)) return false;
           usedSpotlightSongs.add(key);
           return true;
-        })
-      })).filter((entry) => entry.songs.length).slice(0, 5);
+        });
+        if (!uniqueSongs.length) continue;
+        artists.push({ ...entry, songs: uniqueSongs });
+        if (artists.length >= 12) break;
+      }
       if (!artists.length && chart.length && window.matchMedia('(max-width: 56.24rem)').matches) {
         const fallbackSong = chart.find((song) => song?.trackName && (song.artistName || song.artist));
         if (fallbackSong) {
@@ -4546,7 +4576,7 @@
       spotlightArtists = artists;
       // Resolve and decode the full rotation before showing the first slide.
       // This prevents a network request from interrupting the endless loop.
-      await Promise.all(artists.map((entry) => {
+      const portraitResults = await Promise.all(artists.map((entry) => {
         if (!spotlightCache.has(entry.artist)) {
           spotlightCache.set(entry.artist, Promise.allSettled([
             getWikipediaArtistInfo(entry.artist),
@@ -4555,7 +4585,12 @@
         }
         return spotlightCache.get(entry.artist);
       }));
-      const genreTitle = mobileHomeGenreRows.find((category) => category.key === genre)?.title || 'International';
+      artists = artists.filter((entry, index) => {
+        const results = portraitResults[index] || [];
+        const infoImage = results[0]?.status === 'fulfilled' ? results[0].value?.image : '';
+        const portraitImage = results[1]?.status === 'fulfilled' ? results[1].value : '';
+        return Boolean(infoImage || portraitImage);
+      }).slice(0, 5);
       artistSpotlight.querySelector('.artist-spotlight-eyebrow').textContent = `${genreTitle.toUpperCase()} · ${taste.length ? 'PICKED FOR YOU' : 'CHART PICKS'}`;
       if (!artists.length) {
         spotlightRequest += 1;
