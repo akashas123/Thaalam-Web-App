@@ -507,6 +507,11 @@ body.view-now-playing::after {
   .home-page .artist-spotlight-title {
     max-width: 100%;
     font-size: clamp(1.65rem, 7vw, 2.5rem);
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
   }
   .artist-spotlight-name { margin: .65rem 0 1.15rem; font-size: .92rem; color: #d6d6da; }
   .artist-spotlight-listen {
