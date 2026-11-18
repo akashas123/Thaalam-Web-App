@@ -557,7 +557,7 @@ body.view-now-playing::after {
     height: var(--spotlight-backdrop-height, 0px);
     clip-path: inset(0);
     object-fit: cover;
-    object-position: center 20%;
+    object-position: center 32%;
     background: transparent;
     pointer-events: none;
     filter: grayscale(1) brightness(0.6);
