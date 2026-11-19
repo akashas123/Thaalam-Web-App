@@ -49,7 +49,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=973">
+  <link rel="stylesheet" href="style.css?v=981">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -4380,12 +4380,15 @@
     function syncSpotlightBackdrop() {
       cancelAnimationFrame(spotlightBackdropFrame);
       spotlightBackdropFrame = requestAnimationFrame(() => {
+        const shelves = document.getElementById('mobileGenreShelves');
+        const homeFadeScroll = Math.max(window.scrollY || 0, shelves?.scrollTop || 0);
+        const homeGlowOpacity = Math.max(0, Math.min(1, 1 - homeFadeScroll / 150));
+        document.body.style.setProperty('--home-glow-opacity', homeGlowOpacity.toFixed(3));
         const isHomeView = document.body.classList.contains('view-home');
         if (!isHomeView || artistSpotlight.hidden || !artistSpotlight.getClientRects().length) {
           spotlightPortrait.hidden = true;
           return;
         }
-        const shelves = document.getElementById('mobileGenreShelves');
         const firstGenreShelf = [...shelves.children].find((section) =>
           section !== artistSpotlight &&
           mobileHomeGenreRows.some((category) =>

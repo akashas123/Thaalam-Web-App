@@ -264,6 +264,7 @@ body.on-demand-paused .tagline #nowPlaying::after {
   --c5: #05070d;
   --album-dominant-color: #05070d;
   --home-tint: transparent;
+  --home-glow-opacity: 1;
   --liked-folder-color: #ff1744;
 }
 
@@ -300,7 +301,7 @@ body {
    as About. The live album gradient belongs to Now Playing only. */
 body.view-home {
   background:
-    radial-gradient(ellipse 88% 52% at 0% 0%, color-mix(in srgb, var(--home-tint) 58%, transparent), transparent 100%),
+    radial-gradient(ellipse 88% 52% at 0% 0%, color-mix(in srgb, var(--home-tint) calc(58% * var(--home-glow-opacity)), transparent), transparent 100%),
     #05070d;
   transition: --home-tint 850ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
@@ -308,7 +309,7 @@ body.view-home {
 @media (min-width: 56.25rem) and (pointer: fine) and (any-pointer: fine) {
   body.view-home {
     background:
-      radial-gradient(ellipse 100% 64% at 0% 0%, color-mix(in srgb, var(--home-tint) 92%, transparent), transparent 100%),
+      radial-gradient(ellipse 100% 64% at 0% 0%, color-mix(in srgb, var(--home-tint) calc(92% * var(--home-glow-opacity)), transparent), transparent 100%),
       #05070d;
   }
 }
@@ -7593,20 +7594,20 @@ img {
 
   body.view-home:not(.has-liked-home-glow) {
     background:
-      radial-gradient(ellipse 94% 58% at 0% 0%, color-mix(in srgb, var(--home-tint) 72%, transparent), transparent 100%),
+      radial-gradient(ellipse 94% 58% at 0% 0%, color-mix(in srgb, var(--home-tint) calc(72% * var(--home-glow-opacity)), transparent), transparent 100%),
       #05070d;
   }
 
   body.view-home.has-liked-home-glow {
     background:
-      radial-gradient(ellipse 88% 52% at 0% 0%, color-mix(in srgb, var(--home-tint) 34%, transparent), transparent 100%),
-      radial-gradient(ellipse 62% 42% at 18% 4%, color-mix(in srgb, var(--home-tint) 26%, #05070d), transparent 100%),
+      radial-gradient(ellipse 88% 52% at 0% 0%, color-mix(in srgb, var(--home-tint) calc(34% * var(--home-glow-opacity)), transparent), transparent 100%),
+      radial-gradient(ellipse 62% 42% at 18% 4%, color-mix(in srgb, var(--home-tint) calc(26% * var(--home-glow-opacity)), #05070d), transparent 100%),
       #05070d !important;
   }
 
   body.mobile-search-active.view-home.has-home-glow.has-search-art {
     background:
-      radial-gradient(ellipse 88% 52% at 0% 0%, color-mix(in srgb, var(--home-tint) 58%, transparent), transparent 100%),
+      radial-gradient(ellipse 88% 52% at 0% 0%, color-mix(in srgb, var(--home-tint) calc(58% * var(--home-glow-opacity)), transparent), transparent 100%),
       #05070d !important;
   }
 
@@ -8688,6 +8689,28 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
     overscroll-behavior-y: auto;
     touch-action: pan-y;
     scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      rgba(0, 0, 0, 0.35) 2.5rem,
+      #000 8rem,
+      #000 calc(100% - 8rem),
+      rgba(0, 0, 0, 0.35) calc(100% - 2.5rem),
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      rgba(0, 0, 0, 0.35) 2.5rem,
+      #000 8rem,
+      #000 calc(100% - 8rem),
+      rgba(0, 0, 0, 0.35) calc(100% - 2.5rem),
+      transparent 100%
+    );
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
   }
 
   .home-page .mobile-genre-row {
@@ -9257,6 +9280,16 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
    visible in both cases. This final rule deliberately wins over mobile-card
    declarations earlier in the stylesheet. */
 @media (min-width: 56.25rem) {
+  /* Desktop uses the softer charcoal surface; mobile keeps the AMOLED base. */
+  body:not(.view-now-playing) {
+    background-color: #18191d;
+  }
+
+  body.view-home,
+  body.view-home:not(.has-home-glow) {
+    background-color: #18191d;
+  }
+
   /* Desktop shelves render only the cards that fit; keep resize paints from
      revealing a fractional cover before JavaScript recalculates the count. */
   .home-page .mobile-genre-track-row {
