@@ -8694,18 +8694,14 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
       transparent 0,
       rgba(0, 0, 0, 0.35) 2.5rem,
       #000 8rem,
-      #000 calc(100% - 8rem),
-      rgba(0, 0, 0, 0.35) calc(100% - 2.5rem),
-      transparent 100%
+      #000 100%
     );
     mask-image: linear-gradient(
       to bottom,
       transparent 0,
       rgba(0, 0, 0, 0.35) 2.5rem,
       #000 8rem,
-      #000 calc(100% - 8rem),
-      rgba(0, 0, 0, 0.35) calc(100% - 2.5rem),
-      transparent 100%
+      #000 100%
     );
     -webkit-mask-repeat: no-repeat;
     mask-repeat: no-repeat;
