@@ -8715,15 +8715,15 @@ body.view-now-playing.on-demand-active #nowPlaying::after {
     -webkit-mask-image: linear-gradient(
       to bottom,
       transparent 0,
-      rgba(0, 0, 0, 0.35) 2.5rem,
-      #000 8rem,
+      rgba(0, 0, 0, 0.85) 0.8rem,
+      #000 3.5rem,
       #000 100%
     );
     mask-image: linear-gradient(
       to bottom,
       transparent 0,
-      rgba(0, 0, 0, 0.35) 2.5rem,
-      #000 8rem,
+      rgba(0, 0, 0, 0.85) 0.8rem,
+      #000 3.5rem,
       #000 100%
     );
     -webkit-mask-repeat: no-repeat;
