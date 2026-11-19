@@ -49,7 +49,7 @@
 
   <title>Thaalam 24x7</title>
 
-  <link rel="stylesheet" href="style.css?v=982">
+  <link rel="stylesheet" href="style.css?v=985">
   <link rel="icon" type="image/png" sizes="512x512" href="thaalam-icon-512.png?v=8">
   <link rel="apple-touch-icon" sizes="192x192" href="thaalam-icon-192.png?v=8">
 
@@ -4376,13 +4376,154 @@
     spotlightPortrait.alt = '';
     spotlightPortrait.setAttribute('aria-hidden', 'true');
     document.body.appendChild(spotlightPortrait);
+    const desktopScrollArtistPortrait = document.createElement('img');
+    desktopScrollArtistPortrait.className = 'desktop-scroll-artist-portrait';
+    desktopScrollArtistPortrait.alt = '';
+    desktopScrollArtistPortrait.hidden = true;
+    desktopScrollArtistPortrait.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(desktopScrollArtistPortrait);
+    let desktopScrollArtistRequest = 0;
+    let desktopScrollArtistName = '';
+    const desktopArtistImageCache = new Map();
+
+    const isHdDesktopArtistImage = (image, premium = false) => {
+      const width = Number(image?.width || 0);
+      const height = Number(image?.height || 0);
+      const aspectRatio = width && height ? Math.max(width, height) / Math.min(width, height) : Infinity;
+      return Boolean(image?.source)
+        && Math.max(width, height) >= (premium ? 7680 : 2400)
+        && Math.min(width, height) >= (premium ? 4320 : 1400)
+        && (!premium || aspectRatio <= 1.5);
+    };
+
+    async function verifyHdDesktopArtistImage(source, premium = false) {
+      if (!source) return false;
+      return new Promise((resolve) => {
+        const image = new Image();
+        image.onload = () => resolve(
+          Math.max(image.naturalWidth, image.naturalHeight) >= (premium ? 7680 : 2400)
+          && Math.min(image.naturalWidth, image.naturalHeight) >= (premium ? 4320 : 1400)
+          && (!premium || Math.max(image.naturalWidth, image.naturalHeight)
+            / Math.min(image.naturalWidth, image.naturalHeight) <= 1.5)
+        );
+        image.onerror = () => resolve(false);
+        image.src = source;
+      }).then(async (dimensionsOk) => {
+        if (!dimensionsOk) return false;
+        try {
+          const response = await fetch(source, { mode: 'cors', cache: 'force-cache' });
+          if (!response.ok) return false;
+          const fileSize = (await response.blob()).size;
+          return fileSize >= (premium ? 2 * 1024 * 1024 : 450 * 1024);
+        } catch {
+          return false;
+        }
+      });
+    }
+
+    async function getDesktopArtistImage(artist, quality = 'row') {
+      const premium = quality === 'spotlight';
+      const artists = String(artist || '')
+        .split(/,|\s+&\s+|\s+feat\.?\s+|\s+ft\.?\s+/i)
+        .map((name) => name.trim())
+        .filter(Boolean);
+      for (const name of artists) {
+        try {
+          const cacheKey = `${quality}:${name.toLowerCase()}`;
+          let imagePromise = desktopArtistImageCache.get(cacheKey);
+          if (!imagePromise) {
+            imagePromise = fetch(
+              `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name.replace(/\s+/g, '_'))}`
+            )
+              .then((response) => response.ok ? response.json() : null)
+              .then(async (page) => {
+                if (!isHdDesktopArtistImage(page?.originalimage, premium)) return '';
+                const source = page.originalimage.source;
+                return await verifyHdDesktopArtistImage(source, premium) ? source : '';
+              })
+              .catch(() => '');
+            desktopArtistImageCache.set(cacheKey, imagePromise);
+          }
+          const image = await imagePromise;
+          if (image) return { image, artist: name };
+        } catch {
+        }
+      }
+      return { image: '', artist: '' };
+    }
+
+    async function prefetchDesktopHomeArtistImages(shelves) {
+      if (!desktopNavigation.matches || !shelves) return;
+      const artists = [...shelves.querySelectorAll('.mobile-genre-track')]
+        .map((card) => card.__onDemandSong?.artistName || card.__onDemandSong?.artist || '')
+        .map((artist) => String(artist).trim())
+        .filter(Boolean)
+        .filter((artist, index, values) => values.indexOf(artist) === index);
+      artists.forEach((artist) => { void getDesktopArtistImage(artist); });
+      void updateDesktopScrollArtistPortrait();
+    }
+
+    async function updateDesktopScrollArtistPortrait() {
+      if (!desktopNavigation.matches || !document.body.classList.contains('view-home')) {
+        desktopScrollArtistPortrait.hidden = true;
+        desktopScrollArtistName = '';
+        return;
+      }
+      const spotlightOpacity = Number.parseFloat(getComputedStyle(spotlightPortrait).opacity || '0');
+      if (!spotlightPortrait.hidden && spotlightOpacity > 0.01) {
+        desktopScrollArtistPortrait.hidden = true;
+        desktopScrollArtistName = '';
+        return;
+      }
+      const shelves = document.getElementById('mobileGenreShelves');
+      const scrollFade = Math.max(window.scrollY || 0, shelves?.scrollTop || 0);
+      if (!shelves || scrollFade < 150) {
+        desktopScrollArtistPortrait.hidden = true;
+        desktopScrollArtistName = '';
+        return;
+      }
+      const shelfBounds = shelves.getBoundingClientRect();
+      const cards = [...shelves.querySelectorAll('.mobile-genre-track')].filter((item) => {
+        const bounds = item.getBoundingClientRect();
+        return bounds.bottom > shelfBounds.top && bounds.top < shelfBounds.bottom && item.__onDemandSong;
+      });
+      const artistNames = cards
+        .map((card) => card.__onDemandSong?.artistName || card.__onDemandSong?.artist || '')
+        .filter(Boolean);
+      const artistKey = artistNames.join('|');
+      if (!artistNames.length || artistKey === desktopScrollArtistName) return;
+      desktopScrollArtistName = artistKey;
+      const request = ++desktopScrollArtistRequest;
+      let result = { image: '', artist: '' };
+      for (const artist of artistNames) {
+        result = await getDesktopArtistImage(artist);
+        if (result.image) break;
+      }
+      if (request !== desktopScrollArtistRequest || !result.image) return;
+      desktopScrollArtistPortrait.alt = `${result.artist} portrait`;
+      desktopScrollArtistPortrait.src = result.image;
+      desktopScrollArtistPortrait.hidden = false;
+    }
+
+    document.getElementById('mobileGenreShelves')?.addEventListener('scroll', () => {
+      syncSpotlightBackdrop();
+      void updateDesktopScrollArtistPortrait();
+    }, { passive: true });
+    window.addEventListener('resize', () => {
+      void updateDesktopScrollArtistPortrait();
+    });
+    document.addEventListener('scroll', () => {
+      void updateDesktopScrollArtistPortrait();
+    }, { capture: true, passive: true });
     let spotlightBackdropFrame = 0;
     function syncSpotlightBackdrop() {
       cancelAnimationFrame(spotlightBackdropFrame);
       spotlightBackdropFrame = requestAnimationFrame(() => {
         const shelves = document.getElementById('mobileGenreShelves');
         const homeFadeScroll = Math.max(window.scrollY || 0, shelves?.scrollTop || 0);
-        const homeGlowOpacity = Math.max(0, Math.min(1, 1 - homeFadeScroll / 150));
+        const homeGlowOpacity = desktopNavigation.matches
+          ? 1
+          : Math.max(0, Math.min(1, 1 - homeFadeScroll / 150));
         document.body.style.setProperty('--home-glow-opacity', homeGlowOpacity.toFixed(3));
         const isHomeView = document.body.classList.contains('view-home');
         if (!isHomeView || artistSpotlight.hidden || !artistSpotlight.getClientRects().length) {
@@ -4427,6 +4568,10 @@
     async function showArtistSpotlight(index, tried = 0) {
       if (!spotlightArtists.length) return;
       if (tried >= spotlightArtists.length) {
+        if (desktopNavigation.matches) {
+          spotlightPortrait.hidden = true;
+          artistSpotlight.hidden = true;
+        }
         // Every artist tried — none had a Wikipedia image; keep section visible without portrait
         return;
       }
@@ -4435,23 +4580,32 @@
       if (!entry?.artist || !entry.songs?.length) return;
       const request = ++spotlightRequest;
       if (!spotlightCache.has(entry.artist)) {
-        spotlightCache.set(entry.artist, Promise.allSettled([
-          getWikipediaArtistInfo(entry.artist),
-          fetchWikipediaArtistPortrait(entry.artist)
-        ]).then(async (results) => {
-          const infoImage = results[0].status === 'fulfilled' ? results[0].value?.image : '';
-          const portraitImage = results[1].status === 'fulfilled' ? results[1].value : '';
-          const portraitUrl = infoImage || portraitImage;
-          if (portraitUrl) {
-            await new Promise((resolve) => {
-              const image = new Image();
-              image.onload = resolve;
-              image.onerror = resolve;
-              image.src = portraitUrl;
-            });
-          }
-          return results;
-        }));
+        if (desktopNavigation.matches) {
+          // Desktop spotlight portraits use the same strict HD filter as the
+          // scroll portrait and advance through multiple artists when needed.
+          spotlightCache.set(entry.artist, getDesktopArtistImage(entry.artist, 'spotlight').then((result) => [
+            { status: 'fulfilled', value: result.image ? { image: result.image } : null },
+            { status: 'fulfilled', value: result.image }
+          ]));
+        } else {
+          spotlightCache.set(entry.artist, Promise.allSettled([
+            getWikipediaArtistInfo(entry.artist),
+            fetchWikipediaArtistPortrait(entry.artist)
+          ]).then(async (results) => {
+            const infoImage = results[0].status === 'fulfilled' ? results[0].value?.image : '';
+            const portraitImage = results[1].status === 'fulfilled' ? results[1].value : '';
+            const portraitUrl = infoImage || portraitImage;
+            if (portraitUrl) {
+              await new Promise((resolve) => {
+                const image = new Image();
+                image.onload = resolve;
+                image.onerror = resolve;
+                image.src = portraitUrl;
+              });
+            }
+            return results;
+          }));
+        }
       }
       const [infoResult, portraitResult] = await spotlightCache.get(entry.artist);
       if (request !== spotlightRequest) return;
@@ -4459,11 +4613,12 @@
       const portraitImage = portraitResult.status === 'fulfilled' ? portraitResult.value : '';
       const portraitUrl = infoImage || portraitImage;
       if (!portraitUrl) {
-        if (window.matchMedia('(max-width: 56.24rem)').matches && entry.songs?.length) {
+        if (!desktopNavigation.matches && entry.songs?.length) {
           spotlightSong = entry.songs[0];
           artistSpotlight.querySelector('.artist-spotlight-title').textContent = spotlightSong.trackName;
           artistSpotlight.querySelector('.artist-spotlight-name').textContent = entry.artist;
           artistSpotlight.hidden = false;
+          return;
         }
         // Artist image not found — loop to next artist
         void showArtistSpotlight((spotlightIndex + 1) % spotlightArtists.length, tried + 1);
@@ -4482,7 +4637,12 @@
       portrait.hidden = false;
       portrait.alt = `${entry.artist} portrait`;
       portrait.src = portraitUrl;
-      portrait.onerror = () => { portrait.hidden = true; };
+      portrait.onerror = () => {
+        portrait.hidden = true;
+        if (!desktopNavigation.matches) return;
+        artistSpotlight.hidden = true;
+        void showArtistSpotlight((spotlightIndex + 1) % spotlightArtists.length, tried + 1);
+      };
       artistSpotlight.hidden = false;
       syncSpotlightBackdrop();
     }
@@ -4840,6 +5000,7 @@
         return section;
       });
       updateMobileRecents();
+      void prefetchDesktopHomeArtistImages(shelves);
       // On a signed-in desktop refresh, keep Home covered until its saved
       // genre order and recents are both in the DOM. Without this handoff the
       // browser can paint the static default Home for one frame first.
@@ -4864,6 +5025,7 @@
       updateMobileRecents();
       updateDesktopHomeTint();
       updateDesktopLibraryFolder();
+      void prefetchDesktopHomeArtistImages(shelves);
     }
 
     window.addEventListener('resize', () => {
