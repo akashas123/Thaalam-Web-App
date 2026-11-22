@@ -6387,6 +6387,10 @@
       );
       document.body.classList.add(`view-${view}`);
       if (view === 'library') document.body.classList.add('view-home');
+      if (view !== 'home' && view !== 'library') {
+        if (typeof spotlightPortrait !== 'undefined') spotlightPortrait.hidden = true;
+        if (typeof desktopScrollArtistPortrait !== 'undefined') desktopScrollArtistPortrait.hidden = true;
+      }
       if (previousView !== view && view !== 'now-playing') {
         replayEntrance('.mini-player', 'miniPlayerDockIn');
       }
