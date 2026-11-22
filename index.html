@@ -4613,13 +4613,6 @@
       const portraitImage = portraitResult.status === 'fulfilled' ? portraitResult.value : '';
       const portraitUrl = infoImage || portraitImage;
       if (!portraitUrl) {
-        if (!desktopNavigation.matches && entry.songs?.length) {
-          spotlightSong = entry.songs[0];
-          artistSpotlight.querySelector('.artist-spotlight-title').textContent = spotlightSong.trackName;
-          artistSpotlight.querySelector('.artist-spotlight-name').textContent = entry.artist;
-          artistSpotlight.hidden = false;
-          return;
-        }
         // Artist image not found — loop to next artist
         void showArtistSpotlight((spotlightIndex + 1) % spotlightArtists.length, tried + 1);
         return;
@@ -4639,7 +4632,6 @@
       portrait.src = portraitUrl;
       portrait.onerror = () => {
         portrait.hidden = true;
-        if (!desktopNavigation.matches) return;
         artistSpotlight.hidden = true;
         void showArtistSpotlight((spotlightIndex + 1) % spotlightArtists.length, tried + 1);
       };
